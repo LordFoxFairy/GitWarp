@@ -9,6 +9,10 @@ description: Use when concurrent Claude Code or Codex agents need isolated git w
 
 GitWarp provides a deterministic helper around native `git worktree` so agents can claim, track, and destroy isolated sandboxes without reusing a branch or contaminating the main checkout index. It stores runtime state in the target repository under `.gitwarp/ledger.json`.
 
+## Core Rule
+
+When a task requires isolated concurrent writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main repository. Use GitWarp to scan, summon, label, and collapse the workspace so branch ownership stays machine-readable.
+
 ## When To Use
 
 Use this skill when any of the following are true:
@@ -19,6 +23,14 @@ Use this skill when any of the following are true:
 4. You need a prompt statusline banner that tells a model whether it is in the main repo or an isolated sandbox.
 
 Do not use this skill for single-agent edits in the main checkout when no branch isolation is needed.
+
+## Command Contract
+
+1. `scan`, `summon`, and `collapse` emit deterministic single-line JSON.
+2. `statusline` emits a raw unquoted prompt banner only.
+3. All `--cwd`, returned workspace paths, ledger paths, and worktree roots must be treated as absolute paths.
+4. If any JSON command returns nonzero or `"ok": false`, stop the workflow, report the `error` field, and do not keep editing from an assumed workspace.
+5. Never edit `.gitwarp/ledger.json` by hand.
 
 ## Skill Resources
 
@@ -63,7 +75,7 @@ After installation, use:
 gitwarp --help
 ```
 
-### 2. Scan before allocating
+### 2. Scan before allocating or editing
 
 Run:
 
@@ -78,6 +90,14 @@ gitwarp scan --cwd /absolute/path/to/repo
 ```
 
 This returns the repo root, ledger path, and live worktrees enriched with any tracked `agent_id` and `purpose`.
+
+If the current process might already be inside a sandbox, also run:
+
+```bash
+gitwarp statusline --cwd "$PWD"
+```
+
+Continue in place only when the banner matches the intended agent and branch.
 
 ### 3. Summon an isolated workspace
 
@@ -96,6 +116,7 @@ Rules:
 1. Treat branch collisions as hard failures.
 2. `cd` into the returned `path` before editing.
 3. Assume the workspace path is absolute and stable for the lifetime of the task.
+4. Do not edit in the public root after a sandbox has been summoned for the task.
 
 ### 4. Collapse when the task is done
 
@@ -119,10 +140,16 @@ python3 /absolute/path/to/skills/gitwarp/scripts/gitwarp.py statusline --cwd "$P
 
 This prints a raw string such as `GITWARP[main-repo]` or `GITWARP[codex-reviewer@feature/gitwarp-statusline]`.
 
+## Failure Handling
+
+- Branch collision: abort and ask for a different branch or collapse the existing workspace only with explicit user approval.
+- Missing Git repository: run from a real repository or pass `--cwd /absolute/path/to/repo`.
+- Invalid ledger: stop and report the ledger path; do not rewrite it manually unless the user asks for repair.
+- Collapse target missing: run `scan`, verify the branch/path, then retry with the exact live path or branch.
+
 ## Expectations
 
-1. Never edit `.gitwarp/ledger.json` by hand.
-2. Never reuse a branch name already attached to a live worktree.
-3. Always prefer the helper output over assumptions about where a worktree lives.
-4. Prefer `gitwarp ...` commands over direct Python script paths once the CLI is installed.
-5. Keep the helper script deterministic and machine-readable.
+1. Never reuse a branch name already attached to a live worktree.
+2. Always prefer helper output over assumptions about where a worktree lives.
+3. Prefer `gitwarp ...` commands over direct Python script paths once the CLI is installed.
+4. Keep the helper script deterministic and machine-readable.

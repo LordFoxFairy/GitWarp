@@ -17,19 +17,33 @@
 
 ## Recommended repo strategy
 
-For authoring, keep the canonical skill in source control and copy or symlink it into the tool-specific discovery directory that you actually use:
+For authoring, keep the canonical skill in `skills/gitwarp/` and mirror it into `plugins/gitwarp/skills/gitwarp/` before installing the plugin. The local Codex marketplace is defined at `.agents/plugins/api_marketplace.json` with marketplace name `gitwarp-dev`.
 
-- Codex: `.agents/skills/gitwarp` or `~/.agents/skills/gitwarp`
-- Claude Code: `.claude/skills/gitwarp` or `~/.claude/skills/gitwarp`
+Install from the repository root:
 
-If the skill later needs packaging for broader installation, wrap it in a plugin rather than changing the skill internals.
+```bash
+scripts/install-codex-plugin.sh
+```
+
+Manual equivalent:
+
+```bash
+codex plugin marketplace add /absolute/path/to/GitWarp --json
+codex plugin add gitwarp@gitwarp-dev --json
+python3 "$HOME/.codex/plugins/cache/gitwarp-dev/gitwarp/0.1.0/skills/gitwarp/scripts/install_cli.py"
+```
+
+For direct skill-only experiments, copy or symlink `skills/gitwarp` into the tool-specific discovery directory:
+
+- Codex: `$HOME/.codex/skills/gitwarp` or `$HOME/.agents/skills/gitwarp`
+- Claude Code: `$HOME/.claude/skills/gitwarp`
 
 ## CLI command
 
-After installing the skill, expose the bundled helper as `gitwarp`:
+After installing the plugin or skill, expose the bundled helper as `gitwarp`:
 
 ```bash
-python3 ~/.codex/skills/gitwarp/scripts/install_cli.py
+python3 /absolute/path/to/skills/gitwarp/scripts/install_cli.py
 ```
 
 By default this writes a launcher to `~/.local/bin/gitwarp`. Override with `--dest /absolute/path/gitwarp` when needed.

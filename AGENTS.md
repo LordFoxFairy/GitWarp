@@ -5,10 +5,13 @@
 
 ## Build, Test, and Development Commands
 - `python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp`: validate the canonical skill shape.
+- `python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/gitwarp`: validate the packaged Codex plugin.
 - `python3 -m unittest discover -s tests -p 'test_*.py' -v`: run GitWarp worktree behavior tests.
-- `python3 skills/gitwarp/scripts/install_cli.py`: install the `gitwarp` launcher to `~/.local/bin`.
+- `scripts/install-codex-plugin.sh`: register the local marketplace, install the plugin, and expose the `gitwarp` launcher.
+- `scripts/verify-install.sh`: verify the installed plugin and run a real scan/summon/statusline/collapse smoke test.
+- `python3 skills/gitwarp/scripts/install_cli.py`: install only the `gitwarp` launcher to `~/.local/bin`.
 - `gitwarp scan --cwd "$PWD"`: verify the installed CLI can inspect the current repository.
-- `codex plugin marketplace add . --json`: register this checkout as a local Codex marketplace.
+- `codex plugin marketplace add "$PWD" --json`: register this checkout as a local Codex marketplace.
 - `codex plugin add gitwarp@gitwarp-dev --json`: install GitWarp through the Codex plugin path.
 
 ## Coding Style & Naming Conventions
