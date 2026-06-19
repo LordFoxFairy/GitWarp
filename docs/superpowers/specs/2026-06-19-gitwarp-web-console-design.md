@@ -78,6 +78,7 @@ All API responses are JSON with stable keys and absolute paths.
 - `POST /api/dispatch`: create a dossier-backed worktree and return launch command.
 - `POST /api/start`: create a manual worktree.
 - `POST /api/handoff`: append progress and optional lesson.
+- `POST /api/confirmation`: inspect a destructive action target and return a short-lived confirmation challenge.
 - `POST /api/finish`: record final progress; optional collapse with confirmation token.
 - `POST /api/collapse`: destructive remove with confirmation token.
 
@@ -104,6 +105,7 @@ Required mutation request fields:
 - `POST /api/dispatch`: `{"agent": "codex", "agent_id": null, "branch": "...", "purpose": "..."}`
 - `POST /api/start`: `{"agent_id": "...", "branch": "...", "purpose": "..."}`
 - `POST /api/handoff`: `{"cwd": "/abs/worktree/or/nested", "status": "...", "progress": "...", "lesson": null}`
+- `POST /api/confirmation`: `{"action": "finish-collapse|collapse", "cwd": "/abs/worktree/or/nested", "path": null, "branch": null}`
 - `POST /api/finish`: `{"cwd": "/abs/worktree/or/nested", "status": "...", "progress": "...", "lesson": null, "collapse": false, "confirmation": null}`
 - `POST /api/collapse`: `{"path": "/abs/worktree", "branch": null, "confirmation": "..."}`
 
@@ -113,11 +115,22 @@ Required mutation request fields:
 
 Default binding is `127.0.0.1` only. Binding to any non-loopback host must fail unless the user passes `--unsafe-host` with an explicit warning. Loopback validation must cover IPv4, IPv6, and hostnames by resolving the bind host and rejecting `0.0.0.0`, `::`, and non-loopback addresses unless unsafe mode is explicit.
 
+Every HTTP request must also pass a `Host` header allowlist check. The allowlist is built from the selected bind host and actual port after startup, including equivalent loopback forms such as `127.0.0.1:<port>`, `localhost:<port>`, and `[::1]:<port>` when applicable. Requests with missing, mismatched, wildcard, or non-loopback `Host` headers receive a JSON 403 response before routing. This reduces DNS-rebinding exposure because `/api/session` returns the mutation token.
+
 Mutation endpoints require:
 
 - JSON `Content-Type`.
 - A per-server random CSRF token returned by `GET /api/session` and embedded in the initial HTML. Mutations require `X-GitWarp-Token`.
 - Confirmation token for destructive actions. The token is derived from a freshly inspected absolute path, branch, HEAD, dirty summary, untracked summary, and timestamp for that request. Execution must re-read the same fields and reject the token if any field changed.
+
+Confirmation flow:
+
+1. UI calls `POST /api/confirmation` with CSRF token and intended action.
+2. Server resolves the target worktree, reads branch, HEAD, dirty summary, untracked summary, dossier path, and current ledger row.
+3. Server returns `{"ok":true,"confirmation":"...","expires_at":"...","challenge":{...}}`.
+4. UI shows the challenge fields verbatim and requires the user to confirm.
+5. UI sends the confirmation token to `POST /api/finish` or `POST /api/collapse`.
+6. Server re-inspects the target. If branch, HEAD, path, dirty summary, or untracked summary differ from the challenge, it rejects the destructive action.
 
 The Web Console must keep `doctor` read-only. It must never execute repository hooks. It may display hook health from existing static doctor findings.
 
@@ -177,9 +190,12 @@ Unit tests:
 - `/api/state` does not create, normalize, prune, lock, or rewrite `.gitwarp/ledger.json`.
 - Dossier endpoint refuses paths outside the dossier root.
 - `/api/session` returns a CSRF token and `/api/schema` documents mutability and required fields.
+- Requests with invalid `Host` headers return 403 before route handling.
 - Mutating endpoints require CSRF token.
 - Read-only mode rejects all mutation endpoints with a stable JSON error.
+- `/api/confirmation` returns challenge fields for destructive actions and expires tokens.
 - Collapse/finish destructive endpoints require confirmation bound to path, branch, HEAD, dirty summary, and untracked summary.
+- Collapse/finish rejects stale confirmation when target HEAD or dirty summary changes after token issuance.
 - Existing dispatch launch metadata is included in state when present.
 - Doctor web-safe cache avoids repeated external checks during rapid polling.
 - Host validation rejects `0.0.0.0`, `::`, and non-loopback hosts without `--unsafe-host`.
