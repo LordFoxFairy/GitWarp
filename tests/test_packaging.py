@@ -93,6 +93,7 @@ class PluginStructureTests(unittest.TestCase):
             "infrastructure/agents.py",
             "infrastructure/dossiers.py",
             "infrastructure/git_cli.py",
+            "infrastructure/instructions.py",
             "infrastructure/ledger.py",
             "infrastructure/runtime.py",
             "infrastructure/worktrees.py",
@@ -171,6 +172,24 @@ class PluginStructureTests(unittest.TestCase):
         self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "assets" / ".gitkeep").exists())
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "package.json").exists())
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "web").exists())
+
+    def test_web_runtime_assets_do_not_drift_between_source_and_package(self) -> None:
+        package_json = json.loads((REPO_ROOT / "web" / "console" / "package.json").read_text(encoding="utf-8"))
+        self.assertIn("check:dist", package_json["scripts"])
+        self.assertEqual(package_json["scripts"]["check:dist"], "node scripts/check-runtime.mjs")
+        check_script = (REPO_ROOT / "web" / "console" / "scripts" / "check-runtime.mjs").read_text(encoding="utf-8")
+        self.assertIn("mkdtemp", check_script)
+        self.assertIn("write-runtime.mjs", check_script)
+
+        expected = {"index.html", "app.css", "app.js"}
+        self.assertEqual(expected, {path.name for path in (REPO_ROOT / "web" / "console" / "dist").iterdir() if path.is_file()})
+        self.assertEqual(expected, {path.name for path in (REPO_ROOT / "src" / "gitwarp" / "assets" / "web_console").iterdir() if path.is_file()})
+
+        for filename in ("index.html", "app.css", "app.js"):
+            with self.subTest(filename=filename):
+                web_asset = REPO_ROOT / "web" / "console" / "dist" / filename
+                package_asset = REPO_ROOT / "src" / "gitwarp" / "assets" / "web_console" / filename
+                self.assertEqual(web_asset.read_bytes(), package_asset.read_bytes())
 
     def test_root_plugin_copy_runs_skill_wrapper_from_adjacent_src(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
@@ -261,6 +280,7 @@ class PluginStructureTests(unittest.TestCase):
             "web/console/index.html",
             "web/console/package.json",
             "web/console/package-lock.json",
+            "web/console/scripts/check-runtime.mjs",
             "web/console/scripts/write-runtime.mjs",
             "web/console/src/main.tsx",
             "web/console/src/styles.css",

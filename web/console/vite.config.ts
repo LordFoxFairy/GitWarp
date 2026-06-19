@@ -11,7 +11,7 @@ export default defineConfig({
     host: "127.0.0.1",
   },
   build: {
-    outDir: "dist/.vite",
+    outDir: process.env.GITWARP_VITE_OUT_DIR ?? "dist/.vite",
     emptyOutDir: true,
     cssCodeSplit: false,
     minify: "esbuild",

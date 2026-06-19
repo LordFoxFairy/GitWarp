@@ -7,6 +7,7 @@
 - `python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp`: validate the canonical skill shape.
 - `python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py .`: validate the repository-root Codex plugin package.
 - `python3 -m unittest discover -s tests -p 'test_*.py' -v`: run GitWarp worktree behavior tests.
+- `cd web/console && npm run check:dist`: type-check/build the React console in a temporary directory and verify checked-in runtime assets have not drifted.
 - `scripts/install-codex-plugin.sh`: register the local marketplace, install the plugin, and expose the `gitwarp` launcher.
 - `scripts/verify-install.sh`: verify the installed plugin and run a real agents/dispatch/adopt/reconcile/doctor/enter/start/context/handoff/board/statusline/finish smoke test.
 - `python3 skills/gitwarp/scripts/install_cli.py`: install only the `gitwarp` launcher to `~/.local/bin`.
@@ -25,5 +26,6 @@ Use short, imperative Conventional Commit messages, for example `feat: add gitwa
 
 ## Configuration Notes
 Runtime ledgers live under `.gitwarp/` inside target repositories and must stay ignored. Do not commit editor state, `__pycache__/`, `.pytest_cache/`, or temporary worktree contents. Keep the plugin manifest, hooks, and canonical skill source synchronized when changing install behavior.
+Instruction profile config lives at `.gitwarp/instruction_profiles.json` and is local runtime state. Use explicit `--instruction` or `--instruction-profile` when a worktree needs local `AGENTS.md`, `CLAUDE.md`, or host-specific rules; do not auto-copy global instructions.
 Keep `.agents/skills/gitwarp` and `.claude/skills/gitwarp` as symlinks to `../../skills/gitwarp`; do not replace them with copied skill folders.
 Keep `plugins/gitwarp` as a symlink to `..` for Codex marketplace compatibility. Do not replace it with a directory and do not recreate `plugins/gitwarp/src`; `src/gitwarp/` is the single source of truth.

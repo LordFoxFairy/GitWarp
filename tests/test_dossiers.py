@@ -4,6 +4,46 @@ from helpers import *
 
 
 class DossierTests(GitWarpTestCase):
+    def test_dossier_repair_preserves_mounted_instruction_metadata(self) -> None:
+        (self.repo / "AGENTS.md").write_text("root rules\n", encoding="utf-8")
+        run_git(self.repo, "add", "AGENTS.md")
+        run_git(self.repo, "commit", "-m", "add rules")
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-dossier-repair",
+            "--branch",
+            "feature/dossier-repair",
+            "--purpose",
+            "Repair dossier with instruction metadata",
+            "--instruction",
+            "AGENTS.md",
+        )
+        worktree_path = Path(str(start["path"]))
+        task_md = Path(str(start["task_md"]))
+        progress_md = Path(str(start["progress_md"]))
+        lessons_md = Path(str(start["lessons_md"]))
+        task_md.unlink()
+        progress_md.unlink()
+        lessons_md.unlink()
+
+        run_gitwarp(
+            self.repo,
+            "handoff",
+            "--cwd",
+            str(worktree_path),
+            "--status",
+            "testing",
+            "--progress",
+            "Repaired dossier after missing files",
+        )
+
+        task_text = task_md.read_text(encoding="utf-8")
+        self.assertIn("Mounted Instructions", task_text)
+        self.assertIn("`AGENTS.md`", task_text)
+        self.assertIn("Repaired dossier after missing files", progress_md.read_text(encoding="utf-8"))
+
     def test_pause_and_resume_record_blocked_and_active_handoffs(self) -> None:
         start = run_gitwarp(
             self.repo,

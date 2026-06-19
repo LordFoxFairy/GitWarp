@@ -18,6 +18,7 @@ LEDGER_FILENAME = "ledger.json"
 LEDGER_LOCK_FILENAME = "ledger.lock"
 LOCK_TIMEOUT_SECONDS = 10.0
 AGENTS_FILENAME = "agents.json"
+INSTRUCTION_PROFILES_FILENAME = "instruction_profiles.json"
 WORKTREE_DIRNAME = "worktrees"
 DOSSIER_DIRNAME = "dossiers"
 TASK_FILENAME = "task.md"
@@ -55,6 +56,10 @@ class RepoContext:
     @property
     def agents_path(self) -> Path:
         return self.ledger_dir / AGENTS_FILENAME
+
+    @property
+    def instruction_profiles_path(self) -> Path:
+        return self.ledger_dir / INSTRUCTION_PROFILES_FILENAME
 
     @property
     def git_info_exclude_path(self) -> Path:

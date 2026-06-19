@@ -212,9 +212,14 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("Worktree Control", html)
         self.assertIn("Start Worktree", html)
         self.assertIn("Prepare Launch Command", html)
+        self.assertIn("Instruction Mounts", html)
+        self.assertIn("copy snapshot", html)
+        self.assertIn("symlink live file", html)
         self.assertIn("Active Worktrees", html)
         self.assertIn("Doctor / Reconcile", html)
         self.assertIn("Finish + Collapse", html)
+        self.assertIn("createRoot", html)
+        self.assertIn("React", html)
         self.assertIn("data-dossier-kind", html)
         self.assertIn("/api/state", html)
         self.assertIn("data-gitwarp-token", html)
@@ -295,6 +300,10 @@ class WebApiTests(GitWarpTestCase):
             web.decode_confirmation(b"secret", token)  # type: ignore[attr-defined]
 
     def test_web_init_dispatch_start_and_handoff_mutations(self) -> None:
+        (self.repo / "AGENTS.md").write_text("web agent rules\n", encoding="utf-8")
+        run_git(self.repo, "add", "AGENTS.md")
+        run_git(self.repo, "commit", "-m", "add web instruction fixture")
+
         _, ready = self.start_web_server(
             self.repo,
             "web",
@@ -324,6 +333,7 @@ class WebApiTests(GitWarpTestCase):
                 "agent_id": None,
                 "branch": "feature/web-mutation-dispatch",
                 "purpose": "Dispatch through Web API",
+                "instructions": ["AGENTS.md"],
             },
         )
         self.assertEqual(dispatch_status, 200, dispatch_payload)
@@ -336,6 +346,7 @@ class WebApiTests(GitWarpTestCase):
                 "agent_id": "codex-web-start",
                 "branch": "feature/web-mutation-start",
                 "purpose": "Start through Web API",
+                "instructions": ["AGENTS.md"],
             },
         )
         self.assertEqual(start_status, 200, start_payload)
@@ -359,15 +370,84 @@ class WebApiTests(GitWarpTestCase):
         self.assertTrue((self.repo / ".gitwarp" / "ledger.json").exists())
         self.assertTrue(Path(str(dispatch_payload["path"])).exists())
         self.assertIn("launch_command", dispatch_payload)
+        self.assertEqual(dispatch_payload["instructions"][0]["target"], "AGENTS.md")  # type: ignore[index]
+        self.assertEqual(dispatch_payload["instruction_mode"], "copy")
         self.assertTrue(Path(str(start_payload["path"])).exists())
         self.assertEqual(start_payload["status"], "active")
+        self.assertEqual(start_payload["instructions"][0]["target"], "AGENTS.md")  # type: ignore[index]
         self.assertEqual(handoff_status, 200)
         self.assertEqual(handoff_payload["status"], "testing")
         self.assertEqual(state_status, 200)
         state_row = next(item for item in state["worktrees"] if item["branch"] == "feature/web-mutation-dispatch")  # type: ignore[index]
         board_row = next(item for item in board["worktrees"] if item["branch"] == "feature/web-mutation-dispatch")  # type: ignore[index]
         self.assertEqual(state_row["status"], "testing")
+        self.assertEqual(state_row["instructions"][0]["target"], "AGENTS.md")  # type: ignore[index]
         self.assertEqual(board_row["latest_progress"], "Web handoff recorded")
+
+    def test_web_instruction_payload_validation_is_strict(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        cases = [
+            (
+                {
+                    "agent_id": "codex-web-bad-instruction-element",
+                    "branch": "feature/web-bad-instruction-element",
+                    "purpose": "Reject bad instruction element",
+                    "instructions": ["AGENTS.md", 42],
+                },
+                "instructions must be a list of strings",
+            ),
+            (
+                {
+                    "agent_id": "codex-web-bad-instructions",
+                    "branch": "feature/web-bad-instructions",
+                    "purpose": "Reject non-list instructions",
+                    "instructions": "AGENTS.md",
+                },
+                "instructions must be a list of strings",
+            ),
+            (
+                {
+                    "agent_id": "codex-web-bad-profile",
+                    "branch": "feature/web-bad-profile",
+                    "purpose": "Reject bad profile",
+                    "instruction_profile": 42,
+                },
+                "instruction_profile must be a string",
+            ),
+            (
+                {
+                    "agent_id": "codex-web-bad-mode",
+                    "branch": "feature/web-bad-mode",
+                    "purpose": "Reject bad mode",
+                    "instruction_mode": "hardlink",
+                },
+                "instruction_mode must be copy or symlink",
+            ),
+        ]
+
+        for data, error in cases:
+            with self.subTest(error=error):
+                status, payload = self.fetch_web_json(
+                    str(ready["url"]),
+                    "/api/start",
+                    method="POST",
+                    token=str(session["token"]),
+                    data=data,
+                )
+
+                self.assertEqual(status, 400)
+                self.assertFalse(payload["ok"])
+                self.assertEqual(payload["code"], "gitwarp_error")
+                self.assertIn(error, str(payload["error"]))
 
     def test_web_finish_collapse_requires_fresh_confirmation(self) -> None:
         start = run_gitwarp(

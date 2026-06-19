@@ -83,6 +83,10 @@ function WorktreeCard({ readonly, worktree, onSelect, onHandoff, onFinish }: Wor
           <dt>Progress</dt>
           <dd>{worktree.latest_progress || "No progress recorded."}</dd>
         </div>
+        <div>
+          <dt>Instructions</dt>
+          <dd>{worktree.instructions?.length ? `${worktree.instructions.length} mounted` : "None"}</dd>
+        </div>
       </dl>
 
       <div className="workspace-actions">

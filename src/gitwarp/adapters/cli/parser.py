@@ -61,6 +61,9 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--agent-id", required=True)
     start.add_argument("--branch", required=True)
     start.add_argument("--purpose", required=True)
+    start.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
+    start.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
+    start.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
     start.set_defaults(func=cmd_start)
 
     dispatch = subparsers.add_parser("dispatch", help="Create a worktree and render an agent launch command")
@@ -70,6 +73,9 @@ def build_parser() -> argparse.ArgumentParser:
     dispatch.add_argument("--branch", required=True)
     dispatch.add_argument("--purpose", required=True)
     dispatch.add_argument("--command-mode", choices=["print", "execute"], default="print")
+    dispatch.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
+    dispatch.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
+    dispatch.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
     dispatch.set_defaults(func=cmd_dispatch)
 
     adopt = subparsers.add_parser("adopt", help="Bind an existing non-main worktree to GitWarp metadata")

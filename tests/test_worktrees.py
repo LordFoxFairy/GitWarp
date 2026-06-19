@@ -194,6 +194,329 @@ class WorktreeTests(GitWarpTestCase):
         self.assertEqual(worktree["status"], "dispatched")  # type: ignore[index]
         self.assertEqual(worktree["agent_id"], "local-feature-dispatch-print")  # type: ignore[index]
 
+    def test_start_mounts_explicit_instruction_files(self) -> None:
+        (self.repo / "docs").mkdir()
+        (self.repo / "AGENTS.md").write_text("root agent rules\n", encoding="utf-8")
+        (self.repo / "docs" / "codex-rules.md").write_text("codex local rules\n", encoding="utf-8")
+        run_git(self.repo, "add", "AGENTS.md", "docs/codex-rules.md")
+        run_git(self.repo, "commit", "-m", "add instruction fixtures")
+
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--cwd",
+            str(self.repo),
+            "--agent-id",
+            "codex-instructions",
+            "--branch",
+            "feature/instruction-mounts",
+            "--purpose",
+            "Verify instruction mounts",
+            "--instruction",
+            "AGENTS.md",
+            "--instruction",
+            ".agents/CODEX.md=docs/codex-rules.md",
+        )
+        worktree_path = Path(str(start["path"]))
+        instructions = start["instructions"]  # type: ignore[index]
+
+        self.assertEqual([item["target"] for item in instructions], ["AGENTS.md", ".agents/CODEX.md"])  # type: ignore[index]
+        self.assertEqual(start["instruction_mode"], "copy")
+        self.assertEqual(instructions[1]["status"], "copied")  # type: ignore[index]
+        self.assertEqual(instructions[1]["bytes"], len("codex local rules\n"))  # type: ignore[index]
+        self.assertRegex(str(instructions[1]["sha256"]), r"^[a-f0-9]{64}$")  # type: ignore[index]
+        self.assertEqual((worktree_path / "AGENTS.md").read_text(encoding="utf-8"), "root agent rules\n")
+        self.assertEqual((worktree_path / ".agents" / "CODEX.md").read_text(encoding="utf-8"), "codex local rules\n")
+        self.assertIn("Mounted Instructions", Path(str(start["task_md"])).read_text(encoding="utf-8"))
+
+        context = run_gitwarp(self.repo, "context", "--cwd", str(worktree_path))
+        worktree = context["worktree"]  # type: ignore[index]
+        self.assertEqual(worktree["instructions"], instructions)  # type: ignore[index]
+        prompt = run_gitwarp_text(self.repo, "enter", "--cwd", str(worktree_path), "--format", "prompt")
+        self.assertIn("Instructions:", prompt)
+        self.assertIn("- AGENTS.md", prompt)
+        self.assertIn("- .agents/CODEX.md", prompt)
+
+    def test_dispatch_mounts_instruction_profile_from_config(self) -> None:
+        (self.repo / "docs").mkdir()
+        (self.repo / "AGENTS.md").write_text("root rules\n", encoding="utf-8")
+        (self.repo / "docs" / "claude.md").write_text("claude rules\n", encoding="utf-8")
+        run_git(self.repo, "add", "AGENTS.md", "docs/claude.md")
+        run_git(self.repo, "commit", "-m", "add profile fixtures")
+        profile_path = self.repo / ".gitwarp" / "instruction_profiles.json"
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        profile_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "profiles": {
+                        "claude-code": {
+                            "description": "Claude Code instruction stack",
+                            "instructions": [
+                                "AGENTS.md",
+                                {"target": "CLAUDE.md", "source": "docs/claude.md"},
+                            ],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        dispatch = run_gitwarp(
+            self.repo,
+            "dispatch",
+            "--cwd",
+            str(self.repo),
+            "--agent",
+            "codex",
+            "--branch",
+            "feature/profile-mounts",
+            "--purpose",
+            "Verify instruction profile",
+            "--instruction-profile",
+            "claude-code",
+        )
+        worktree_path = Path(str(dispatch["path"]))
+
+        self.assertEqual(dispatch["instruction_profile"], "claude-code")
+        self.assertEqual(dispatch["instruction_mode"], "copy")
+        self.assertEqual((worktree_path / "AGENTS.md").read_text(encoding="utf-8"), "root rules\n")
+        self.assertEqual((worktree_path / "CLAUDE.md").read_text(encoding="utf-8"), "claude rules\n")
+        self.assertIn("CLAUDE.md", Path(str(dispatch["task_md"])).read_text(encoding="utf-8"))
+
+    def test_dispatch_rolls_back_existing_branch_when_instruction_mount_conflicts(self) -> None:
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs" / "rules.md").write_text("source rules\n", encoding="utf-8")
+        run_git(self.repo, "add", "docs/rules.md")
+        run_git(self.repo, "commit", "-m", "add source rules")
+        run_git(self.repo, "checkout", "-b", "feature/conflicting-mount")
+        (self.repo / ".agents").mkdir()
+        (self.repo / ".agents" / "CODEX.md").write_text("branch existing rules\n", encoding="utf-8")
+        run_git(self.repo, "add", ".agents/CODEX.md")
+        run_git(self.repo, "commit", "-m", "add conflicting branch target")
+        run_git(self.repo, "checkout", "main")
+
+        result = run_gitwarp(
+            self.repo,
+            "dispatch",
+            "--cwd",
+            str(self.repo),
+            "--agent",
+            "codex",
+            "--branch",
+            "feature/conflicting-mount",
+            "--purpose",
+            "Should roll back worktree on mount failure",
+            "--instruction",
+            ".agents/CODEX.md=docs/rules.md",
+            expect_ok=False,
+        )
+        scan = run_gitwarp(self.repo, "scan", "--cwd", str(self.repo))
+
+        self.assertIn("different content", str(result["error"]))
+        self.assertNotEqual(run_git(self.repo, "branch", "--list", "feature/conflicting-mount"), "")
+        self.assertFalse((self.repo / ".gitwarp" / "worktrees" / "feature-conflicting-mount").exists())
+        self.assertNotIn(
+            "feature/conflicting-mount",
+            {item["branch"] for item in scan["worktrees"]},  # type: ignore[index]
+        )
+
+    def test_start_rolls_back_partial_instruction_mount_failure(self) -> None:
+        (self.repo / "docs").mkdir()
+        (self.repo / "docs" / "keep.txt").write_text("keep docs directory\n", encoding="utf-8")
+        (self.repo / "AGENTS.md").write_text("root rules\n", encoding="utf-8")
+        run_git(self.repo, "add", "AGENTS.md", "docs/keep.txt")
+        run_git(self.repo, "commit", "-m", "add rollback fixtures")
+
+        result = run_gitwarp(
+            self.repo,
+            "start",
+            "--cwd",
+            str(self.repo),
+            "--agent-id",
+            "codex-rollback",
+            "--branch",
+            "feature/partial-mount-failure",
+            "--purpose",
+            "Should roll back partial instruction mounts",
+            "--instruction",
+            ".mounted/AGENTS.md=AGENTS.md",
+            "--instruction",
+            "docs=AGENTS.md",
+            expect_ok=False,
+        )
+        scan = run_gitwarp(self.repo, "scan", "--cwd", str(self.repo))
+
+        self.assertIn("different content", str(result["error"]))
+        self.assertEqual(run_git(self.repo, "branch", "--list", "feature/partial-mount-failure"), "")
+        self.assertFalse((self.repo / ".gitwarp" / "worktrees" / "feature-partial-mount-failure").exists())
+        self.assertNotIn(
+            "feature/partial-mount-failure",
+            {item["branch"] for item in scan["worktrees"]},  # type: ignore[index]
+        )
+
+    def test_start_rolls_back_worktree_and_dossier_when_ledger_write_fails(self) -> None:
+        ensure_src_path()
+        provisioning = importlib.import_module("gitwarp.application.use_cases.provisioning")
+        ledger = importlib.import_module("gitwarp.infrastructure.ledger")
+        ctx = ledger.discover_repo(self.repo)
+        original_mutate_ledger = provisioning.mutate_ledger
+
+        def fail_mutate_ledger(*_args: object, **_kwargs: object) -> None:
+            raise provisioning.GitWarpError("simulated ledger write failure")
+
+        provisioning.mutate_ledger = fail_mutate_ledger
+        try:
+            with self.assertRaises(provisioning.GitWarpError):
+                provisioning.build_start_payload(
+                    ctx,
+                    agent_id="codex-ledger-failure",
+                    branch="feature/ledger-failure",
+                    purpose="Should roll back if ledger cannot persist",
+                )
+        finally:
+            provisioning.mutate_ledger = original_mutate_ledger
+
+        self.assertEqual(run_git(self.repo, "branch", "--list", "feature/ledger-failure"), "")
+        self.assertFalse((self.repo / ".gitwarp" / "worktrees" / "feature-ledger-failure").exists())
+        remaining_dossiers = list((self.repo / ".gitwarp" / "dossiers").glob("feature-ledger-failure-*"))
+        self.assertEqual([], remaining_dossiers)
+
+    def test_instruction_profile_schema_rejects_invalid_targets_and_duplicates(self) -> None:
+        (self.repo / "AGENTS.md").write_text("root rules\n", encoding="utf-8")
+        run_git(self.repo, "add", "AGENTS.md")
+        run_git(self.repo, "commit", "-m", "add rules")
+        profile_path = self.repo / ".gitwarp" / "instruction_profiles.json"
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+
+        profile_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "profiles": {
+                        "bad-target": {
+                            "instructions": [{"source": "AGENTS.md", "target": 42}],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        bad_target = run_gitwarp(
+            self.repo,
+            "start",
+            "--cwd",
+            str(self.repo),
+            "--agent-id",
+            "codex-bad-profile",
+            "--branch",
+            "feature/bad-profile",
+            "--purpose",
+            "Reject invalid profile target",
+            "--instruction-profile",
+            "bad-target",
+            expect_ok=False,
+        )
+        self.assertIn("non-string target", str(bad_target["error"]))
+        self.assertEqual(run_git(self.repo, "branch", "--list", "feature/bad-profile"), "")
+
+        profile_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "profiles": {
+                        "duplicate": {
+                            "instructions": ["AGENTS.md"],
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        duplicate = run_gitwarp(
+            self.repo,
+            "dispatch",
+            "--cwd",
+            str(self.repo),
+            "--agent",
+            "codex",
+            "--branch",
+            "feature/duplicate-profile",
+            "--purpose",
+            "Reject duplicate instruction targets",
+            "--instruction-profile",
+            "duplicate",
+            "--instruction",
+            "AGENTS.md",
+            expect_ok=False,
+        )
+        self.assertIn("specified more than once", str(duplicate["error"]))
+        self.assertEqual(run_git(self.repo, "branch", "--list", "feature/duplicate-profile"), "")
+
+    def test_instruction_symlink_mode_and_validation_do_not_mutate_on_error(self) -> None:
+        (self.repo / "AGENTS.md").write_text("root rules\n", encoding="utf-8")
+        run_git(self.repo, "add", "AGENTS.md")
+        run_git(self.repo, "commit", "-m", "add rules")
+
+        linked = run_gitwarp(
+            self.repo,
+            "start",
+            "--cwd",
+            str(self.repo),
+            "--agent-id",
+            "codex-symlink",
+            "--branch",
+            "feature/symlink-instructions",
+            "--purpose",
+            "Verify symlink mode",
+            "--instruction",
+            ".rules/AGENTS.md=AGENTS.md",
+            "--instruction-mode",
+            "symlink",
+        )
+        link_path = Path(str(linked["path"])) / ".rules" / "AGENTS.md"
+        self.assertTrue(link_path.is_symlink())
+        self.assertEqual(linked["instructions"][0]["status"], "linked")  # type: ignore[index]
+
+        missing = run_gitwarp(
+            self.repo,
+            "start",
+            "--cwd",
+            str(self.repo),
+            "--agent-id",
+            "codex-missing",
+            "--branch",
+            "feature/missing-instruction",
+            "--purpose",
+            "Should not mutate",
+            "--instruction",
+            "MISSING.md",
+            expect_ok=False,
+        )
+        self.assertIn("instruction source", str(missing["error"]))
+        self.assertEqual(run_git(self.repo, "branch", "--list", "feature/missing-instruction"), "")
+        self.assertFalse((self.repo / ".gitwarp" / "worktrees" / "feature-missing-instruction").exists())
+
+        escape = run_gitwarp(
+            self.repo,
+            "dispatch",
+            "--cwd",
+            str(self.repo),
+            "--agent",
+            "codex",
+            "--branch",
+            "feature/escape-instruction",
+            "--purpose",
+            "Should not mutate",
+            "--instruction",
+            "../AGENTS.md=AGENTS.md",
+            expect_ok=False,
+        )
+        self.assertIn("relative path", str(escape["error"]))
+        self.assertEqual(run_git(self.repo, "branch", "--list", "feature/escape-instruction"), "")
+        self.assertFalse((self.repo / ".gitwarp" / "worktrees" / "feature-escape-instruction").exists())
+
     def test_dispatch_execute_is_rejected_before_mutation(self) -> None:
         result = run_gitwarp(
             self.repo,
