@@ -18,6 +18,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp.py"
 SCRIPT_DIR = REPO_ROOT / "skills" / "gitwarp" / "scripts"
+SRC_DIR = REPO_ROOT / "src"
 
 
 def run_git(repo: Path, *args: str) -> str:
@@ -68,25 +69,25 @@ def findings_with_code(payload: dict[str, object], code: str) -> list[dict[str, 
     ]
 
 
+def ensure_src_path() -> None:
+    src_dir = str(SRC_DIR)
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+
+
 def load_gitwarp_services() -> object:
-    script_dir = str(SCRIPT_DIR)
-    if script_dir not in sys.path:
-        sys.path.insert(0, script_dir)
-    return importlib.import_module("gitwarp_core.services")
+    ensure_src_path()
+    return importlib.import_module("gitwarp.services")
 
 
 def load_gitwarp_ledger() -> object:
-    script_dir = str(SCRIPT_DIR)
-    if script_dir not in sys.path:
-        sys.path.insert(0, script_dir)
-    return importlib.import_module("gitwarp_core.ledger")
+    ensure_src_path()
+    return importlib.import_module("gitwarp.ledger")
 
 
 def load_gitwarp_web() -> object:
-    script_dir = str(SCRIPT_DIR)
-    if script_dir not in sys.path:
-        sys.path.insert(0, script_dir)
-    return importlib.import_module("gitwarp_core.web")
+    ensure_src_path()
+    return importlib.import_module("gitwarp.web")
 
 
 def read_json_response(response: object) -> dict[str, object]:

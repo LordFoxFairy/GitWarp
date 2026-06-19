@@ -56,7 +56,24 @@ class PluginStructureTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
 
     def test_plugin_src_package_matches_root_package(self) -> None:
-        self.assert_directory_mirror(REPO_ROOT / "src" / "gitwarp", REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp")
+        self.assert_directory_mirror(
+            REPO_ROOT / "src" / "gitwarp",
+            REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp",
+        )
+
+    def test_skill_wrappers_do_not_ship_product_core(self) -> None:
+        self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp_core").exists())
+        self.assertFalse(
+            (
+                REPO_ROOT
+                / "plugins"
+                / "gitwarp"
+                / "skills"
+                / "gitwarp"
+                / "scripts"
+                / "gitwarp_core"
+            ).exists()
+        )
 
     def test_plugin_wrapper_runs_from_installed_plugin_copy(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
@@ -112,10 +129,6 @@ class PluginStructureTests(unittest.TestCase):
             "skills/gitwarp/scripts/gitwarp.py",
             "skills/gitwarp/scripts/install_cli.py",
         ]
-        relative_paths.extend(
-            str(path.relative_to(REPO_ROOT))
-            for path in sorted((REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp_core").glob("*.py"))
-        )
 
         for relative_path in relative_paths:
             with self.subTest(path=relative_path):
