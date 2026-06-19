@@ -28,6 +28,8 @@ Install from the repository root:
 
 ```bash
 scripts/install-codex-plugin.sh
+gitwarp init --cwd "$PWD"
+gitwarp doctor --cwd "$PWD"
 ```
 
 Manual equivalent:
@@ -64,15 +66,28 @@ By default this writes a launcher to `~/.local/bin/gitwarp`. Override with `--de
 Verify:
 
 ```bash
+gitwarp init --cwd /absolute/path/to/git/repo
+gitwarp doctor --cwd /absolute/path/to/git/repo
 gitwarp enter --cwd /absolute/path/to/git/repo
 gitwarp scan --cwd /absolute/path/to/git/repo
 gitwarp agents --cwd /absolute/path/to/git/repo
-gitwarp doctor --cwd /absolute/path/to/git/repo
 gitwarp context --cwd /absolute/path/to/git/repo
 gitwarp board --cwd /absolute/path/to/git/repo --format table
 ```
 
-Plugin session hooks install the CLI and attempt `gitwarp enter --cwd "$PWD" --format prompt` at session start. That injects the current main/worktree context for agents, but it does not allocate a worktree automatically. Start isolated work explicitly with `gitwarp dispatch` or `gitwarp start`.
+## Repository initialization
+
+`gitwarp init --cwd /absolute/path/to/git/repo` creates `.gitwarp/`, `.gitwarp/worktrees/`, `.gitwarp/dossiers/`, and `.gitwarp/ledger.json`. The command is idempotent and validates existing state before writing.
+
+Default local mode writes `/.gitwarp/` to `.git/info/exclude`, so runtime files stay ignored without touching tracked files. Team mode writes the same rule to `.gitignore`:
+
+```bash
+gitwarp init --cwd /absolute/path/to/git/repo --write-gitignore
+```
+
+Use team mode only when the project wants the ignore rule committed. If `.gitignore` already has the rule, `init` will not duplicate it.
+
+Plugin session hooks install the CLI and attempt `gitwarp enter --cwd "$PWD" --format prompt` at session start. That injects the current main/worktree context for agents, but it does not initialize runtime state or allocate a worktree automatically. Start isolated work explicitly with `gitwarp dispatch` or `gitwarp start`.
 
 For orchestrated agent launches, use `gitwarp dispatch`. It allocates a project-local worktree under `<repo>/.gitwarp/worktrees/<worktree-name>`, creates the dossier files, records ownership, and prints a launch command without executing it. Optional local launch templates live in ignored runtime config at `.gitwarp/agents.json`; built-in templates are available for `codex` and `claude`.
 

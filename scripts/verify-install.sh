@@ -79,6 +79,61 @@ printf "hello\n" > "$tmpdir/README.md"
 git -C "$tmpdir" add README.md
 git -C "$tmpdir" commit -m init >/dev/null
 
+pre_init_doctor="$(gitwarp doctor --cwd "$tmpdir")"
+PRE_INIT_DOCTOR="$pre_init_doctor" TMPDIR="$tmpdir" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["PRE_INIT_DOCTOR"])
+assert payload["ok"] is True
+codes = {finding["code"] for finding in payload["findings"]}
+assert {"gitwarp_initialized", "ledger_schema", "gitwarp_ignored", "agent_config"} <= codes
+assert any("gitwarp init --cwd" in item for item in payload["recommended_next"])
+assert not os.path.exists(os.path.join(os.environ["TMPDIR"], ".gitwarp", "ledger.json"))
+PY
+
+init_output="$(gitwarp init --cwd "$tmpdir")"
+INIT_OUTPUT="$init_output" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(os.environ["INIT_OUTPUT"])
+assert payload["ok"] is True
+assert payload["created"]["ledger"] is True
+assert payload["updated"]["ignore_rule"] is True
+for key in ("ledger_path", "worktree_root", "dossier_root"):
+    assert payload[key]
+    assert Path(payload[key]).exists()
+assert payload["ignore_target"].endswith("/.git/info/exclude")
+assert any("gitwarp doctor" in item for item in payload["recommended_next"])
+PY
+
+second_init_output="$(gitwarp init --cwd "$tmpdir")"
+SECOND_INIT_OUTPUT="$second_init_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["SECOND_INIT_OUTPUT"])
+assert payload["ok"] is True
+assert payload["created"]["ledger"] is False
+assert payload["updated"]["ignore_rule"] is False
+PY
+
+post_init_doctor="$(gitwarp doctor --cwd "$tmpdir")"
+POST_INIT_DOCTOR="$post_init_doctor" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["POST_INIT_DOCTOR"])
+assert payload["ok"] is True
+findings = {finding["code"]: finding for finding in payload["findings"]}
+assert findings["gitwarp_initialized"]["severity"] == "ok"
+assert findings["ledger_schema"]["severity"] == "ok"
+assert findings["gitwarp_ignored"]["severity"] == "ok"
+assert findings["agent_config"]["severity"] == "ok"
+PY
+
 main_enter="$(gitwarp enter --cwd "$tmpdir")"
 MAIN_ENTER="$main_enter" python3 - <<'PY'
 import json
@@ -104,7 +159,6 @@ assert {"codex", "claude"} <= names
 assert payload["config_path"].endswith("/.gitwarp/agents.json")
 PY
 
-mkdir -p "$tmpdir/.gitwarp"
 cat > "$tmpdir/.gitwarp/agents.json" <<'JSON'
 {"version":1,"default_agent":"local","agents":{"local":{"description":"Local smoke agent","command":["python3","-c","{prompt}","{worktree}"],"status":"enabled"}}}
 JSON
@@ -364,12 +418,15 @@ expected = {
     "git",
     "python3",
     "gitwarp_launcher",
+    "gitwarp_initialized",
+    "ledger_schema",
     "gitwarp_ignored",
+    "agent_config",
     "agent_binary",
     "codex_plugin_metadata",
-    "session_hook_context",
 }
 assert expected <= codes
+assert "session_hook_context" not in codes
 assert "summary" in payload
 PY
 
@@ -412,7 +469,7 @@ print(
             "plugin": os.environ["PLUGIN_ID"],
             "cli": os.environ["CLI_PATH"],
             "dispatch_path": os.environ["DISPATCH_PATH"],
-            "smoke": "agents-dispatch-adopt-reconcile-doctor-enter-start-context-handoff-board-statusline-finish",
+            "smoke": "init-agents-dispatch-adopt-reconcile-doctor-enter-start-context-handoff-board-statusline-finish",
         },
         separators=(",", ":"),
         sort_keys=True,

@@ -20,6 +20,7 @@ From this checkout:
 
 ```bash
 scripts/install-codex-plugin.sh
+gitwarp init --cwd "$PWD"
 gitwarp doctor --cwd "$PWD"
 ```
 
@@ -52,6 +53,13 @@ python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
 The skill works without the plugin wrapper as long as the host can discover `SKILL.md` and the `gitwarp` launcher is on `PATH`.
 
 ## Quick Start
+
+Initialize each target repository once, then run a read-only diagnostic:
+
+```bash
+gitwarp init --cwd "$PWD"
+gitwarp doctor --cwd "$PWD"
+```
 
 Start every repository session with context:
 
@@ -126,12 +134,14 @@ gitwarp adopt --cwd /absolute/path/to/repo \
 
 ## Runtime Model
 
-GitWarp stores runtime state under `.gitwarp/` in the target repository. This directory is ignored and should not be committed.
+GitWarp stores runtime state under `.gitwarp/` in the target repository. Run `gitwarp init --cwd "$PWD"` to create this state safely before dispatching agents.
 
 - Worktrees: `.gitwarp/worktrees/<worktree-name>`
 - Ledger: `.gitwarp/ledger.json`
 - Agent launch config: `.gitwarp/agents.json`
 - Dossiers: `.gitwarp/dossiers/<branch-slug>-<id>/`
+
+By default, `init` writes `/.gitwarp/` to `.git/info/exclude`, which keeps runtime files local to one checkout. Use `gitwarp init --write-gitignore` when the team wants the ignore rule committed to `.gitignore`.
 
 `dispatch` is intentionally print-only in this release. `--command-mode execute` fails before creating anything so humans can review agent launch commands and host-specific flags.
 

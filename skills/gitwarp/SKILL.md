@@ -11,17 +11,19 @@ GitWarp is the worktree isolation protocol for coding agents. It wraps native `g
 
 ## Core Rules
 
-1. Run `gitwarp enter --cwd "$PWD"` before repository work unless a session hook already provided GitWarp Context.
-2. For concurrent or isolated writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main checkout.
-3. Use only absolute paths returned by GitWarp. The default sandbox root is `<repo>/.gitwarp/worktrees/`.
-4. Read `task.md`, `progress.md`, and `lessons.md` before editing inside a sandbox.
-5. Record milestones with `gitwarp handoff` so later agents can recover context.
-6. Never edit `.gitwarp/ledger.json` or `.gitwarp/agents.json` by hand while GitWarp commands may be running.
+1. Run `gitwarp init --cwd "$PWD"` once per target repository when GitWarp runtime state is missing or `doctor` recommends it.
+2. Run `gitwarp enter --cwd "$PWD"` before repository work unless a session hook already provided GitWarp Context.
+3. For concurrent or isolated writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main checkout.
+4. Use only absolute paths returned by GitWarp. The default sandbox root is `<repo>/.gitwarp/worktrees/`.
+5. Read `task.md`, `progress.md`, and `lessons.md` before editing inside a sandbox.
+6. Record milestones with `gitwarp handoff` so later agents can recover context.
+7. Never edit `.gitwarp/ledger.json` or `.gitwarp/agents.json` by hand while GitWarp commands may be running.
 
 ## Command Contract
 
 | Command | Use |
 | --- | --- |
+| `init` | Create `.gitwarp/`, runtime subdirectories, ledger, and ignore rule safely. |
 | `enter` | Get current main/worktree context and dossier pointers. JSON by default; `--format prompt` for hooks. |
 | `dispatch` | Create a dossier-backed worktree and print a ready-to-run agent launch command. |
 | `start` | Create a dossier-backed worktree for manual coordination. |
@@ -40,8 +42,12 @@ All automation commands emit deterministic single-line JSON except `statusline`,
 From any repository path:
 
 ```bash
+gitwarp init --cwd "$PWD"
+gitwarp doctor --cwd "$PWD"
 gitwarp enter --cwd "$PWD"
 ```
+
+If `doctor` reports missing runtime state, run or recommend `gitwarp init --cwd "$PWD"` before starting new isolated work. By default it writes `/.gitwarp/` to `.git/info/exclude`; use `--write-gitignore` only when the project wants a committed team ignore rule.
 
 If `location` is `main` and isolated work is needed, prefer dispatch:
 

@@ -26,10 +26,11 @@ escape_for_json() {
 
 context="GitWarp plugin is installed.
 Agent protocol:
-1. Run gitwarp enter --cwd \"\$PWD\" before repository work.
-2. For isolated or concurrent writes, use gitwarp start instead of git checkout/git switch.
-3. In a worktree, read task.md, progress.md, and lessons.md before editing.
-4. Record milestones with gitwarp handoff and finish with gitwarp finish.
+1. If GitWarp runtime is missing or doctor recommends it, run gitwarp init --cwd \"\$PWD\".
+2. Run gitwarp enter --cwd \"\$PWD\" before repository work.
+3. For isolated or concurrent writes, use gitwarp dispatch or gitwarp start instead of git checkout/git switch.
+4. In a worktree, read task.md, progress.md, and lessons.md before editing.
+5. Record milestones with gitwarp handoff and finish with gitwarp finish.
 
 Current context:
 ${gitwarp_context:-GitWarp context unavailable. Run gitwarp enter --cwd \"\$PWD\" manually.}"
