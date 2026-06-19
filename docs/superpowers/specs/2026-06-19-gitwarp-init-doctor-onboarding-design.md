@@ -30,6 +30,40 @@ Add `gitwarp init --cwd <repo>` as the explicit first-run repository setup comma
 
 Refactor `doctor` around reusable checks and make it read-only. It should report runtime initialization, ledger schema, ignore coverage, standard skill discovery links, launcher/version, agent registry, plugin metadata, static hook presence, and setup recommendations. It must never execute repository hook scripts.
 
+## Ledger V1 Schema
+
+An empty initialized ledger is:
+
+```json
+{
+  "version": 1,
+  "repo_root": "/absolute/path/to/repo",
+  "entries": []
+}
+```
+
+Valid ledger v1 requirements:
+
+- Root object must be a JSON object.
+- `entries` must exist and be an array.
+- `version` may be absent for older GitWarp ledgers; loaders normalize it to `1`.
+- `repo_root` may be absent or stale; loaders normalize it to the current repository root.
+- Unknown top-level fields are preserved.
+- Existing `entries` contents are preserved unless stale pruning is explicitly performed by existing commands such as `scan`.
+
+`gitwarp init` must not prune ledger entries. If `ledger.json` exists and is valid, init may normalize only missing `version` or stale/missing `repo_root`; it must not delete or rewrite `entries`.
+
+## Existing Command Compatibility
+
+Existing commands should continue to work without a prior explicit `gitwarp init`.
+
+- Mutating commands such as `start`, `summon`, `dispatch`, `adopt`, `handoff`, `annotate`, `finish`, and `collapse` may continue their current opportunistic creation of `.gitwarp/ledger.json` through existing ledger write paths.
+- `scan` may continue to synchronize/prune the ledger as it does today.
+- `enter`, `statusline`, `doctor`, and `reconcile` remain usable before init.
+- New onboarding guidance should recommend `gitwarp init`, but implementation must not make prior init a hard requirement for existing workflows.
+
+This preserves backward compatibility while giving users a clean first-run command.
+
 ## Command: `gitwarp init`
 
 ### CLI
@@ -42,12 +76,16 @@ gitwarp init --cwd /absolute/path/to/repo --write-gitignore
 ### Default Behavior
 
 1. Discover the root repository from `--cwd` or current directory.
-2. Validate that `.gitwarp` is absent or a directory.
-3. Create `.gitwarp/`, `.gitwarp/worktrees/`, and `.gitwarp/dossiers/`.
-4. Create `.gitwarp/ledger.json` only if absent.
-5. If a valid ledger already exists, preserve it exactly except for normal schema normalization when a write is required.
-6. Ensure the repo ignores `/.gitwarp/` by appending it to `.git/info/exclude` if no ignore rule already covers `.gitwarp`.
-7. Return JSON containing paths, created/updated booleans, ignore target, and recommended next commands.
+2. Preflight all target paths and existing ledger state before writing anything.
+3. Validate that `.gitwarp` is absent or a directory.
+4. Validate that `.gitwarp/worktrees` and `.gitwarp/dossiers` are absent or directories.
+5. Validate that existing `.gitwarp/ledger.json`, if present, is a valid v1-compatible ledger.
+6. Validate that the selected ignore target can be written if a new ignore rule is required.
+7. Create `.gitwarp/`, `.gitwarp/worktrees/`, and `.gitwarp/dossiers/`.
+8. Create `.gitwarp/ledger.json` only if absent.
+9. If a valid ledger already exists, preserve entries and unknown fields while normalizing `version` and `repo_root` only when a write is required.
+10. Ensure the repo ignores `/.gitwarp/` by appending it to `.git/info/exclude` if no ignore rule already covers `.gitwarp`.
+11. Return JSON containing paths, created/updated booleans, ignore target, and recommended next commands.
 
 ### `--write-gitignore`
 
@@ -92,9 +130,24 @@ Rules:
 - Git repository discovery fails: existing JSON error path handles this.
 - Ignore target cannot be written: fail with a clear path in the error.
 
+### Atomicity And Preflight
+
+`init` is not a transaction manager, but it must avoid partial setup for predictable preflight failures.
+
+Before creating directories or writing files, it must check:
+
+- All path collisions listed in Failure Cases.
+- Existing ledger JSON/schema.
+- Whether a new ignore rule is necessary.
+- Whether the selected ignore target path is a directory or otherwise unwritable.
+
+After preflight passes, writes happen in this order: create directories, write or normalize ledger with atomic replace, then append ignore rule. If the final ignore append fails despite preflight, return `ok:false` with the path and leave already-created runtime directories in place; subsequent `init` can retry idempotently.
+
 ## Doctor Redesign
 
 `doctor` remains a read-only JSON command.
+
+`doctor` always exits `0` and returns `"ok": true` when it can discover the repository and complete diagnostics, even if some findings have `severity: "error"`. It exits nonzero only when it cannot run as a diagnostic command at all, such as when `--cwd` is outside any Git repository and repository discovery fails.
 
 ### Required Checks
 
@@ -108,7 +161,7 @@ Rules:
 | `gitwarp_ignored` | `ok` when Git ignore covers `.gitwarp`; `warning` otherwise. |
 | `standard_skill_links` | `ok` when repo-local `.agents/skills/gitwarp` and `.claude/skills/gitwarp` resolve to `skills/gitwarp`; `warning` when missing or wrong. |
 | `agent_binary` | One finding per configured/built-in agent, same as current behavior. |
-| `agent_config` | `ok` when valid or absent; `error` when `.gitwarp/agents.json` is malformed. |
+| `agent_config` | Always emit exactly one finding: `ok` when valid or absent; `error` when `.gitwarp/agents.json` is malformed. |
 | `codex_plugin_metadata` | Existing Codex plugin check, warning if Codex/plugin metadata unavailable. |
 | `session_hook_context` | Static check only: hook file exists, executable, and contains `gitwarp enter --cwd`; do not execute it. |
 
@@ -160,6 +213,8 @@ Add tests in `tests/test_gitwarp.py`:
 - `test_init_bootstraps_runtime_state_and_is_idempotent`
 - `test_init_preserves_existing_ledger_entries`
 - `test_init_refuses_invalid_existing_state`
+- `test_init_write_gitignore_and_deduplicates_ignore_rules`
+- `test_init_reports_ignore_target_write_failure`
 - `test_doctor_reports_setup_guidance_without_mutation`
 - `test_doctor_reports_invalid_ledger_error`
 - `test_doctor_does_not_execute_repo_hook`
