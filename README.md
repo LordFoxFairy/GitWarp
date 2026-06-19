@@ -1,8 +1,8 @@
 # GitWarp
 
-GitWarp is an Agent Skill plus CLI for running Codex, Claude Code, and other coding agents in isolated Git worktrees. It gives each task a physical sandbox, a branch ownership record, and a small dossier (`task.md`, `progress.md`, `lessons.md`) so agents can resume work without guessing what happened before.
+GitWarp is an Agent Skill plus installable CLI package for running Codex, Claude Code, and other coding agents in isolated Git worktrees. It gives each task a physical sandbox, a branch ownership record, and a small dossier (`task.md`, `progress.md`, `lessons.md`) so agents can resume work without guessing what happened before.
 
-The project follows the common Agent Skills layout: `SKILL.md` contains the agent instructions, `scripts/` contains deterministic tools, `references/` contains optional details, and plugin wrappers expose the same skill to supported hosts.
+The project follows the common Agent Skills layout while keeping product code in a normal Python package. `src/gitwarp/` is the canonical runtime, `skills/gitwarp/` contains agent instructions plus tiny wrappers, and `plugins/gitwarp/` is the self-contained plugin distribution mirror.
 
 ## Why GitWarp
 
@@ -43,7 +43,7 @@ GitWarp also exposes repo-local standard skill locations:
 - Codex: `.agents/skills/gitwarp -> ../../skills/gitwarp`
 - Claude Code: `.claude/skills/gitwarp -> ../../skills/gitwarp`
 
-For user-global installs, copy or symlink the canonical skill folder:
+For source checkout installs, symlink the canonical skill folder so the wrapper can resolve the adjacent `src/gitwarp` package:
 
 ```bash
 mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
@@ -52,7 +52,7 @@ ln -s "$PWD/skills/gitwarp" "$HOME/.claude/skills/gitwarp"
 python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
 ```
 
-The skill works without the plugin wrapper as long as the host can discover `SKILL.md` and the `gitwarp` launcher is on `PATH`.
+For copy-only installs, install the full plugin package or install the Python package first. Copying only `skills/gitwarp/` is not enough because the core implementation lives in `src/gitwarp/`.
 
 ## Quick Start
 
@@ -177,21 +177,25 @@ Example `.gitwarp/agents.json`:
 
 ## Repository Layout
 
-- `skills/gitwarp/`: canonical skill source, CLI helper, installer, and references.
+- `src/gitwarp/`: canonical Python package and CLI implementation.
+- `src/gitwarp/assets/`: packaged static assets; future web builds go under `assets/web-console/`.
+- `skills/gitwarp/`: canonical Agent Skill instructions, wrapper script, installer, and references.
 - `.agents/skills/gitwarp` and `.claude/skills/gitwarp`: repo-local standard skill discovery links.
-- `plugins/gitwarp/`: marketplace-ready Codex plugin package mirror.
+- `plugins/gitwarp/`: marketplace-ready Codex plugin package mirror, including its own `src/gitwarp/` copy.
 - `.codex-plugin/` and `.claude-plugin/`: plugin metadata shells.
 - `.agents/plugins/api_marketplace.json`: local Codex marketplace entry named `gitwarp-dev`.
 - `hooks/`: session hook assets for compatible hosts.
+- `web/`: future rich web console source; do not put frontend source under `skills/`.
 - `tests/`: Python regression tests for GitWarp behavior and packaging.
 
 ## Development
 
 ```bash
+python3 -m py_compile src/gitwarp/*.py plugins/gitwarp/src/gitwarp/*.py skills/gitwarp/scripts/*.py plugins/gitwarp/skills/gitwarp/scripts/*.py
 python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp
 python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/gitwarp
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 scripts/verify-install.sh
 ```
 
-Keep `skills/gitwarp/` and `plugins/gitwarp/skills/gitwarp/` synchronized when changing skill behavior. Keep the standard discovery links pointing at the canonical skill folder.
+Keep `src/gitwarp/` and `plugins/gitwarp/src/gitwarp/` synchronized when changing runtime behavior. Keep `skills/gitwarp/` and `plugins/gitwarp/skills/gitwarp/` synchronized when changing skill behavior. Keep the standard discovery links pointing at the canonical skill folder.

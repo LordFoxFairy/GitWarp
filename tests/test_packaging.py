@@ -75,6 +75,13 @@ class PluginStructureTests(unittest.TestCase):
             ).exists()
         )
 
+    def test_web_source_and_packaged_assets_have_clear_boundaries(self) -> None:
+        self.assertTrue((REPO_ROOT / "web" / "README.md").exists())
+        self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "assets" / ".gitkeep").exists())
+        self.assertTrue((REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp" / "assets" / ".gitkeep").exists())
+        self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "package.json").exists())
+        self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "web").exists())
+
     def test_plugin_wrapper_runs_from_installed_plugin_copy(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             plugin_copy = Path(tempdir) / "gitwarp"

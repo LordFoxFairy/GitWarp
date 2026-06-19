@@ -17,7 +17,7 @@
 
 ## Recommended repo strategy
 
-For authoring, keep the canonical skill in `skills/gitwarp/` and mirror it into `plugins/gitwarp/skills/gitwarp/` before installing the plugin. Repo-local standard discovery paths are symlinks:
+For authoring, keep the canonical runtime in `src/gitwarp/`, keep the canonical skill in `skills/gitwarp/`, and mirror both into `plugins/gitwarp/` before installing the plugin. Repo-local standard discovery paths are symlinks:
 
 - `.agents/skills/gitwarp -> ../../skills/gitwarp`
 - `.claude/skills/gitwarp -> ../../skills/gitwarp`
@@ -40,7 +40,7 @@ codex plugin add gitwarp@gitwarp-dev --json
 python3 "$HOME/.codex/plugins/cache/gitwarp-dev/gitwarp/0.1.0/skills/gitwarp/scripts/install_cli.py"
 ```
 
-For direct skill-only experiments, copy or symlink `skills/gitwarp` into the tool-specific discovery directory:
+For direct skill-only experiments from a source checkout, symlink `skills/gitwarp` into the tool-specific discovery directory:
 
 - Codex: `$HOME/.agents/skills/gitwarp`
 - Claude Code: `$HOME/.claude/skills/gitwarp`
@@ -52,6 +52,8 @@ mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
 ln -s /absolute/path/to/GitWarp/skills/gitwarp "$HOME/.agents/skills/gitwarp"
 ln -s /absolute/path/to/GitWarp/skills/gitwarp "$HOME/.claude/skills/gitwarp"
 ```
+
+Do not copy only `skills/gitwarp/` unless the `gitwarp` Python package is already installed. The wrapper in `skills/gitwarp/scripts/gitwarp.py` loads product code from the adjacent source checkout or from the complete plugin package at `plugins/gitwarp/src/gitwarp/`.
 
 ## CLI command
 
@@ -91,4 +93,4 @@ Plugin session hooks install the CLI and attempt `gitwarp enter --cwd "$PWD" --f
 
 For orchestrated agent launches, use `gitwarp dispatch`. It allocates a project-local worktree under `<repo>/.gitwarp/worktrees/<worktree-name>`, creates the dossier files, records ownership, and prints a launch command without executing it. Optional local launch templates live in ignored runtime config at `.gitwarp/agents.json`; built-in templates are available for `codex` and `claude`.
 
-The implementation is Python by design: it uses only the standard library plus the system `git` command, which keeps the skill portable while making JSON and path handling safer than shell-only parsing. Day to day, users should call `gitwarp`, not the Python file.
+The implementation is Python by design: it uses only the standard library plus the system `git` command, which keeps the skill portable while making JSON and path handling safer than shell-only parsing. Product modules live in `src/gitwarp/`; skill scripts are wrappers and installers only. Day to day, users should call `gitwarp`, not the Python file.

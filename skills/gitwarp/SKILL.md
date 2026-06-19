@@ -121,11 +121,13 @@ GitWarp refuses main and detached worktrees.
 
 ## Resources
 
-- CLI script: `scripts/gitwarp.py`
+- CLI wrapper: `scripts/gitwarp.py`
 - CLI installer: `scripts/install_cli.py`
 - Install and distribution notes: read `references/install.md` when installing, packaging, or troubleshooting host discovery.
 
-Use `gitwarp` from `PATH` when installed. If it is unavailable, run the bundled script with `python3 /absolute/path/to/skills/gitwarp/scripts/gitwarp.py`.
+Use `gitwarp` from `PATH` when installed. If it is unavailable, run the bundled wrapper with `python3 /absolute/path/to/skills/gitwarp/scripts/gitwarp.py`.
+
+The wrapper loads the installable Python package from the source checkout or plugin package. Do not add product modules under `skills/gitwarp/scripts/`; runtime changes belong in `src/gitwarp/` and must be mirrored into `plugins/gitwarp/src/gitwarp/` before plugin distribution.
 
 ## Common Failures
 
