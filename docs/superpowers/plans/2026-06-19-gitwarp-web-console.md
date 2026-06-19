@@ -4,7 +4,7 @@
 
 **Goal:** Add a local browser-based GitWarp management console with read-only state, safe mutations, and deterministic test coverage.
 
-**Architecture:** Extract reusable service payload builders from stdout-oriented CLI commands, then build a Python standard-library `ThreadingHTTPServer` around those builders. Keep `/api/state` non-mutating, protect mutation endpoints with Host allowlisting and CSRF, and gate destructive actions behind a fresh confirmation challenge.
+**Architecture:** First split the current single-file CLI into a small importable package under `skills/gitwarp/scripts/gitwarp_core/`, keeping `gitwarp.py` as a thin entrypoint. Then build a Python standard-library `ThreadingHTTPServer` around service payload builders. Keep `/api/state` non-mutating, protect mutation endpoints with Host allowlisting and CSRF, and gate destructive actions behind a fresh confirmation challenge.
 
 **Tech Stack:** Python standard library (`http.server`, `urllib`, `threading`, `secrets`, `hmac`, `socket`, `webbrowser`), Git CLI, unittest, Bash smoke script, embedded HTML/CSS/JS.
 
@@ -12,13 +12,71 @@
 
 ## File Structure
 
-- Modify `skills/gitwarp/scripts/gitwarp.py`: service payload builders, Web server, API router, embedded UI, parser wiring, safety helpers.
+- Modify `skills/gitwarp/scripts/gitwarp.py`: thin compatibility entrypoint only.
+- Create `skills/gitwarp/scripts/gitwarp_core/__init__.py`: package marker and version export.
+- Create `skills/gitwarp/scripts/gitwarp_core/models.py`: constants, `RepoContext`, `GitWarpError`.
+- Create `skills/gitwarp/scripts/gitwarp_core/git_ops.py`: Git command execution, repo discovery, worktree parsing, branch/worktree helpers.
+- Create `skills/gitwarp/scripts/gitwarp_core/ledger.py`: ledger loading, schema validation, locking, mutation, init helpers.
+- Create `skills/gitwarp/scripts/gitwarp_core/agents.py`: agent registry, template validation, launch command rendering.
+- Create `skills/gitwarp/scripts/gitwarp_core/dossiers.py`: dossier paths, markdown creation, snippet reading, handoff recording.
+- Create `skills/gitwarp/scripts/gitwarp_core/services.py`: payload builders for CLI and Web APIs.
+- Create `skills/gitwarp/scripts/gitwarp_core/cli.py`: argparse parser and command handlers.
+- Create `skills/gitwarp/scripts/gitwarp_core/web.py`: local HTTP server, API routing, embedded UI, web safety helpers.
 - Modify `tests/test_gitwarp.py`: parser/API/server tests using temporary repos and localhost requests.
 - Modify `scripts/verify-install.sh`: installed CLI smoke for `gitwarp web --no-open --port 0`.
 - Modify `README.md`: Web Console quick start and safety model.
 - Modify `skills/gitwarp/SKILL.md`: command contract and workflow guidance for `web`.
 - Modify `skills/gitwarp/references/install.md`: local web console install/verify note.
 - Mirror canonical files into `plugins/gitwarp/...`.
+
+## Chunk 0: Split The CLI Into A Package
+
+### Task 0: Extract modules without behavior changes
+
+**Files:**
+- Modify: `skills/gitwarp/scripts/gitwarp.py`
+- Create: `skills/gitwarp/scripts/gitwarp_core/__init__.py`
+- Create: `skills/gitwarp/scripts/gitwarp_core/models.py`
+- Create: `skills/gitwarp/scripts/gitwarp_core/git_ops.py`
+- Create: `skills/gitwarp/scripts/gitwarp_core/ledger.py`
+- Create: `skills/gitwarp/scripts/gitwarp_core/agents.py`
+- Create: `skills/gitwarp/scripts/gitwarp_core/dossiers.py`
+- Create: `skills/gitwarp/scripts/gitwarp_core/services.py`
+- Create: `skills/gitwarp/scripts/gitwarp_core/cli.py`
+
+- [ ] Move constants, `GitWarpError`, and `RepoContext` into `models.py`.
+- [ ] Move Git subprocess/repo/worktree helpers into `git_ops.py`.
+- [ ] Move ledger/init helpers into `ledger.py`.
+- [ ] Move agent registry/template helpers into `agents.py`.
+- [ ] Move dossier/handoff helpers into `dossiers.py`.
+- [ ] Move existing payload-style helpers into `services.py`.
+- [ ] Move argparse and `cmd_*` handlers into `cli.py`.
+- [ ] Replace `gitwarp.py` with:
+
+```python
+#!/usr/bin/env python3
+from gitwarp_core.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+- [ ] Run full unittest and py_compile.
+
+```bash
+python3 -m py_compile skills/gitwarp/scripts/gitwarp.py skills/gitwarp/scripts/gitwarp_core/*.py
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+- [ ] Sync plugin mirror including the new package.
+- [ ] Commit.
+
+```bash
+cp -R skills/gitwarp/scripts/gitwarp_core plugins/gitwarp/skills/gitwarp/scripts/
+cp skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
+git add skills/gitwarp/scripts plugins/gitwarp/skills/gitwarp/scripts tests/test_gitwarp.py
+git commit -m "refactor: split gitwarp cli into modules"
+```
 
 ## Chunk 1: Service Builders And Non-Mutating State
 
@@ -60,6 +118,8 @@ Expected: fail because service functions do not exist.
 
 **Files:**
 - Modify: `skills/gitwarp/scripts/gitwarp.py`
+- Modify: `skills/gitwarp/scripts/gitwarp_core/services.py`
+- Modify: `skills/gitwarp/scripts/gitwarp_core/cli.py`
 
 - [ ] Add `safe_load_ledger_for_web(ctx)`:
   - If ledger missing, return `default_ledger(ctx)` in memory only.
@@ -97,8 +157,9 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 - [ ] Commit.
 
 ```bash
+cp -R skills/gitwarp/scripts/gitwarp_core plugins/gitwarp/skills/gitwarp/scripts/
 cp skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
-git add tests/test_gitwarp.py skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
+git add tests/test_gitwarp.py skills/gitwarp/scripts plugins/gitwarp/skills/gitwarp/scripts
 git commit -m "feat: add web state service"
 ```
 
@@ -153,6 +214,8 @@ Expected: fail because web server and parser alias do not exist.
 
 **Files:**
 - Modify: `skills/gitwarp/scripts/gitwarp.py`
+- Modify: `skills/gitwarp/scripts/gitwarp_core/web.py`
+- Modify: `skills/gitwarp/scripts/gitwarp_core/cli.py`
 
 - [ ] Add imports: `base64`, `hmac`, `ipaddress`, `socket`, `threading`, `urllib.parse`, `webbrowser`, `http.server`.
 
@@ -192,8 +255,9 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 - [ ] Sync plugin mirror script and commit.
 
 ```bash
+cp -R skills/gitwarp/scripts/gitwarp_core plugins/gitwarp/skills/gitwarp/scripts/
 cp skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
-git add tests/test_gitwarp.py skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
+git add tests/test_gitwarp.py skills/gitwarp/scripts plugins/gitwarp/skills/gitwarp/scripts
 git commit -m "feat: add gitwarp web server"
 ```
 
@@ -228,6 +292,7 @@ Expected: fail because root HTML and dossier API are not implemented.
 
 **Files:**
 - Modify: `skills/gitwarp/scripts/gitwarp.py`
+- Modify: `skills/gitwarp/scripts/gitwarp_core/web.py`
 
 - [ ] Add `WEB_CONSOLE_HTML` with:
   - Distinctive lightweight UI.
@@ -246,8 +311,9 @@ Expected: fail because root HTML and dossier API are not implemented.
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py' -v
+cp -R skills/gitwarp/scripts/gitwarp_core plugins/gitwarp/skills/gitwarp/scripts/
 cp skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
-git add tests/test_gitwarp.py skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
+git add tests/test_gitwarp.py skills/gitwarp/scripts plugins/gitwarp/skills/gitwarp/scripts
 git commit -m "feat: add gitwarp web console ui"
 ```
 
@@ -310,6 +376,8 @@ Expected: fail because mutation endpoints and confirmation flow are not implemen
 
 **Files:**
 - Modify: `skills/gitwarp/scripts/gitwarp.py`
+- Modify: `skills/gitwarp/scripts/gitwarp_core/services.py`
+- Modify: `skills/gitwarp/scripts/gitwarp_core/web.py`
 
 - [ ] Add JSON body parser with size limit.
 - [ ] Add CSRF validation for POST routes.
@@ -325,8 +393,9 @@ Expected: fail because mutation endpoints and confirmation flow are not implemen
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py' -v
+cp -R skills/gitwarp/scripts/gitwarp_core plugins/gitwarp/skills/gitwarp/scripts/
 cp skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
-git add tests/test_gitwarp.py skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
+git add tests/test_gitwarp.py skills/gitwarp/scripts plugins/gitwarp/skills/gitwarp/scripts
 git commit -m "feat: add gitwarp web mutations"
 ```
 
@@ -358,7 +427,7 @@ gitwarp web --cwd "$PWD"
 
 ```bash
 bash -n scripts/verify-install.sh hooks/session-start hooks/session-start-codex scripts/install-codex-plugin.sh
-python3 -m py_compile skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
+python3 -m py_compile skills/gitwarp/scripts/gitwarp.py skills/gitwarp/scripts/gitwarp_core/*.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp_core/*.py
 python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp
 python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/gitwarp
 python3 -m unittest discover -s tests -p 'test_*.py' -v
