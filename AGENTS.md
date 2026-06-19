@@ -26,4 +26,4 @@ Use short, imperative Conventional Commit messages, for example `feat: add gitwa
 ## Configuration Notes
 Runtime ledgers live under `.gitwarp/` inside target repositories and must stay ignored. Do not commit editor state, `__pycache__/`, `.pytest_cache/`, or temporary worktree contents. Keep the plugin manifest, hooks, and canonical skill source synchronized when changing install behavior.
 Keep `.agents/skills/gitwarp` and `.claude/skills/gitwarp` as symlinks to `../../skills/gitwarp`; do not replace them with copied skill folders.
-Do not recreate `plugins/gitwarp/src`; the repository root is the plugin package and `src/gitwarp/` is the single source of truth.
+Keep `plugins/gitwarp` as a symlink to `..` for Codex marketplace compatibility. Do not replace it with a directory and do not recreate `plugins/gitwarp/src`; `src/gitwarp/` is the single source of truth.

@@ -2,7 +2,7 @@
 
 GitWarp is an Agent Skill plus installable CLI package for running Codex, Claude Code, and other coding agents in isolated Git worktrees. It gives each task a physical sandbox, a branch ownership record, and a small dossier (`task.md`, `progress.md`, `lessons.md`) so agents can resume work without guessing what happened before.
 
-The project follows the common Agent Skills layout while keeping product code in a normal Python package. `src/gitwarp/` is the single canonical runtime, `skills/gitwarp/` contains agent instructions plus tiny wrappers, and the repository root is the plugin package.
+The project follows the common Agent Skills layout while keeping product code in a normal Python package. `src/gitwarp/` is the single canonical runtime, `skills/gitwarp/` contains agent instructions plus tiny wrappers, and the repository root is the plugin package. `plugins/gitwarp` is only a marketplace compatibility symlink back to the repository root; it must not contain copied runtime files.
 
 ## Why GitWarp
 
@@ -189,6 +189,7 @@ Example `.gitwarp/agents.json`:
 - `.agents/skills/gitwarp` and `.claude/skills/gitwarp`: repo-local standard skill discovery links.
 - `.codex-plugin/` and `.claude-plugin/`: plugin metadata shells.
 - `.agents/plugins/api_marketplace.json`: local Codex marketplace entry named `gitwarp-dev`.
+- `plugins/gitwarp -> ..`: Codex marketplace compatibility symlink. Keep it as a symlink; do not add `plugins/gitwarp/src`.
 - `hooks/`: session hook assets for compatible hosts.
 - `web/`: future rich web console source; do not put frontend source under `skills/`.
 - `tests/`: Python regression tests for GitWarp behavior and packaging.
@@ -203,4 +204,4 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 scripts/verify-install.sh
 ```
 
-Keep runtime behavior in `src/gitwarp/` only. Do not recreate `plugins/gitwarp/src`; the repository root is the plugin package. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.
+Keep runtime behavior in `src/gitwarp/` only. Do not recreate `plugins/gitwarp/src`; `plugins/gitwarp` is a symlink for marketplace discovery, not a second source tree. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.

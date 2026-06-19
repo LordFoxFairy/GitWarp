@@ -17,7 +17,7 @@
 
 ## Recommended repo strategy
 
-For authoring, keep the canonical runtime in `src/gitwarp/` and the canonical skill in `skills/gitwarp/`. The repository root is the plugin package; do not maintain a second runtime mirror. Repo-local standard discovery paths are symlinks:
+For authoring, keep the canonical runtime in `src/gitwarp/` and the canonical skill in `skills/gitwarp/`. The repository root is the plugin package; do not maintain a second runtime mirror. `plugins/gitwarp` is only a symlink back to the repository root so Codex marketplace discovery can keep using the standard `./plugins/<name>` source path. Repo-local standard discovery paths are symlinks:
 
 - `.agents/skills/gitwarp -> ../../skills/gitwarp`
 - `.claude/skills/gitwarp -> ../../skills/gitwarp`

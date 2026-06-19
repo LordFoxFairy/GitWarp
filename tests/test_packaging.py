@@ -46,7 +46,9 @@ class PluginStructureTests(unittest.TestCase):
 
     def test_runtime_source_exists_only_in_root_src(self) -> None:
         self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "cli.py").is_file())
-        self.assertFalse((REPO_ROOT / "plugins" / "gitwarp" / "src").exists())
+        plugin_link = REPO_ROOT / "plugins" / "gitwarp"
+        self.assertTrue(plugin_link.is_symlink())
+        self.assertEqual(plugin_link.resolve(), REPO_ROOT.resolve())
 
     def test_runtime_package_has_ddd_boundaries(self) -> None:
         expected_modules = {
@@ -165,6 +167,7 @@ class PluginStructureTests(unittest.TestCase):
             shutil.copytree(
                 REPO_ROOT,
                 plugin_copy,
+                symlinks=True,
                 ignore=shutil.ignore_patterns(".git", ".gitwarp", "tmp", "__pycache__"),
             )
 
@@ -193,9 +196,9 @@ class PluginStructureTests(unittest.TestCase):
         self.assertEqual(plugin["skills"], "./skills/")
         self.assertNotIn("hooks", plugin)
         self.assertEqual(marketplace["name"], "gitwarp-dev")
-        self.assertEqual(marketplace["plugins"][0]["source"]["path"], ".")
-        self.assertEqual(legacy_marketplace["plugins"][0]["source"]["path"], ".")
-        self.assertEqual(root_marketplace["plugins"][0]["source"]["path"], ".")
+        self.assertEqual(marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
+        self.assertEqual(legacy_marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
+        self.assertEqual(root_marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
         self.assertEqual(claude_marketplace["plugins"][0]["source"], "./")
         self.assertIn("CODEX", marketplace["plugins"][0]["policy"]["products"])
         self.assertIn("SessionStart", hooks["hooks"])
@@ -230,4 +233,4 @@ class PluginStructureTests(unittest.TestCase):
         for relative_path in relative_paths:
             with self.subTest(path=relative_path):
                 self.assertTrue((REPO_ROOT / relative_path).is_file())
-        self.assertFalse((REPO_ROOT / "plugins" / "gitwarp").exists())
+        self.assertTrue((REPO_ROOT / "plugins" / "gitwarp").is_symlink())
