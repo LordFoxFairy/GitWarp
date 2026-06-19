@@ -1,5 +1,7 @@
 # GitWarp Agent Orchestrator Implementation Plan
 
+> Status: Historical record. Superseded by `2026-06-20-gitwarp-ddd-architecture.md` and the repository README. Do not follow old `plugins/gitwarp` mirror instructions.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a safe GitWarp orchestration layer that prepares Codex/Claude/custom agent worktrees, audits active work, and keeps ledger updates safe under parallel agent usage.

@@ -177,7 +177,13 @@ Example `.gitwarp/agents.json`:
 
 ## Repository Layout
 
-- `src/gitwarp/`: canonical Python package and CLI implementation.
+- `src/gitwarp/`: the only canonical runtime package. Root modules here are compatibility shims; implementation lives in the subpackages below.
+- `src/gitwarp/domain/`: value objects and pure policies for worktree snapshots, workspace records, branch collisions, guarded paths, and head drift.
+- `src/gitwarp/application/use_cases/`: orchestration for init, dispatch/start/handoff/finish/collapse, and read-only web state.
+- `src/gitwarp/application/health/`: doctor/init health checks, findings, process probes, and recommendations.
+- `src/gitwarp/infrastructure/`: Git subprocess, ledger persistence, dossier files, agent registry, and repository discovery adapters.
+- `src/gitwarp/adapters/cli/`: argparse parser, entrypoint, read commands, system commands, and workspace commands.
+- `src/gitwarp/webapp/`: Web Console contracts, security, static resources, controllers, HTTP transport, and server lifecycle.
 - `src/gitwarp/assets/`: packaged static assets; future web builds go under `assets/web-console/`.
 - `skills/gitwarp/`: canonical Agent Skill instructions, wrapper script, installer, and references.
 - `.agents/skills/gitwarp` and `.claude/skills/gitwarp`: repo-local standard skill discovery links.
@@ -190,11 +196,11 @@ Example `.gitwarp/agents.json`:
 ## Development
 
 ```bash
-python3 -m py_compile src/gitwarp/*.py src/gitwarp/domain/*.py src/gitwarp/application/*.py src/gitwarp/infrastructure/*.py src/gitwarp/webapp/*.py skills/gitwarp/scripts/*.py
+python3 -m compileall -q src skills/gitwarp/scripts
 python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp
 python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py .
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 scripts/verify-install.sh
 ```
 
-Keep runtime behavior in `src/gitwarp/` only. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.
+Keep runtime behavior in `src/gitwarp/` only. Do not recreate `plugins/gitwarp/src`; the repository root is the plugin package. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.

@@ -1,5 +1,7 @@
 # GitWarp Init And Doctor Onboarding Design
 
+> Status: Historical record. Superseded by `2026-06-20-gitwarp-ddd-architecture-design.md` and the repository README. Do not follow old `plugins/gitwarp` mirror instructions.
+
 ## Problem
 
 GitWarp has a working skill/plugin shape and a useful CLI, but first-run setup still feels manual. A user or agent must infer whether `.gitwarp/` is ignored, whether runtime folders exist, whether the launcher points to the installed plugin, whether repo-local skill discovery links are present, and whether session hooks are usable. The current `doctor` command reports some environment health, but it does not give an explicit setup path and it executes the session hook as part of diagnosis, which is too invasive for a read-only audit command.

@@ -6,25 +6,6 @@ from helpers import *
 
 
 class PluginStructureTests(unittest.TestCase):
-    def assert_directory_mirror(self, source: Path, target: Path) -> None:
-        source_files = {
-            path.relative_to(source)
-            for path in source.rglob("*")
-            if path.is_file() and "__pycache__" not in path.parts
-        }
-        target_files = {
-            path.relative_to(target)
-            for path in target.rglob("*")
-            if path.is_file() and "__pycache__" not in path.parts
-        }
-        self.assertEqual(source_files, target_files)
-        for relative_path in sorted(source_files):
-            with self.subTest(path=str(relative_path)):
-                self.assertEqual(
-                    (source / relative_path).read_text(encoding="utf-8"),
-                    (target / relative_path).read_text(encoding="utf-8"),
-                )
-
     def assert_script_tree_allowlist(self, root: Path) -> None:
         files = {
             path.relative_to(root)
@@ -76,10 +57,30 @@ class PluginStructureTests(unittest.TestCase):
             "application/__init__.py",
             "application/diagnostics.py",
             "application/dto.py",
+            "application/health/__init__.py",
+            "application/health/checks.py",
+            "application/health/doctor.py",
+            "application/health/findings.py",
+            "application/health/init.py",
+            "application/health/process.py",
             "application/reconcile.py",
             "application/services.py",
+            "application/views.py",
+            "application/use_cases/__init__.py",
+            "application/use_cases/cleanup.py",
+            "application/use_cases/handoff.py",
+            "application/use_cases/init.py",
+            "application/use_cases/metadata.py",
+            "application/use_cases/provisioning.py",
+            "application/use_cases/web_state.py",
+            "application/use_cases/workspace_lifecycle.py",
             "adapters/__init__.py",
-            "adapters/cli.py",
+            "adapters/cli/__init__.py",
+            "adapters/cli/entrypoint.py",
+            "adapters/cli/parser.py",
+            "adapters/cli/read.py",
+            "adapters/cli/system.py",
+            "adapters/cli/workspaces.py",
             "adapters/presenters.py",
             "infrastructure/__init__.py",
             "infrastructure/agents.py",
@@ -102,6 +103,32 @@ class PluginStructureTests(unittest.TestCase):
         for relative_path in sorted(expected_modules):
             with self.subTest(path=relative_path):
                 self.assertTrue((REPO_ROOT / "src" / "gitwarp" / relative_path).is_file())
+
+    def test_core_layers_do_not_depend_on_adapters(self) -> None:
+        layer_roots = [
+            REPO_ROOT / "src" / "gitwarp" / "domain",
+            REPO_ROOT / "src" / "gitwarp" / "application",
+            REPO_ROOT / "src" / "gitwarp" / "infrastructure",
+        ]
+        forbidden = ("..adapters", "...adapters", "gitwarp.adapters")
+        offenders: list[str] = []
+        for root in layer_roots:
+            for path in root.rglob("*.py"):
+                if "__pycache__" in path.parts:
+                    continue
+                text = path.read_text(encoding="utf-8")
+                if any(token in text for token in forbidden):
+                    offenders.append(str(path.relative_to(REPO_ROOT)))
+        self.assertEqual([], offenders)
+
+    def test_cli_adapter_does_not_mutate_ledger_directly(self) -> None:
+        cli_root = REPO_ROOT / "src" / "gitwarp" / "adapters" / "cli"
+        offenders: list[str] = []
+        for path in cli_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if "mutate_ledger" in text or "create_worktree(" in text:
+                offenders.append(str(path.relative_to(REPO_ROOT)))
+        self.assertEqual([], offenders)
 
     def test_root_runtime_modules_are_compatibility_shims(self) -> None:
         shim_modules = {
@@ -154,6 +181,9 @@ class PluginStructureTests(unittest.TestCase):
     def test_codex_plugin_points_at_canonical_skill_and_hooks(self) -> None:
         plugin = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         marketplace = json.loads((REPO_ROOT / ".agents" / "plugins" / "api_marketplace.json").read_text(encoding="utf-8"))
+        legacy_marketplace = json.loads((REPO_ROOT / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8"))
+        root_marketplace = json.loads((REPO_ROOT / "marketplace.json").read_text(encoding="utf-8"))
+        claude_marketplace = json.loads((REPO_ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
         hooks = json.loads((REPO_ROOT / "hooks" / "hooks-codex.json").read_text(encoding="utf-8"))
         session_hook = (REPO_ROOT / "hooks" / "session-start-codex").read_text(encoding="utf-8")
         codex_skill_link = REPO_ROOT / ".agents" / "skills" / "gitwarp"
@@ -164,6 +194,9 @@ class PluginStructureTests(unittest.TestCase):
         self.assertNotIn("hooks", plugin)
         self.assertEqual(marketplace["name"], "gitwarp-dev")
         self.assertEqual(marketplace["plugins"][0]["source"]["path"], ".")
+        self.assertEqual(legacy_marketplace["plugins"][0]["source"]["path"], ".")
+        self.assertEqual(root_marketplace["plugins"][0]["source"]["path"], ".")
+        self.assertEqual(claude_marketplace["plugins"][0]["source"], "./")
         self.assertIn("CODEX", marketplace["plugins"][0]["policy"]["products"])
         self.assertIn("SessionStart", hooks["hooks"])
         self.assertIn("gitwarp enter --cwd", session_hook)
@@ -178,6 +211,9 @@ class PluginStructureTests(unittest.TestCase):
         relative_paths = [
             ".codex-plugin/plugin.json",
             ".claude-plugin/plugin.json",
+            ".agents/plugins/marketplace.json",
+            ".agents/plugins/api_marketplace.json",
+            "marketplace.json",
             ".claude-plugin/marketplace.json",
             "hooks/hooks.json",
             "hooks/hooks-codex.json",

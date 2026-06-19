@@ -32,7 +32,12 @@ src/gitwarp/
     policies.py        # branch collision, target selection, head drift, guarded-root policy
   application/
     dto.py             # JSON-compatible request/result DTO helpers
-    services.py        # use cases used by CLI/Web compatibility facades
+    services.py        # compatibility facade for use cases
+    use_cases/         # init, workspace lifecycle, and web state orchestration
+    health/            # doctor/init health checks, findings, probes, recommendations
+  adapters/
+    cli/               # argparse parser, entrypoint, read/system/workspace commands
+    presenters.py      # CLI prompt/table/statusline presentation helpers
   infrastructure/
     git_cli.py         # Git command adapter
     json_ledger.py     # ledger persistence compatibility surface
@@ -51,7 +56,7 @@ Existing modules remain as compatibility shims initially:
 - `foundation.py` re-exports core constants, `RepoContext`, `GitWarpError`, path/time helpers, and `run_git`.
 - `services.py` re-exports application use cases.
 - `web.py` re-exports the public web API and `run_web_console`.
-- `cli.py` keeps argparse and JSON emission, but delegates workflows to application services.
+- `cli.py` re-exports the CLI adapter package entrypoint.
 
 ## Domain Model
 
@@ -89,15 +94,17 @@ The inline UI must use DOM text assignment instead of `innerHTML` for ledger-con
 
 1. Add DDD architecture docs and tests that assert the new package boundaries exist.
 2. Introduce `domain`, `application`, and `infrastructure` compatibility modules.
-3. Move shared workflow builders from root `services.py` into `application/services.py`; keep root `services.py` as a re-export.
+3. Move shared workflow builders from root `services.py` into `application/use_cases`; keep root and application `services.py` as re-export facades.
 4. Extract web contracts, security, resources, controllers, transport, and server from `web.py`; keep root `web.py` as a re-export.
-5. Refactor CLI command handlers to delegate duplicated workflows to application services.
+5. Refactor CLI command handlers into `adapters/cli` modules that delegate workflows to application services.
 6. Split web tests by new module boundary and add an XSS regression test.
 7. Keep plugin metadata at the repository root and forbid plugin runtime source copies.
 
 ## Acceptance Criteria
 
 - `src/gitwarp/domain`, `src/gitwarp/application`, `src/gitwarp/infrastructure`, and `src/gitwarp/webapp` exist with production code, not placeholders.
+- CLI command code is under `src/gitwarp/adapters/cli/`, not a single large adapter file.
+- Doctor/init health checks are under `src/gitwarp/application/health/`, not a single large diagnostics file.
 - `src/gitwarp/web.py` and `src/gitwarp/services.py` are compatibility shims under 80 lines each.
 - Web security, contracts, resources, controllers, transport, and server lifecycle are separate modules.
 - Inline console no longer injects ledger-controlled strings via template `innerHTML`.

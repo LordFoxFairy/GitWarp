@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from .application.services import (
+    build_adopt_payload,
+    build_annotate_payload,
     build_collapse_payload,
     build_dispatch_payload,
     build_finish_payload,
     build_handoff_payload,
     build_init_payload,
     build_start_payload,
+    build_summon_payload,
     build_web_state_payload,
     collapse_worktree,
     inspect_destructive_target,
@@ -17,12 +20,15 @@ from .application.services import (
 )
 
 __all__ = [
+    "build_adopt_payload",
+    "build_annotate_payload",
     "build_collapse_payload",
     "build_dispatch_payload",
     "build_finish_payload",
     "build_handoff_payload",
     "build_init_payload",
     "build_start_payload",
+    "build_summon_payload",
     "build_web_state_payload",
     "collapse_worktree",
     "inspect_destructive_target",

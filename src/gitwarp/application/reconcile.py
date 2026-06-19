@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..adapters.presenters import age_seconds
 from ..application.diagnostics import build_finding, summarize_findings
+from ..application.views import age_seconds
 from ..infrastructure.ledger import load_raw_ledger
 from ..infrastructure.runtime import RepoContext
 from ..infrastructure.worktrees import branch_merged_into_main, parse_worktrees, worktree_dirty

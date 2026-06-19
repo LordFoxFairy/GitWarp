@@ -4,7 +4,7 @@
 
 **Goal:** Refactor GitWarp into a production-grade DDD-inspired architecture while preserving CLI, Web, plugin, and JSON behavior.
 
-**Architecture:** Introduce typed domain objects and application use cases, isolate infrastructure adapters, and split the web console into contracts/security/resources/controllers/transport/server modules. Keep compatibility shims during migration so behavior remains stable.
+**Architecture:** Introduce typed domain objects and application use cases, isolate infrastructure adapters, split CLI adapters into a command package, split health checks into an application subpackage, and split the web console into contracts/security/resources/controllers/transport/server modules. Keep compatibility shims during migration so behavior remains stable.
 
 **Tech Stack:** Python standard library, Git CLI, unittest, setuptools package layout.
 
@@ -45,15 +45,30 @@
 **Files:**
 - Create: `src/gitwarp/application/dto.py`
 - Create: `src/gitwarp/application/services.py`
+- Create: `src/gitwarp/application/use_cases/`
+- Create: `src/gitwarp/application/health/`
 - Modify: `src/gitwarp/services.py`
 - Modify: `src/gitwarp/cli.py`
 - Test: existing CLI and web workflow tests.
 
-- [ ] Move web-facing use case builders from root `services.py` to `application/services.py`.
-- [ ] Make root `services.py` a compatibility re-export.
+- [ ] Move web-facing use case builders from root `services.py` to `application/use_cases/`.
+- [ ] Split doctor/init health checks into `application/health/`.
+- [ ] Make root and application `services.py` compatibility re-exports.
 - [ ] Replace duplicated `cmd_start`, `cmd_dispatch`, `cmd_handoff`, `cmd_finish`, and `cmd_collapse` workflow logic in `cli.py` with application service calls.
 - [ ] Run CLI lifecycle, worktree, and web API tests.
 - [ ] Commit `refactor: route gitwarp commands through application services`.
+
+## Chunk 3B: CLI Adapter Package
+
+**Files:**
+- Create: `src/gitwarp/adapters/cli/`
+- Modify: `src/gitwarp/cli.py`
+- Modify: `tests/test_packaging.py`
+
+- [ ] Replace the single CLI adapter file with parser, entrypoint, read command, system command, and workspace command modules.
+- [ ] Keep `gitwarp.cli:main` and `gitwarp.adapters.cli` import-compatible.
+- [ ] Add packaging guardrails for the CLI package files.
+- [ ] Run packaging and CLI lifecycle tests.
 
 ## Chunk 4: WebApp Extraction and XSS Fix
 

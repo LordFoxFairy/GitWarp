@@ -1,5 +1,7 @@
 # GitWarp Init Doctor Onboarding Implementation Plan
 
+> Status: Historical record. Superseded by `2026-06-20-gitwarp-ddd-architecture.md` and the repository README. Do not follow old `plugins/gitwarp` mirror instructions.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a safe first-run `gitwarp init` command and strengthen `doctor` into a read-only onboarding diagnostic with concrete setup guidance.

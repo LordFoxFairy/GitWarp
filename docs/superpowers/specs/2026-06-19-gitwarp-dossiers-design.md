@@ -1,5 +1,7 @@
 # GitWarp Dossiers Design
 
+> Status: Historical record. Superseded by `2026-06-20-gitwarp-ddd-architecture-design.md` and the repository README. Do not follow old `plugins/gitwarp` mirror instructions.
+
 ## Problem
 
 GitWarp can isolate agents in worktrees and record metadata, but the current memory model is still too thin. An agent can identify its worktree, branch, owner, purpose, status, and notes, yet it does not get a durable task dossier that explains the assignment, current progress, and lessons learned in a way both humans and future agents can scan quickly.

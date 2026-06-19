@@ -1,5 +1,7 @@
 # GitWarp Autopilot Implementation Plan
 
+> Status: Historical record. Superseded by `2026-06-20-gitwarp-ddd-architecture.md` and the repository README. Do not follow old `plugins/gitwarp` mirror instructions.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make GitWarp feel automatic for Codex/Claude agents by adding an `enter` command, stronger board views, and startup hook context injection.

@@ -1,5 +1,7 @@
 # GitWarp Web Console Design
 
+> Status: Historical record. Superseded by `2026-06-20-gitwarp-ddd-architecture-design.md` and the repository README. Do not follow old `plugins/gitwarp` mirror instructions.
+
 ## Goal
 
 Add a local Web Console for GitWarp so humans can manage agent worktrees without memorizing CLI commands. The console should make the current worktree matrix, doctor findings, dossiers, and safe lifecycle actions visible from a browser while preserving GitWarp's existing CLI-first safety model.

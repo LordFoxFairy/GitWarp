@@ -1,5 +1,7 @@
 # GitWarp Agent Orchestrator Design
 
+> Status: Historical record. Superseded by `2026-06-20-gitwarp-ddd-architecture-design.md` and the repository README. Do not follow old `plugins/gitwarp` mirror instructions.
+
 ## Problem
 
 GitWarp now gives agents isolated worktrees, task dossiers, startup context, and a board. The next gap is orchestration: a human or lead agent still has to manually choose an agent CLI, create the worktree, copy the path, construct the launch command, and later detect stale or broken work. That friction makes parallel Codex and Claude Code development possible but not yet smooth.
