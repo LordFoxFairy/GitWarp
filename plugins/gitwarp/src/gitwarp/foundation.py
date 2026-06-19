@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .domain.errors import GitWarpError
+from .domain.policies import path_contains
+
 
 LEDGER_DIRNAME = ".gitwarp"
 LEDGER_FILENAME = "ledger.json"
@@ -20,10 +23,6 @@ DOSSIER_DIRNAME = "dossiers"
 TASK_FILENAME = "task.md"
 PROGRESS_FILENAME = "progress.md"
 LESSONS_FILENAME = "lessons.md"
-
-
-class GitWarpError(RuntimeError):
-    pass
 
 
 @dataclass(frozen=True)
@@ -96,11 +95,6 @@ def run_git(cwd: Path, *args: str, check: bool = True) -> str:
         message = result.stderr.strip() or result.stdout.strip() or "git command failed"
         raise GitWarpError(message)
     return result.stdout.strip()
-
-
-def path_contains(parent: str, child: Path) -> bool:
-    parent_path = Path(parent).resolve()
-    return child == parent_path or parent_path in child.parents
 
 
 def sanitize_name(value: str) -> str:
