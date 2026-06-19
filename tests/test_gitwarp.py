@@ -3,6 +3,7 @@ from __future__ import annotations
 import http.client
 import importlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -72,6 +73,13 @@ def load_gitwarp_services() -> object:
     if script_dir not in sys.path:
         sys.path.insert(0, script_dir)
     return importlib.import_module("gitwarp_core.services")
+
+
+def load_gitwarp_ledger() -> object:
+    script_dir = str(SCRIPT_DIR)
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    return importlib.import_module("gitwarp_core.ledger")
 
 
 def read_json_response(response: object) -> dict[str, object]:
@@ -549,6 +557,39 @@ class GitWarpTests(unittest.TestCase):
         for expected in expected_notes:
             self.assertIn(expected, notes)
         self.assertFalse((self.repo / ".gitwarp" / "ledger.lock").exists())
+
+    def test_ledger_lock_hijacks_dead_pid_after_timeout(self) -> None:
+        ledger_module = load_gitwarp_ledger()
+        ctx = ledger_module.discover_repo(self.repo)
+        lock_path = self.repo / ".gitwarp" / "ledger.lock"
+        lock_path.parent.mkdir()
+        lock_path.write_text(
+            json.dumps({"pid": 99999999, "created_at": "2000-01-01T00:00:00+00:00"}),
+            encoding="utf-8",
+        )
+
+        with ledger_module.ledger_write_lock(ctx, timeout=0.05):
+            lock = json.loads(lock_path.read_text(encoding="utf-8"))
+            self.assertEqual(lock["pid"], os.getpid())
+
+        self.assertFalse(lock_path.exists())
+
+    def test_ledger_lock_keeps_live_pid_lock(self) -> None:
+        ledger_module = load_gitwarp_ledger()
+        ctx = ledger_module.discover_repo(self.repo)
+        lock_path = self.repo / ".gitwarp" / "ledger.lock"
+        lock_path.parent.mkdir()
+        lock_path.write_text(
+            json.dumps({"pid": os.getpid(), "created_at": "2000-01-01T00:00:00+00:00"}),
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(ledger_module.GitWarpError):
+            with ledger_module.ledger_write_lock(ctx, timeout=0.05):
+                pass
+
+        lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        self.assertEqual(lock["pid"], os.getpid())
 
     def test_agents_lists_builtin_templates_without_config(self) -> None:
         agents = run_gitwarp(self.repo, "agents", "--cwd", str(self.repo))

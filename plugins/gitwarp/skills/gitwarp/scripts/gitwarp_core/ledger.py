@@ -61,6 +61,47 @@ def load_raw_ledger(ctx: RepoContext) -> dict[str, Any]:
     return load_ledger(ctx)
 
 
+def process_is_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def lock_owner_is_alive(raw_lock: str) -> bool:
+    try:
+        metadata = json.loads(raw_lock)
+    except json.JSONDecodeError:
+        return False
+    pid = metadata.get("pid")
+    if isinstance(pid, bool) or not isinstance(pid, int):
+        return False
+    return process_is_alive(pid)
+
+
+def break_stale_lock(ctx: RepoContext) -> bool:
+    try:
+        raw_lock = ctx.ledger_lock_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return True
+    if lock_owner_is_alive(raw_lock):
+        return False
+    try:
+        if ctx.ledger_lock_path.read_text(encoding="utf-8") != raw_lock:
+            return False
+        ctx.ledger_lock_path.unlink()
+        return True
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+
+
 @contextmanager
 def ledger_write_lock(ctx: RepoContext, timeout: float = LOCK_TIMEOUT_SECONDS) -> Any:
     ctx.ledger_dir.mkdir(parents=True, exist_ok=True)
@@ -73,7 +114,10 @@ def ledger_write_lock(ctx: RepoContext, timeout: float = LOCK_TIMEOUT_SECONDS) -
             break
         except FileExistsError:
             if time.monotonic() >= deadline:
-                raise GitWarpError(f"timed out waiting for ledger lock: {ctx.ledger_lock_path}")
+                if break_stale_lock(ctx):
+                    deadline = time.monotonic() + timeout
+                    continue
+                raise GitWarpError(f"timed out waiting for live ledger lock: {ctx.ledger_lock_path}")
             time.sleep(0.025)
     try:
         yield
