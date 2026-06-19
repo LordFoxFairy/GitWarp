@@ -1082,6 +1082,10 @@ class PluginStructureTests(unittest.TestCase):
             "skills/gitwarp/scripts/gitwarp.py",
             "skills/gitwarp/scripts/install_cli.py",
         ]
+        relative_paths.extend(
+            str(path.relative_to(REPO_ROOT))
+            for path in sorted((REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp_core").glob("*.py"))
+        )
 
         for relative_path in relative_paths:
             with self.subTest(path=relative_path):
