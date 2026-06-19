@@ -53,10 +53,14 @@ Verify:
 ```bash
 gitwarp enter --cwd /absolute/path/to/git/repo
 gitwarp scan --cwd /absolute/path/to/git/repo
+gitwarp agents --cwd /absolute/path/to/git/repo
+gitwarp doctor --cwd /absolute/path/to/git/repo
 gitwarp context --cwd /absolute/path/to/git/repo
 gitwarp board --cwd /absolute/path/to/git/repo --format table
 ```
 
 Plugin session hooks install the CLI and attempt `gitwarp enter --cwd "$PWD" --format prompt` at session start. That injects the current main/worktree context for agents, but it does not allocate a worktree automatically. Start isolated work explicitly with `gitwarp start`.
+
+For orchestrated agent launches, use `gitwarp dispatch`. It allocates a project-local worktree under `<repo>/.gitwarp/worktrees/<worktree-name>`, creates the dossier files, records ownership, and prints a launch command without executing it. Optional local launch templates live in ignored runtime config at `.gitwarp/agents.json`; built-in templates are available for `codex` and `claude`.
 
 The implementation is Python by design: it uses only the standard library plus the system `git` command, which keeps the skill portable while making JSON and path handling safer than shell-only parsing. Day to day, users should call `gitwarp`, not the Python file.

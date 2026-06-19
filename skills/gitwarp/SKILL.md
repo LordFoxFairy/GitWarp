@@ -7,11 +7,11 @@ description: Use when concurrent Claude Code or Codex agents need isolated git w
 
 ## Overview
 
-GitWarp provides a deterministic helper around native `git worktree` so agents can enter with context, claim, track, annotate, inspect, and destroy isolated sandboxes without reusing a branch or contaminating the main checkout index. It stores runtime state in the target repository under `.gitwarp/ledger.json` and task dossiers under `.gitwarp/dossiers/`.
+GitWarp provides a deterministic helper around native `git worktree` so agents can enter with context, dispatch, adopt, track, inspect, and destroy isolated sandboxes without reusing a branch or contaminating the main checkout index. It stores runtime state in the target repository under `.gitwarp/ledger.json` and task dossiers under `.gitwarp/dossiers/`.
 
 ## Core Rule
 
-At the start of repository work, run `gitwarp enter --cwd "$PWD"` if the hook has not already supplied a GitWarp Context block. When a task requires isolated concurrent writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main repository. Use GitWarp to enter, start, inspect, hand off, and finish the workspace so branch ownership and task history stay machine-readable.
+At the start of repository work, run `gitwarp enter --cwd "$PWD"` if the hook has not already supplied a GitWarp Context block. When a task requires isolated concurrent writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main repository. Use GitWarp to enter, dispatch or start, inspect, hand off, audit, and finish the workspace so branch ownership and task history stay machine-readable.
 
 ## When To Use
 
@@ -22,18 +22,19 @@ Use this skill when any of the following are true:
 3. You need a machine-readable inventory of active worktrees plus ownership metadata such as agent id and task purpose.
 4. An agent is unsure which worktree it is in or what work has already been recorded there.
 5. You need `task.md`, `progress.md`, and `lessons.md` files for handoff between agents.
-6. You need a prompt statusline banner that tells a model whether it is in the main repo or an isolated sandbox.
+6. You need a ready-to-run Codex or Claude launch command for an isolated workspace.
+7. You need a prompt statusline banner that tells a model whether it is in the main repo or an isolated sandbox.
 
 Do not use this skill for single-agent edits in the main checkout when no branch isolation is needed.
 
 ## Command Contract
 
-1. `enter`, `scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, and `collapse` emit deterministic single-line JSON by default.
+1. `enter`, `scan`, `agents`, `dispatch`, `start`, `summon`, `adopt`, `context`, `annotate`, `handoff`, `board`, `reconcile`, `doctor`, `finish`, and `collapse` emit deterministic single-line JSON by default.
 2. `statusline` emits a raw unquoted prompt banner only.
 3. `enter --format prompt` and `board --format table` emit deterministic multi-line text for humans.
 4. All `--cwd`, returned workspace paths, ledger paths, dossier paths, and worktree roots must be treated as absolute paths.
 5. If any JSON command returns nonzero or `"ok": false`, stop the workflow, report the `error` field, and do not keep editing from an assumed workspace.
-6. Never edit `.gitwarp/ledger.json` by hand.
+6. Never edit `.gitwarp/ledger.json` or `.gitwarp/agents.json` by hand while another GitWarp command is running.
 
 ## Skill Resources
 
@@ -132,7 +133,39 @@ gitwarp statusline --cwd "$PWD"
 
 Continue in place only when the context or banner matches the intended agent and branch.
 
-### 4. Start an isolated workspace
+### 4. Dispatch an agent workspace
+
+Prefer `dispatch` when you want GitWarp to allocate a sandbox and produce the exact launch command for another agent:
+
+```bash
+gitwarp dispatch \
+  --cwd /absolute/path/to/repo \
+  --agent codex \
+  --branch feature/gitwarp-statusline \
+  --purpose "Implement prompt banner"
+```
+
+Rules:
+
+1. GitWarp owns the physical path. The default is project-local: `<repo>/.gitwarp/worktrees/<worktree-name>`.
+2. Use only the returned absolute `path` and `launch_command`; do not invent a worktree path.
+3. `dispatch` creates `task.md`, `progress.md`, and `lessons.md` before returning.
+4. `--command-mode execute` is not supported yet and fails before creating anything.
+5. Agent templates come from built-ins plus optional `.gitwarp/agents.json`.
+
+Inspect available launch templates:
+
+```bash
+gitwarp agents --cwd /absolute/path/to/repo
+```
+
+Minimal `.gitwarp/agents.json`:
+
+```json
+{"version":1,"default_agent":"codex","agents":{"codex":{"command":["codex","--ask-for-approval","never","exec","-C","{worktree}","{prompt}"]}}}
+```
+
+### 5. Start an isolated workspace manually
 
 Prefer `start` for agent work because it creates the worktree plus dossier files:
 
@@ -146,7 +179,21 @@ gitwarp start \
 
 The returned JSON includes `path`, `task_md`, `progress_md`, and `lessons_md`. `cd` into `path`, then read the three Markdown files before editing.
 
-### 5. Summon an isolated workspace without a dossier
+### 6. Adopt an existing worktree
+
+Use `adopt` when a non-main worktree already exists and must become visible to GitWarp:
+
+```bash
+gitwarp adopt \
+  --cwd /absolute/path/to/repo \
+  --path /absolute/path/to/existing-worktree \
+  --agent-id claude-existing \
+  --purpose "Continue existing sandbox"
+```
+
+It preserves the live branch, refuses main or detached worktrees, creates missing dossier files, and reports whether the path is outside the guarded `.gitwarp/worktrees/` root.
+
+### 7. Summon an isolated workspace without a dossier
 
 Run:
 
@@ -165,7 +212,7 @@ Rules:
 3. Assume the workspace path is absolute and stable for the lifetime of the task.
 4. Do not edit in the public root after a sandbox has been summoned for the task.
 
-### 6. Record progress and lessons
+### 8. Record progress and lessons
 
 After meaningful milestones, write a short note:
 
@@ -180,7 +227,7 @@ Use terse status values such as `active`, `implementing`, `testing`, `blocked`, 
 
 Use low-level `annotate` only when a script needs ledger notes without Markdown dossier writes.
 
-### 7. View all active work
+### 9. View all active work
 
 For automation:
 
@@ -203,7 +250,18 @@ gitwarp board --cwd /absolute/path/to/repo --stale 4
 
 Use `--verbose` when handing off coordination; it includes short snippets from `task.md`, `progress.md`, and `lessons.md`. Use `--stale N` to list worktrees whose ledger record has not changed for at least N hours.
 
-### 8. Finish when the task is done
+### 10. Audit orchestration state
+
+Before dispatching more agents or collapsing old spaces, run:
+
+```bash
+gitwarp reconcile --cwd /absolute/path/to/repo --stale 4
+gitwarp doctor --cwd /absolute/path/to/repo
+```
+
+`reconcile` is non-mutating and reports stale ledger entries, untracked worktrees, missing dossiers, dirty worktrees, and branches already merged to `main`. `doctor` checks the local `gitwarp` launcher, Git/Python availability, plugin metadata, session hook context, and configured agent binaries.
+
+### 11. Finish when the task is done
 
 Run:
 
@@ -217,7 +275,7 @@ gitwarp finish --cwd "$PWD" \
 
 `finish` records final progress first. It only destroys the worktree when `--collapse` is passed. Dossiers are preserved by default; add `--purge-dossier` only when the user explicitly wants to delete the record.
 
-### 9. Surface context in prompts
+### 12. Surface context in prompts
 
 Run:
 
@@ -235,6 +293,8 @@ This prints a raw string such as `GITWARP[main-repo]` or `GITWARP[codex-reviewer
 - Collapse target missing: run `scan`, verify the branch/path, then retry with the exact live path or branch.
 - Annotation refused on main repo: start or enter an isolated workspace first.
 - Handoff refused on main repo: use `start` first or pass a non-main `--path`/`--branch`.
+- Dispatch execute refused: rerun without `--command-mode execute`; copy or run the returned `launch_command` yourself.
+- Adopt refused: verify the target is a live non-main, non-detached Git worktree.
 
 ## Expectations
 
@@ -242,3 +302,4 @@ This prints a raw string such as `GITWARP[main-repo]` or `GITWARP[codex-reviewer
 2. Always prefer helper output over assumptions about where a worktree lives.
 3. Prefer `gitwarp ...` commands over direct Python script paths once the CLI is installed.
 4. Keep the helper script deterministic and machine-readable.
+5. Record milestones with `handoff` so the next agent can recover context from dossier files.

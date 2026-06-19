@@ -91,6 +91,24 @@ assert payload["statusline"] == "GITWARP[main-repo]"
 assert any("gitwarp start" in item for item in payload["recommended_next"])
 PY
 
+agents_output="$(gitwarp agents --cwd "$tmpdir")"
+AGENTS_OUTPUT="$agents_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["AGENTS_OUTPUT"])
+assert payload["ok"] is True
+assert payload["default_agent"] == "codex"
+names = {agent["name"] for agent in payload["agents"]}
+assert {"codex", "claude"} <= names
+assert payload["config_path"].endswith("/.gitwarp/agents.json")
+PY
+
+mkdir -p "$tmpdir/.gitwarp"
+cat > "$tmpdir/.gitwarp/agents.json" <<'JSON'
+{"version":1,"default_agent":"local","agents":{"local":{"description":"Local smoke agent","command":["python3","-c","{prompt}","{worktree}"],"status":"enabled"}}}
+JSON
+
 scan_output="$(gitwarp scan --cwd "$tmpdir")"
 SCAN_OUTPUT="$scan_output" python3 - <<'PY'
 import json
@@ -99,6 +117,82 @@ import os
 payload = json.loads(os.environ["SCAN_OUTPUT"])
 assert payload["ok"] is True
 assert len(payload["worktrees"]) == 1
+PY
+
+dispatch_output="$(
+  gitwarp dispatch --cwd "$tmpdir" \
+    --agent local \
+    --branch feature/verify-dispatch \
+    --purpose "Verify dispatch print"
+)"
+dispatch_path="$(
+  DISPATCH_OUTPUT="$dispatch_output" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(os.environ["DISPATCH_OUTPUT"])
+assert payload["ok"] is True
+assert payload["mode"] == "print"
+assert payload["agent"] == "local"
+assert payload["status"] == "dispatched"
+assert payload["branch"] == "feature/verify-dispatch"
+assert payload["path"].endswith("/.gitwarp/worktrees/feature-verify-dispatch")
+assert payload["launch_command"][0:2] == ["python3", "-c"]
+assert "gitwarp enter" in payload["launch_command"][2]
+assert "Record milestones with gitwarp handoff" in payload["launch_command"][2]
+assert payload["launch_command"][3] == payload["path"]
+for key in ("task_md", "progress_md", "lessons_md"):
+    assert Path(payload[key]).exists()
+print(payload["path"])
+PY
+)"
+
+set +e
+execute_output="$(
+  gitwarp dispatch --cwd "$tmpdir" \
+    --agent local \
+    --branch feature/verify-execute \
+    --purpose "Verify execute rejection" \
+    --command-mode execute
+)"
+execute_rc=$?
+set -e
+if [[ "$execute_rc" -eq 0 ]]; then
+  echo "dispatch execute unexpectedly succeeded" >&2
+  exit 1
+fi
+EXECUTE_OUTPUT="$execute_output" TMPDIR="$tmpdir" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(os.environ["EXECUTE_OUTPUT"])
+assert payload["ok"] is False
+assert "execute is not supported yet" in payload["error"]
+assert not (Path(os.environ["TMPDIR"]) / ".gitwarp" / "worktrees" / "feature-verify-execute").exists()
+PY
+
+manual_path="$tmpdir/manual-adopt"
+git -C "$tmpdir" worktree add -b feature/verify-adopt "$manual_path" HEAD >/dev/null
+adopt_output="$(
+  gitwarp adopt --cwd "$tmpdir" \
+    --path "$manual_path" \
+    --agent-id verify-adopt \
+    --purpose "Verify adopt"
+)"
+ADOPT_OUTPUT="$adopt_output" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(os.environ["ADOPT_OUTPUT"])
+assert payload["ok"] is True
+assert payload["status"] == "adopted"
+assert payload["branch"] == "feature/verify-adopt"
+assert payload["outside_guarded_root"] is True
+for key in ("task_md", "progress_md", "lessons_md"):
+    assert Path(payload[key]).exists()
 PY
 
 start_output="$(
@@ -244,6 +338,41 @@ if [[ "$table_output" != *"feature/verify-install"* ]]; then
   exit 1
 fi
 
+reconcile_output="$(gitwarp reconcile --cwd "$tmpdir" --stale 0)"
+RECONCILE_OUTPUT="$reconcile_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["RECONCILE_OUTPUT"])
+assert payload["ok"] is True
+assert payload["repo_root"]
+assert "summary" in payload
+assert isinstance(payload["findings"], list)
+codes = {finding["code"] for finding in payload["findings"]}
+assert "merged_head" in codes
+PY
+
+doctor_output="$(gitwarp doctor --cwd "$tmpdir")"
+DOCTOR_OUTPUT="$doctor_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["DOCTOR_OUTPUT"])
+assert payload["ok"] is True
+codes = {finding["code"] for finding in payload["findings"]}
+expected = {
+    "git",
+    "python3",
+    "gitwarp_launcher",
+    "gitwarp_ignored",
+    "agent_binary",
+    "codex_plugin_metadata",
+    "session_hook_context",
+}
+assert expected <= codes
+assert "summary" in payload
+PY
+
 finish_output="$(
   gitwarp finish --cwd "$nested_path" \
     --status pushed \
@@ -271,6 +400,7 @@ fi
 
 CLI_PATH="$(command -v gitwarp)" \
 PLUGIN_ID="$PLUGIN_ID" \
+DISPATCH_PATH="$dispatch_path" \
 python3 - <<'PY'
 import json
 import os
@@ -281,7 +411,8 @@ print(
             "ok": True,
             "plugin": os.environ["PLUGIN_ID"],
             "cli": os.environ["CLI_PATH"],
-            "smoke": "enter-start-context-handoff-board-statusline-finish",
+            "dispatch_path": os.environ["DISPATCH_PATH"],
+            "smoke": "agents-dispatch-adopt-reconcile-doctor-enter-start-context-handoff-board-statusline-finish",
         },
         separators=(",", ":"),
         sort_keys=True,

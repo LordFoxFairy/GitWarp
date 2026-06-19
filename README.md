@@ -41,10 +41,19 @@ gitwarp scan --cwd "$PWD"
 ```bash
 gitwarp enter --cwd "$PWD"
 gitwarp scan --cwd /absolute/path/to/repo
+gitwarp agents --cwd /absolute/path/to/repo
+gitwarp dispatch --cwd /absolute/path/to/repo \
+  --agent codex \
+  --branch feature/my-task \
+  --purpose "Implement isolated task"
 gitwarp start --cwd /absolute/path/to/repo \
   --agent-id codex-alpha \
   --branch feature/my-task \
   --purpose "Implement isolated task"
+gitwarp adopt --cwd /absolute/path/to/repo \
+  --path /absolute/path/to/existing-worktree \
+  --agent-id claude-existing \
+  --purpose "Continue existing sandbox"
 gitwarp context --cwd "$PWD"
 gitwarp handoff --cwd "$PWD" \
   --status testing \
@@ -53,6 +62,8 @@ gitwarp handoff --cwd "$PWD" \
 gitwarp board --cwd /absolute/path/to/repo --format table
 gitwarp board --cwd /absolute/path/to/repo --status blocked --verbose
 gitwarp board --cwd /absolute/path/to/repo --stale 4
+gitwarp reconcile --cwd /absolute/path/to/repo --stale 4
+gitwarp doctor --cwd /absolute/path/to/repo
 gitwarp statusline --cwd "$PWD"
 gitwarp finish --cwd "$PWD" \
   --status pushed \
@@ -60,11 +71,30 @@ gitwarp finish --cwd "$PWD" \
   --collapse
 ```
 
-`enter`, `scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, and `collapse` emit strict one-line JSON by default. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`. `enter --format prompt` and `board --format table` are the human-readable exceptions.
+`enter`, `scan`, `agents`, `dispatch`, `start`, `summon`, `adopt`, `context`, `annotate`, `handoff`, `board`, `reconcile`, `doctor`, `finish`, and `collapse` emit strict one-line JSON by default. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`. `enter --format prompt` and `board --format table` are the human-readable exceptions.
 
 Use `enter` at the start of a session. In the main repo it returns the main badge and a recommended `gitwarp start` command; inside a sandbox it returns the active agent, branch, dossier paths, and short task/progress/lesson snippets. The session hooks call `gitwarp enter --format prompt` automatically when supported, but they do not create a worktree for you.
 
-Use `start` for new isolated agent work because it creates the worktree plus `task.md`, `progress.md`, and `lessons.md` under `.gitwarp/dossiers/`. Use `context` for deeper machine-readable inspection. Use `handoff` after meaningful milestones so later agents can see progress and lessons through `enter`, `context`, or `board`. Low-level `summon`, `annotate`, and `collapse` remain available for scripts.
+Use `dispatch` when you want GitWarp to allocate a sandbox and return a ready-to-run Codex or Claude command without executing it. The default physical layout is project-local: `<repo>/.gitwarp/worktrees/<worktree-name>`. Agents should use the returned absolute `path`; they should not invent paths or switch branches manually. Local launch templates can be stored in ignored runtime config at `.gitwarp/agents.json`. `dispatch --command-mode execute` is intentionally rejected before mutation in this release.
+
+Use `start` for manual isolated agent work because it creates the worktree plus `task.md`, `progress.md`, and `lessons.md` under `.gitwarp/dossiers/`. Use `adopt` to bind an existing non-main worktree into the ledger. Use `context` for deeper machine-readable inspection. Use `handoff` after meaningful milestones so later agents can see progress and lessons through `enter`, `context`, or `board`. Use `reconcile` for a non-mutating audit of stale ledger rows, dirty worktrees, missing dossiers, and merge-ready branches. Use `doctor` to inspect local CLI, hook, plugin, and agent launch readiness. Low-level `summon`, `annotate`, and `collapse` remain available for scripts.
+
+Example `.gitwarp/agents.json`:
+
+```json
+{
+  "version": 1,
+  "default_agent": "codex",
+  "agents": {
+    "codex": {
+      "command": ["codex", "--ask-for-approval", "never", "exec", "-C", "{worktree}", "{prompt}"]
+    },
+    "claude": {
+      "command": ["claude", "-C", "{worktree}", "{prompt}"]
+    }
+  }
+}
+```
 
 ## Development Checks
 
