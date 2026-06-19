@@ -46,8 +46,10 @@ Valid ledger v1 requirements:
 
 - Root object must be a JSON object.
 - `entries` must exist and be an array.
-- `version` may be absent for older GitWarp ledgers; loaders normalize it to `1`.
-- `repo_root` may be absent or stale; loaders normalize it to the current repository root.
+- `version` may be absent for older GitWarp ledgers; loaders normalize absence to integer `1`.
+- If `version` is present, it must be integer `1`. Values such as `2`, `"1"`, `null`, arrays, or objects are invalid and fatal.
+- `repo_root` may be absent, stale, or a string; loaders normalize it to the current repository root.
+- If `repo_root` is present and not a string, the ledger is invalid and fatal.
 - Unknown top-level fields are preserved.
 - Existing `entries` contents are preserved unless stale pruning is explicitly performed by existing commands such as `scan`.
 
@@ -58,8 +60,8 @@ Valid ledger v1 requirements:
 Existing commands should continue to work without a prior explicit `gitwarp init`.
 
 - Mutating commands such as `start`, `summon`, `dispatch`, `adopt`, `handoff`, `annotate`, `finish`, and `collapse` may continue their current opportunistic creation of `.gitwarp/ledger.json` through existing ledger write paths.
-- `scan` may continue to synchronize/prune the ledger as it does today.
-- `enter`, `statusline`, `doctor`, and `reconcile` remain usable before init.
+- Existing opportunistic ledger-writer commands such as `scan`, `context`, and `board` may continue to synchronize/prune the ledger as they do today.
+- Read-only commands such as `enter`, `statusline`, `doctor`, `reconcile`, `agents`, and command help remain usable before init without creating runtime state.
 - New onboarding guidance should recommend `gitwarp init`, but implementation must not make prior init a hard requirement for existing workflows.
 
 This preserves backward compatibility while giving users a clean first-run command.
@@ -93,7 +95,9 @@ When passed, `init` writes `/.gitwarp/` to the tracked `.gitignore` instead of `
 
 Rules:
 
-- Do not duplicate ignore entries if either `.git/info/exclude` or `.gitignore` already ignores `.gitwarp`.
+- Default mode without `--write-gitignore` may skip writing when either `.git/info/exclude` or `.gitignore` already ignores `.gitwarp`.
+- Team mode with `--write-gitignore` checks `.gitignore` specifically. If only `.git/info/exclude` ignores `.gitwarp`, append `/.gitwarp/` to `.gitignore` so a local rule can be promoted to a tracked team rule.
+- Do not duplicate ignore entries in the selected target file.
 - Preserve existing file content and append a newline before the new entry when needed.
 - If `.gitignore` is a directory or cannot be written, return `ok:false`.
 
@@ -110,7 +114,10 @@ Rules:
     "ledger_dir": true,
     "ledger": true,
     "worktree_root": true,
-    "dossier_root": true,
+    "dossier_root": true
+  },
+  "updated": {
+    "ledger": false,
     "ignore_rule": true
   },
   "ignore_target": "/abs/repo/.git/info/exclude",
@@ -159,11 +166,11 @@ After preflight passes, writes happen in this order: create directories, write o
 | `gitwarp_initialized` | `ok` when `.gitwarp/`, `worktrees/`, `dossiers/`, and ledger exist; `warning` when not initialized; `error` on path collisions. |
 | `ledger_schema` | `ok` for valid ledger or absent ledger before init; `error` for malformed JSON/schema. |
 | `gitwarp_ignored` | `ok` when Git ignore covers `.gitwarp`; `warning` otherwise. |
-| `standard_skill_links` | `ok` when repo-local `.agents/skills/gitwarp` and `.claude/skills/gitwarp` resolve to `skills/gitwarp`; `warning` when missing or wrong. |
+| `standard_skill_links` | Source-checkout only. Emit `ok` when repo-local `.agents/skills/gitwarp` and `.claude/skills/gitwarp` resolve to `skills/gitwarp`; `warning` when GitWarp source files are present but links are missing or wrong. Omit this finding in ordinary managed repositories that are not the GitWarp source/package checkout. |
 | `agent_binary` | One finding per configured/built-in agent, same as current behavior. |
 | `agent_config` | Always emit exactly one finding: `ok` when valid or absent; `error` when `.gitwarp/agents.json` is malformed. |
 | `codex_plugin_metadata` | Existing Codex plugin check, warning if Codex/plugin metadata unavailable. |
-| `session_hook_context` | Static check only: hook file exists, executable, and contains `gitwarp enter --cwd`; do not execute it. |
+| `session_hook_context` | Source-checkout only. Static check only: hook file exists, executable, and contains `gitwarp enter --cwd`; do not execute it. Omit this finding in ordinary managed repositories that are not the GitWarp source/package checkout. |
 
 ### Recommended Next
 
