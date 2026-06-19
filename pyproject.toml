@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gitwarp"
+dynamic = ["version"]
+description = "Agent worktree isolation manager for concurrent coding agents"
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+gitwarp = "gitwarp.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "gitwarp.__version__"}
+
+[tool.setuptools.package-data]
+gitwarp = ["assets/*", "assets/**/*"]

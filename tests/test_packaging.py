@@ -4,6 +4,36 @@ from helpers import *
 
 
 class PluginStructureTests(unittest.TestCase):
+    def test_pyproject_declares_gitwarp_console_script(self) -> None:
+        pyproject_path = REPO_ROOT / "pyproject.toml"
+        content = pyproject_path.read_text(encoding="utf-8")
+
+        self.assertIn('name = "gitwarp"', content)
+        self.assertIn("[project.scripts]", content)
+        self.assertIn('gitwarp = "gitwarp.cli:main"', content)
+        self.assertIn('package-dir = {"" = "src"}', content)
+
+    def test_src_package_imports_and_declares_version(self) -> None:
+        src_dir = str(REPO_ROOT / "src")
+        if src_dir not in sys.path:
+            sys.path.insert(0, src_dir)
+        gitwarp = importlib.import_module("gitwarp")
+        cli = importlib.import_module("gitwarp.cli")
+
+        self.assertEqual(gitwarp.__version__, "0.1.0")
+        self.assertTrue(callable(cli.main))
+
+    def test_skill_wrapper_reports_version_from_package(self) -> None:
+        result = subprocess.run(
+            ["python3", str(SCRIPT), "--version"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
+
     def test_codex_plugin_points_at_canonical_skill_and_hooks(self) -> None:
         plugin = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         marketplace = json.loads((REPO_ROOT / ".agents" / "plugins" / "api_marketplace.json").read_text(encoding="utf-8"))
