@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import importlib
 import json
 import subprocess
@@ -7,6 +8,8 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 
@@ -70,6 +73,11 @@ def load_gitwarp_services() -> object:
     return importlib.import_module("gitwarp_core.services")
 
 
+def read_json_response(response: object) -> dict[str, object]:
+    body = response.read().decode("utf-8")  # type: ignore[attr-defined]
+    return json.loads(body)
+
+
 class GitWarpTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
@@ -95,6 +103,60 @@ class GitWarpTests(unittest.TestCase):
         run_git(repo, "add", "README.md")
         run_git(repo, "commit", "-m", "init")
         return repo
+
+    def stop_process(self, proc: subprocess.Popen[str]) -> None:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+        if proc.stdout is not None:
+            proc.stdout.close()
+        if proc.stderr is not None:
+            proc.stderr.close()
+
+    def start_web_server(self, repo: Path, *args: str) -> tuple[subprocess.Popen[str], dict[str, object]]:
+        proc = subprocess.Popen(
+            ["python3", str(SCRIPT), *args],
+            cwd=str(repo),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        assert proc.stdout is not None
+        line = proc.stdout.readline()
+        if not line:
+            stderr = proc.stderr.read() if proc.stderr else ""
+            self.fail(f"web server did not emit readiness JSON; stderr={stderr}")
+        payload = json.loads(line)
+        self.addCleanup(self.stop_process, proc)
+        self.assertEqual(payload["ok"], True)
+        return proc, payload
+
+    def fetch_web_json(
+        self,
+        url: str,
+        path: str,
+        *,
+        method: str = "GET",
+        token: str | None = None,
+        data: dict[str, object] | None = None,
+    ) -> tuple[int, dict[str, object]]:
+        body = None
+        headers: dict[str, str] = {}
+        if data is not None:
+            body = json.dumps(data).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        if token:
+            headers["X-GitWarp-Token"] = token
+        request = urllib.request.Request(f"{url}{path}", data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, read_json_response(response)
+        except urllib.error.HTTPError as exc:
+            return exc.code, read_json_response(exc)
 
     def test_scan_summon_statusline_and_collapse(self) -> None:
         scan = run_gitwarp(self.repo, "scan")
@@ -1104,6 +1166,140 @@ class GitWarpTests(unittest.TestCase):
         self.assertFalse(first["doctor"]["cached"])
         self.assertTrue(second["doctor"]["cached"])
         self.assertIsInstance(second["doctor"]["cache_age_seconds"], int)
+
+    def test_web_server_readiness_json_and_state_endpoint(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+
+        self.assertEqual(ready["host"], "127.0.0.1")
+        self.assertIsInstance(ready["port"], int)
+        self.assertEqual(ready["repo_root"], str(self.repo.resolve()))
+        self.assertTrue(ready["readonly"])
+
+        status, state = self.fetch_web_json(str(ready["url"]), "/api/state")
+
+        self.assertEqual(status, 200)
+        self.assertTrue(state["ok"])
+        self.assertEqual(state["repo_root"], str(self.repo.resolve()))
+        self.assertIn("worktrees", state)
+        self.assertIn("doctor", state)
+        self.assertIn("reconcile", state)
+
+    def test_web_parser_accepts_subcommand_and_global_alias(self) -> None:
+        _, subcommand = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+        self.assertTrue(str(subcommand["url"]).startswith("http://127.0.0.1:"))
+
+        alias_repo = self.make_repo()
+        _, alias = self.start_web_server(
+            alias_repo,
+            "--web",
+            "--cwd",
+            str(alias_repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+        self.assertTrue(str(alias["url"]).startswith("http://127.0.0.1:"))
+
+    def test_web_rejects_bad_host_header(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+
+        connection = http.client.HTTPConnection("127.0.0.1", int(ready["port"]), timeout=5)
+        try:
+            connection.request("GET", "/api/session", headers={"Host": "evil.example"})
+            response = connection.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+        finally:
+            connection.close()
+
+        self.assertEqual(response.status, 403)
+        self.assertFalse(body["ok"])
+        self.assertEqual(body["code"], "bad_host")
+
+    def test_web_host_validation_rejects_non_loopback_without_unsafe(self) -> None:
+        result = subprocess.run(
+            [
+                "python3",
+                str(SCRIPT),
+                "web",
+                "--cwd",
+                str(self.repo),
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "0",
+                "--no-open",
+                "--readonly",
+            ],
+            cwd=str(self.repo),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        payload = json.loads(result.stdout.strip())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(payload["ok"])
+        self.assertIn("loopback", str(payload["error"]))
+
+    def test_web_session_schema_and_readonly_mutation_rejection(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+
+        session_status, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        schema_status, schema = self.fetch_web_json(str(ready["url"]), "/api/schema")
+        init_status, init_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/init",
+            method="POST",
+            token=str(session["token"]),
+            data={"write_gitignore": False},
+        )
+
+        self.assertEqual(session_status, 200)
+        self.assertIsInstance(session["token"], str)
+        self.assertGreater(len(str(session["token"])), 20)
+        self.assertEqual(schema_status, 200)
+        self.assertIn("/api/state", schema["endpoints"])
+        self.assertTrue(schema["endpoints"]["/api/init"]["mutates"])  # type: ignore[index]
+        self.assertEqual(init_status, 403)
+        self.assertFalse(init_payload["ok"])
+        self.assertEqual(init_payload["code"], "readonly")
 
 
 class PluginStructureTests(unittest.TestCase):

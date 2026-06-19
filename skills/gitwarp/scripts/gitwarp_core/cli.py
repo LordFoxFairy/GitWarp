@@ -661,6 +661,12 @@ def cmd_statusline(args: argparse.Namespace) -> None:
     print(statusline_banner(find_worktree_for_cwd(cwd, worktrees)))
 
 
+def cmd_web(args: argparse.Namespace) -> None:
+    from .web import run_web_console
+
+    run_web_console(args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="gitwarp",
@@ -776,10 +782,23 @@ def build_parser() -> argparse.ArgumentParser:
     statusline.add_argument("--cwd")
     statusline.set_defaults(func=cmd_statusline)
 
+    web = subparsers.add_parser("web", help="Start the local GitWarp Web Console")
+    web.add_argument("--cwd")
+    web.add_argument("--host", default="127.0.0.1")
+    web.add_argument("--port", type=int, default=0)
+    web.add_argument("--no-open", action="store_true")
+    web.add_argument("--readonly", action="store_true")
+    web.add_argument("--unsafe-host", action="store_true")
+    web.set_defaults(func=cmd_web)
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "--web":
+        argv = ["web", *argv[1:]]
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
