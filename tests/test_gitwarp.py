@@ -452,6 +452,133 @@ class GitWarpTests(unittest.TestCase):
             self.assertIn(expected, notes)
         self.assertFalse((self.repo / ".gitwarp" / "ledger.lock").exists())
 
+    def test_agents_lists_builtin_templates_without_config(self) -> None:
+        agents = run_gitwarp(self.repo, "agents", "--cwd", str(self.repo))
+        self.assertEqual(Path(str(agents["config_path"])), (self.repo / ".gitwarp" / "agents.json").resolve())
+        rows = {item["name"]: item for item in agents["agents"]}  # type: ignore[index]
+        self.assertIn("codex", rows)
+        self.assertIn("claude", rows)
+        self.assertEqual(rows["codex"]["configured"], False)
+        self.assertEqual(rows["claude"]["configured"], False)
+        self.assertIn("{worktree}", rows["codex"]["command"])  # type: ignore[operator]
+        self.assertIn("{prompt}", rows["codex"]["command"])  # type: ignore[operator]
+
+    def test_agents_loads_json_config_and_validates_templates(self) -> None:
+        config_path = self.repo / ".gitwarp" / "agents.json"
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "default_agent": "local",
+                    "agents": {
+                        "local": {
+                            "description": "Local test agent",
+                            "command": ["python3", "-c", "{prompt}", "{worktree}"],
+                            "status": "enabled",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        agents = run_gitwarp(self.repo, "agents", "--cwd", str(self.repo))
+        rows = {item["name"]: item for item in agents["agents"]}  # type: ignore[index]
+        self.assertEqual(agents["default_agent"], "local")
+        self.assertEqual(rows["local"]["configured"], True)
+        self.assertEqual(rows["local"]["available"], True)
+        self.assertEqual(rows["local"]["command"], ["python3", "-c", "{prompt}", "{worktree}"])
+
+        bad_configs = [
+            {"version": 2, "agents": {}},
+            {"version": 1, "agents": {"bad": {"command": ["python3", "{prompt}"]}}},
+            {"version": 1, "agents": {"bad": {"command": ["python3", "{worktree}"]}}},
+            {"version": 1, "agents": {"bad": {"command": ["python3", "{unknown}", "{worktree}", "{prompt}"]}}},
+        ]
+        for bad_config in bad_configs:
+            with self.subTest(config=bad_config):
+                config_path.write_text(json.dumps(bad_config), encoding="utf-8")
+                result = run_gitwarp(self.repo, "agents", "--cwd", str(self.repo), expect_ok=False)
+                self.assertIn("agent config", str(result["error"]))
+
+    def test_dispatch_print_creates_worktree_and_renders_launch_command(self) -> None:
+        config_path = self.repo / ".gitwarp" / "agents.json"
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "default_agent": "local",
+                    "agents": {
+                        "local": {
+                            "description": "Local test agent",
+                            "command": ["python3", "-c", "{prompt}", "{worktree}"],
+                            "status": "enabled",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        dispatch = run_gitwarp(
+            self.repo,
+            "dispatch",
+            "--cwd",
+            str(self.repo),
+            "--agent",
+            "local",
+            "--branch",
+            "feature/dispatch-print",
+            "--purpose",
+            "Implement dispatch print",
+        )
+        worktree_path = Path(str(dispatch["path"]))
+        self.assertEqual(dispatch["mode"], "print")
+        self.assertEqual(dispatch["agent"], "local")
+        self.assertEqual(dispatch["status"], "dispatched")
+        self.assertTrue(worktree_path.exists())
+        self.assertEqual(Path(str(dispatch["task_md"])).exists(), True)
+        command = dispatch["launch_command"]  # type: ignore[assignment]
+        self.assertIn(str(worktree_path), command)  # type: ignore[arg-type]
+        prompt_arg = command[-2]  # type: ignore[index]
+        self.assertIn("gitwarp enter", prompt_arg)
+        self.assertIn("gitwarp handoff", prompt_arg)
+        self.assertIn("Implement dispatch print", prompt_arg)
+        self.assertIn(str(worktree_path), dispatch["launch_preview"])
+
+        context = run_gitwarp(self.repo, "context", "--cwd", str(worktree_path))
+        worktree = context["worktree"]  # type: ignore[index]
+        self.assertEqual(worktree["status"], "dispatched")  # type: ignore[index]
+        self.assertEqual(worktree["agent_id"], "local-feature-dispatch-print")  # type: ignore[index]
+
+    def test_dispatch_execute_is_rejected_before_mutation(self) -> None:
+        result = run_gitwarp(
+            self.repo,
+            "dispatch",
+            "--cwd",
+            str(self.repo),
+            "--agent",
+            "codex",
+            "--branch",
+            "feature/execute-unsupported",
+            "--purpose",
+            "Should not mutate",
+            "--command-mode",
+            "execute",
+            expect_ok=False,
+        )
+        self.assertIn("execute", str(result["error"]))
+        branches = run_git(self.repo, "branch", "--list", "feature/execute-unsupported")
+        self.assertEqual(branches, "")
+        self.assertFalse((self.repo / ".gitwarp" / "worktrees" / "feature-execute-unsupported").exists())
+        scan = run_gitwarp(self.repo, "scan", "--cwd", str(self.repo))
+        self.assertNotIn(
+            "feature/execute-unsupported",
+            {item["branch"] for item in scan["worktrees"]},  # type: ignore[index]
+        )
+
 
 class PluginStructureTests(unittest.TestCase):
     def test_codex_plugin_points_at_canonical_skill_and_hooks(self) -> None:

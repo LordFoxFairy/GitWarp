@@ -7,6 +7,8 @@ import hashlib
 import json
 import re
 import shutil
+import shlex
+import string
 import subprocess
 import sys
 import time
@@ -21,11 +23,35 @@ LEDGER_DIRNAME = ".gitwarp"
 LEDGER_FILENAME = "ledger.json"
 LEDGER_LOCK_FILENAME = "ledger.lock"
 LOCK_TIMEOUT_SECONDS = 10.0
+AGENTS_FILENAME = "agents.json"
 WORKTREE_DIRNAME = "worktrees"
 DOSSIER_DIRNAME = "dossiers"
 TASK_FILENAME = "task.md"
 PROGRESS_FILENAME = "progress.md"
 LESSONS_FILENAME = "lessons.md"
+ALLOWED_AGENT_TEMPLATE_FIELDS = {
+    "repo",
+    "worktree",
+    "branch",
+    "agent_id",
+    "purpose",
+    "task_md",
+    "progress_md",
+    "lessons_md",
+    "prompt",
+}
+BUILTIN_AGENTS: dict[str, dict[str, Any]] = {
+    "codex": {
+        "description": "Codex CLI non-interactive worker",
+        "command": ["codex", "--ask-for-approval", "never", "exec", "-C", "{worktree}", "{prompt}"],
+        "status": "enabled",
+    },
+    "claude": {
+        "description": "Claude Code worker",
+        "command": ["claude", "-C", "{worktree}", "{prompt}"],
+        "status": "enabled",
+    },
+}
 
 
 class GitWarpError(RuntimeError):
@@ -58,6 +84,10 @@ class RepoContext:
     @property
     def dossier_root(self) -> Path:
         return self.ledger_dir / DOSSIER_DIRNAME
+
+    @property
+    def agents_path(self) -> Path:
+        return self.ledger_dir / AGENTS_FILENAME
 
 
 def now_iso() -> str:
@@ -252,6 +282,117 @@ def sanitize_name(value: str) -> str:
 
 def short_hash(value: str) -> str:
     return hashlib.sha1(value.encode("utf-8")).hexdigest()[:6]
+
+
+def template_fields(values: list[str]) -> set[str]:
+    fields: set[str] = set()
+    formatter = string.Formatter()
+    for value in values:
+        for _, field_name, _, _ in formatter.parse(value):
+            if field_name:
+                fields.add(field_name)
+    return fields
+
+
+def validate_command_template(command: Any, agent_name: str) -> list[str]:
+    if not isinstance(command, list) or not command or not all(isinstance(item, str) for item in command):
+        raise GitWarpError(f"agent config '{agent_name}' command must be a non-empty list of strings")
+    fields = template_fields(command)
+    missing = {"worktree", "prompt"} - fields
+    if missing:
+        raise GitWarpError(f"agent config '{agent_name}' command missing required template field(s): {', '.join(sorted(missing))}")
+    unknown = fields - ALLOWED_AGENT_TEMPLATE_FIELDS
+    if unknown:
+        raise GitWarpError(f"agent config '{agent_name}' command contains unknown template field(s): {', '.join(sorted(unknown))}")
+    return command
+
+
+def normalize_agent_entry(name: str, raw_entry: Any, *, configured: bool) -> dict[str, Any]:
+    if not isinstance(raw_entry, dict):
+        raise GitWarpError(f"agent config '{name}' must be an object")
+    command = validate_command_template(raw_entry.get("command"), name)
+    status = raw_entry.get("status", "enabled")
+    if not isinstance(status, str):
+        raise GitWarpError(f"agent config '{name}' status must be a string")
+    description = raw_entry.get("description", "")
+    if not isinstance(description, str):
+        raise GitWarpError(f"agent config '{name}' description must be a string")
+    return {
+        "name": name,
+        "description": description,
+        "command": command,
+        "status": status,
+        "configured": configured,
+        "available": shutil.which(command[0]) is not None,
+    }
+
+
+def render_agent_prompt(purpose: str) -> str:
+    return "\n".join(
+        [
+            "You are assigned to a GitWarp isolated worktree.",
+            'Run: gitwarp enter --cwd "$PWD"',
+            "Read task.md, progress.md, and lessons.md from that context before editing.",
+            "Do not run git checkout/git switch in the main repository.",
+            "Do not switch branches inside the isolated worktree.",
+            "Record milestones with gitwarp handoff.",
+            "Stop after implementation and verification; do not merge main unless explicitly asked.",
+            "",
+            f"Task: {purpose}",
+        ]
+    )
+
+
+def build_agent_id(agent_name: str, branch: str) -> str:
+    return f"{sanitize_name(agent_name)}-{sanitize_name(branch)}"
+
+
+def render_command(command: list[str], values: dict[str, str]) -> list[str]:
+    return [item.format(**values) for item in command]
+
+
+def shell_preview(command: list[str]) -> str:
+    return shlex.join(command)
+
+
+def load_agent_registry(ctx: RepoContext) -> dict[str, Any]:
+    agents = {
+        name: normalize_agent_entry(name, entry, configured=False)
+        for name, entry in BUILTIN_AGENTS.items()
+    }
+    default_agent = "codex"
+    config_loaded = False
+    if ctx.agents_path.exists():
+        config_loaded = True
+        try:
+            raw = json.loads(ctx.agents_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise GitWarpError(f"agent config invalid JSON: {ctx.agents_path}") from exc
+        if not isinstance(raw, dict):
+            raise GitWarpError("agent config root must be an object")
+        if raw.get("version") != 1:
+            raise GitWarpError("agent config version must be 1")
+        raw_agents = raw.get("agents")
+        if not isinstance(raw_agents, dict):
+            raise GitWarpError("agent config 'agents' must be an object")
+        configured_default = raw.get("default_agent")
+        if configured_default is not None:
+            if not isinstance(configured_default, str):
+                raise GitWarpError("agent config default_agent must be a string")
+            default_agent = configured_default
+        for name, entry in raw_agents.items():
+            if not isinstance(name, str):
+                raise GitWarpError("agent config names must be strings")
+            agents[name] = normalize_agent_entry(name, entry, configured=True)
+    if default_agent not in agents:
+        raise GitWarpError(f"agent config default_agent '{default_agent}' is not defined")
+    return {
+        "config_path": str(ctx.agents_path),
+        "config_loaded": config_loaded,
+        "default_agent": default_agent,
+        "agents": [agents[name] for name in sorted(agents)],
+        "agents_by_name": agents,
+    }
 
 
 def dossier_paths(ctx: RepoContext, branch: str, worktree_path: Path) -> dict[str, str]:
@@ -749,6 +890,21 @@ def cmd_scan(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_agents(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    registry = load_agent_registry(ctx)
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "config_path": registry["config_path"],
+            "config_loaded": registry["config_loaded"],
+            "default_agent": registry["default_agent"],
+            "agents": registry["agents"],
+        }
+    )
+
+
 def cmd_summon(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
@@ -834,6 +990,98 @@ def cmd_start(args: argparse.Namespace) -> None:
             "status": "active",
             "branch_created": not existing_branch,
             "latest_progress": "Workspace created.",
+            **dossier,
+        }
+    )
+
+
+def cmd_dispatch(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    registry = load_agent_registry(ctx)
+    agent_name = args.agent or registry["default_agent"]
+    agents_by_name = registry["agents_by_name"]
+    if agent_name not in agents_by_name:
+        raise GitWarpError(f"unknown agent '{agent_name}'; available agents: {', '.join(sorted(agents_by_name))}")
+    if args.command_mode == "execute":
+        raise GitWarpError("dispatch command-mode execute is not supported yet")
+
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    ensure_branch_available(worktrees, args.branch)
+
+    agent = agents_by_name[agent_name]
+    agent_id = args.agent_id or build_agent_id(agent_name, args.branch)
+    target_dir, existing_branch, head = create_worktree(ctx, args.branch)
+    created_at = now_iso()
+    dossier = dossier_paths(ctx, args.branch, target_dir)
+    prompt = render_agent_prompt(args.purpose)
+    values = {
+        "repo": str(ctx.repo_root),
+        "worktree": str(target_dir),
+        "branch": args.branch,
+        "agent_id": agent_id,
+        "purpose": args.purpose,
+        "task_md": dossier["task_md"],
+        "progress_md": dossier["progress_md"],
+        "lessons_md": dossier["lessons_md"],
+        "prompt": prompt,
+    }
+    launch_command = render_command(agent["command"], values)
+    launch_preview = shell_preview(launch_command)
+    dispatch_meta = {
+        "agent_name": agent_name,
+        "command_mode": "print",
+        "launch_command": launch_command,
+        "launch_preview": launch_preview,
+        "last_exit_code": None,
+        "last_prepared_at": created_at,
+        "last_started_at": None,
+        "last_finished_at": None,
+    }
+    entry = {
+        "path": str(target_dir),
+        "branch": args.branch,
+        "agent_id": agent_id,
+        "purpose": args.purpose,
+        "status": "dispatched",
+        "notes": [],
+        "latest_progress": "Dispatch command prepared.",
+        "created_at": created_at,
+        "updated_at": created_at,
+        "dispatch": dispatch_meta,
+        **dossier,
+    }
+    create_dossier_files(
+        dossier,
+        agent_id=agent_id,
+        branch=args.branch,
+        worktree_path=str(target_dir),
+        purpose=args.purpose,
+        status="dispatched",
+        created_at=created_at,
+    )
+
+    def update(ledger: dict[str, Any]) -> None:
+        ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
+        ledger["entries"].append(entry)
+
+    mutate_ledger(ctx, update)
+
+    emit_json(
+        {
+            "ok": True,
+            "mode": "print",
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "agent": agent_name,
+            "agent_id": agent_id,
+            "path": str(target_dir),
+            "branch": args.branch,
+            "head": head,
+            "purpose": args.purpose,
+            "status": "dispatched",
+            "branch_created": not existing_branch,
+            "launch_command": launch_command,
+            "launch_preview": launch_preview,
             **dossier,
         }
     )
@@ -1100,6 +1348,10 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--cwd")
     scan.set_defaults(func=cmd_scan)
 
+    agents = subparsers.add_parser("agents", help="List configured agent launch templates")
+    agents.add_argument("--cwd")
+    agents.set_defaults(func=cmd_agents)
+
     summon = subparsers.add_parser("summon", help="Create an isolated worktree for an agent")
     summon.add_argument("--cwd")
     summon.add_argument("--agent-id", required=True)
@@ -1113,6 +1365,15 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--branch", required=True)
     start.add_argument("--purpose", required=True)
     start.set_defaults(func=cmd_start)
+
+    dispatch = subparsers.add_parser("dispatch", help="Create a worktree and render an agent launch command")
+    dispatch.add_argument("--cwd")
+    dispatch.add_argument("--agent")
+    dispatch.add_argument("--agent-id")
+    dispatch.add_argument("--branch", required=True)
+    dispatch.add_argument("--purpose", required=True)
+    dispatch.add_argument("--command-mode", choices=["print", "execute"], default="print")
+    dispatch.set_defaults(func=cmd_dispatch)
 
     context = subparsers.add_parser("context", help="Print JSON context for the current worktree")
     context.add_argument("--cwd")
