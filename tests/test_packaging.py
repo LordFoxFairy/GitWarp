@@ -25,6 +25,14 @@ class PluginStructureTests(unittest.TestCase):
                     (target / relative_path).read_text(encoding="utf-8"),
                 )
 
+    def assert_script_tree_allowlist(self, root: Path) -> None:
+        files = {
+            path.relative_to(root)
+            for path in root.rglob("*")
+            if path.is_file() and "__pycache__" not in path.parts
+        }
+        self.assertEqual({Path("gitwarp.py"), Path("install_cli.py")}, files)
+
     def test_pyproject_declares_gitwarp_console_script(self) -> None:
         pyproject_path = REPO_ROOT / "pyproject.toml"
         content = pyproject_path.read_text(encoding="utf-8")
@@ -74,6 +82,8 @@ class PluginStructureTests(unittest.TestCase):
                 / "gitwarp_core"
             ).exists()
         )
+        self.assert_script_tree_allowlist(REPO_ROOT / "skills" / "gitwarp" / "scripts")
+        self.assert_script_tree_allowlist(REPO_ROOT / "plugins" / "gitwarp" / "skills" / "gitwarp" / "scripts")
 
     def test_web_source_and_packaged_assets_have_clear_boundaries(self) -> None:
         self.assertTrue((REPO_ROOT / "web" / "README.md").exists())
