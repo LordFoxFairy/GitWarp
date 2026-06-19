@@ -89,6 +89,14 @@ class RepoContext:
     def agents_path(self) -> Path:
         return self.ledger_dir / AGENTS_FILENAME
 
+    @property
+    def git_info_exclude_path(self) -> Path:
+        return self.common_dir / "info" / "exclude"
+
+    @property
+    def gitignore_path(self) -> Path:
+        return self.repo_root / ".gitignore"
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -122,6 +130,26 @@ def run_git(cwd: Path, *args: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
+def default_ledger(ctx: RepoContext) -> dict[str, Any]:
+    return {"version": 1, "repo_root": str(ctx.repo_root), "entries": []}
+
+
+def normalize_ledger_schema(data: Any, ctx: RepoContext) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise GitWarpError(f"invalid ledger schema: {ctx.ledger_path}")
+    version = data.get("version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) or version != 1:
+        raise GitWarpError(f"invalid ledger schema: {ctx.ledger_path}")
+    repo_root = data.get("repo_root", str(ctx.repo_root))
+    if not isinstance(repo_root, str):
+        raise GitWarpError(f"invalid ledger schema: {ctx.ledger_path}")
+    if "entries" not in data or not isinstance(data["entries"], list):
+        raise GitWarpError(f"invalid ledger schema: {ctx.ledger_path}")
+    data["version"] = 1
+    data["repo_root"] = str(ctx.repo_root)
+    return data
+
+
 def discover_repo(cwd: Path) -> RepoContext:
     common_dir_raw = run_git(cwd, "rev-parse", "--git-common-dir")
     common_dir = Path(common_dir_raw)
@@ -134,16 +162,12 @@ def discover_repo(cwd: Path) -> RepoContext:
 
 def load_ledger(ctx: RepoContext) -> dict[str, Any]:
     if not ctx.ledger_path.exists():
-        return {"version": 1, "repo_root": str(ctx.repo_root), "entries": []}
+        return default_ledger(ctx)
     try:
         data = json.loads(ctx.ledger_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise GitWarpError(f"invalid ledger file: {ctx.ledger_path}") from exc
-    if "entries" not in data or not isinstance(data["entries"], list):
-        raise GitWarpError(f"invalid ledger schema: {ctx.ledger_path}")
-    data.setdefault("version", 1)
-    data["repo_root"] = str(ctx.repo_root)
-    return data
+    return normalize_ledger_schema(data, ctx)
 
 
 def load_raw_ledger(ctx: RepoContext) -> dict[str, Any]:
@@ -173,16 +197,26 @@ def ledger_write_lock(ctx: RepoContext, timeout: float = LOCK_TIMEOUT_SECONDS) -
             pass
 
 
-def write_ledger(ctx: RepoContext, ledger: dict[str, Any]) -> None:
-    ctx.ledger_dir.mkdir(parents=True, exist_ok=True)
-    ledger["repo_root"] = str(ctx.repo_root)
-    ledger["updated_at"] = now_iso()
-    temp_path = ctx.ledger_dir / f".{LEDGER_FILENAME}.{os.getpid()}.{time.monotonic_ns()}.tmp"
-    with temp_path.open("w", encoding="utf-8") as handle:
-        handle.write(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    temp_path.replace(ctx.ledger_path)
+def write_ledger(ctx: RepoContext, ledger: dict[str, Any], *, touch_updated_at: bool = True) -> None:
+    temp_path: Path | None = None
+    try:
+        ctx.ledger_dir.mkdir(parents=True, exist_ok=True)
+        ledger["repo_root"] = str(ctx.repo_root)
+        if touch_updated_at:
+            ledger["updated_at"] = now_iso()
+        temp_path = ctx.ledger_dir / f".{LEDGER_FILENAME}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+        with temp_path.open("w", encoding="utf-8") as handle:
+            handle.write(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        temp_path.replace(ctx.ledger_path)
+    except OSError as exc:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        raise GitWarpError(f"failed to write ledger {ctx.ledger_path}: {exc}") from exc
 
 
 def mutate_ledger(
@@ -804,6 +838,295 @@ def run_command_for_doctor(command: list[str], cwd: Path, timeout: float = 3.0) 
         return None
 
 
+def git_ignores_gitwarp(ctx: RepoContext) -> bool:
+    for candidate in (".gitwarp/", ".gitwarp"):
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", candidate],
+            cwd=str(ctx.repo_root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return True
+    return False
+
+
+def target_contains_gitwarp_rule(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise GitWarpError(f"ignore target is not a file: {path}")
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    normalized = {line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")}
+    return "/.gitwarp/" in normalized or ".gitwarp/" in normalized or ".gitwarp" in normalized or "/.gitwarp" in normalized
+
+
+def append_gitwarp_ignore_rule(path: Path) -> None:
+    if path.exists() and not path.is_file():
+        raise GitWarpError(f"ignore target is not a file: {path}")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        current = path.read_text(encoding="utf-8") if path.exists() else ""
+        prefix = "" if not current or current.endswith("\n") else "\n"
+        path.write_text(current + prefix + "/.gitwarp/\n", encoding="utf-8")
+    except OSError as exc:
+        raise GitWarpError(f"failed to write ignore target {path}: {exc}") from exc
+
+
+def ensure_ignore_target_writable(path: Path) -> None:
+    if path.exists() and not path.is_file():
+        raise GitWarpError(f"ignore target is not a file: {path}")
+    parent = path.parent
+    if parent.exists() and not parent.is_dir():
+        raise GitWarpError(f"ignore target parent is not a directory: {parent}")
+
+
+def preflight_init(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, Any]:
+    if ctx.ledger_dir.exists() and not ctx.ledger_dir.is_dir():
+        raise GitWarpError(f"runtime path is not a directory: {ctx.ledger_dir}")
+    for path in (ctx.worktree_root, ctx.dossier_root):
+        if path.exists() and not path.is_dir():
+            raise GitWarpError(f"runtime path is not a directory: {path}")
+
+    ledger: dict[str, Any] | None = None
+    ledger_needs_write = False
+    if ctx.ledger_path.exists():
+        try:
+            raw = json.loads(ctx.ledger_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise GitWarpError(f"invalid ledger file: {ctx.ledger_path}") from exc
+        before = json.dumps(raw, sort_keys=True)
+        ledger = normalize_ledger_schema(raw, ctx)
+        after = json.dumps(ledger, sort_keys=True)
+        ledger_needs_write = before != after
+
+    ignore_target = ctx.gitignore_path if write_gitignore else ctx.git_info_exclude_path
+    ensure_ignore_target_writable(ignore_target)
+    ignore_rule_needed = not target_contains_gitwarp_rule(ignore_target)
+    if not write_gitignore and git_ignores_gitwarp(ctx):
+        ignore_rule_needed = False
+
+    return {
+        "ledger": ledger,
+        "ledger_needs_write": ledger_needs_write,
+        "ignore_target": ignore_target,
+        "ignore_rule_needed": ignore_rule_needed,
+    }
+
+
+def init_recommendations(ctx: RepoContext) -> list[str]:
+    return [
+        f"gitwarp doctor --cwd \"{ctx.repo_root}\"",
+        f"gitwarp enter --cwd \"{ctx.repo_root}\"",
+        f"gitwarp dispatch --cwd \"{ctx.repo_root}\" --agent codex --branch <branch> --purpose \"<purpose>\"",
+    ]
+
+
+def is_gitwarp_source_checkout(ctx: RepoContext) -> bool:
+    required = [
+        ctx.repo_root / "skills" / "gitwarp" / "SKILL.md",
+        ctx.repo_root / "skills" / "gitwarp" / "scripts" / "gitwarp.py",
+        ctx.repo_root / ".codex-plugin" / "plugin.json",
+        ctx.repo_root / ".agents" / "plugins" / "api_marketplace.json",
+    ]
+    return all(path.exists() for path in required)
+
+
+def gitwarp_initialized_check(ctx: RepoContext) -> dict[str, Any]:
+    exists = ctx.ledger_dir.is_dir() and ctx.worktree_root.is_dir() and ctx.dossier_root.is_dir()
+    return doctor_check(
+        "gitwarp_initialized",
+        "ok" if exists else "warning",
+        "GitWarp runtime directories are initialized." if exists else "GitWarp runtime directories are not initialized.",
+        ledger_dir=str(ctx.ledger_dir),
+        worktree_root=str(ctx.worktree_root),
+        dossier_root=str(ctx.dossier_root),
+        initialized=exists,
+    )
+
+
+def ledger_schema_check(ctx: RepoContext) -> dict[str, Any]:
+    if not ctx.ledger_path.exists():
+        return doctor_check(
+            "ledger_schema",
+            "warning",
+            "GitWarp ledger has not been created.",
+            path=str(ctx.ledger_path),
+            exists=False,
+        )
+    try:
+        raw = json.loads(ctx.ledger_path.read_text(encoding="utf-8"))
+        normalize_ledger_schema(raw, ctx)
+    except (GitWarpError, json.JSONDecodeError) as exc:
+        return doctor_check(
+            "ledger_schema",
+            "error",
+            f"GitWarp ledger is invalid: {exc}",
+            path=str(ctx.ledger_path),
+            exists=True,
+        )
+    return doctor_check(
+        "ledger_schema",
+        "ok",
+        "GitWarp ledger schema is valid.",
+        path=str(ctx.ledger_path),
+        exists=True,
+    )
+
+
+def gitwarp_ignored_check(ctx: RepoContext) -> dict[str, Any]:
+    ignored = git_ignores_gitwarp(ctx)
+    return doctor_check(
+        "gitwarp_ignored",
+        "ok" if ignored else "warning",
+        ".gitwarp is ignored." if ignored else ".gitwarp is not ignored by this repository.",
+        ignored=ignored,
+        gitignore_path=str(ctx.gitignore_path),
+        info_exclude_path=str(ctx.git_info_exclude_path),
+    )
+
+
+def standard_skill_links_check(ctx: RepoContext) -> dict[str, Any]:
+    links = {
+        "codex": ctx.repo_root / ".agents" / "skills" / "gitwarp",
+        "claude": ctx.repo_root / ".claude" / "skills" / "gitwarp",
+    }
+    target = (ctx.repo_root / "skills" / "gitwarp").resolve()
+    states: dict[str, dict[str, Any]] = {}
+    ok = True
+    for name, path in links.items():
+        exists = path.exists() or path.is_symlink()
+        points_to_target = exists and path.resolve() == target
+        ok = ok and bool(points_to_target)
+        states[name] = {
+            "path": str(path),
+            "exists": exists,
+            "is_symlink": path.is_symlink(),
+            "target": str(path.resolve()) if exists else None,
+        }
+    return doctor_check(
+        "standard_skill_links",
+        "ok" if ok else "warning",
+        "Standard skill discovery links point at the canonical skill." if ok else "Standard skill discovery links are missing or misdirected.",
+        expected_target=str(target),
+        links=states,
+    )
+
+
+def agent_config_check(ctx: RepoContext) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    try:
+        registry = load_agent_registry(ctx)
+    except GitWarpError as exc:
+        return (
+            doctor_check(
+                "agent_config",
+                "error",
+                str(exc),
+                path=str(ctx.agents_path),
+                configured=ctx.agents_path.exists(),
+            ),
+            None,
+        )
+    return (
+        doctor_check(
+            "agent_config",
+            "ok",
+            "Agent config is valid or absent.",
+            path=str(ctx.agents_path),
+            configured=registry["config_loaded"],
+            default_agent=registry["default_agent"],
+            count=len(registry["agents"]),
+        ),
+        registry,
+    )
+
+
+def codex_plugin_metadata_check(ctx: RepoContext) -> dict[str, Any]:
+    codex_path = shutil.which("codex")
+    if not codex_path:
+        return doctor_check("codex_plugin_metadata", "warning", "codex is not available on PATH.")
+
+    result = run_command_for_doctor(["codex", "plugin", "list", "--json"], ctx.repo_root, timeout=5.0)
+    enabled = False
+    if result and result.returncode == 0:
+        raw = result.stdout
+        start = raw.find("{")
+        if start >= 0:
+            try:
+                payload = json.loads(raw[start:])
+                enabled = any(
+                    item.get("pluginId") == "gitwarp@gitwarp-dev" and item.get("enabled") is True
+                    for item in payload.get("installed", [])
+                )
+            except json.JSONDecodeError:
+                enabled = False
+    return doctor_check(
+        "codex_plugin_metadata",
+        "ok" if enabled else "warning",
+        "Codex GitWarp plugin is installed and enabled." if enabled else "Codex is available but GitWarp plugin metadata was not confirmed.",
+        codex=codex_path,
+        plugin_id="gitwarp@gitwarp-dev",
+        enabled=enabled,
+    )
+
+
+def session_hook_context_check(ctx: RepoContext) -> dict[str, Any]:
+    hook_path = ctx.repo_root / "hooks" / "session-start-codex"
+    if not hook_path.exists():
+        return doctor_check(
+            "session_hook_context",
+            "warning",
+            "Session hook script is not present.",
+            path=str(hook_path),
+            exists=False,
+            executable=False,
+        )
+    text = hook_path.read_text(encoding="utf-8", errors="replace")
+    executable = os.access(hook_path, os.X_OK)
+    has_context = "GitWarp Context:" in text
+    has_enter = "gitwarp enter --cwd" in text
+    ok = executable and has_context and has_enter
+    return doctor_check(
+        "session_hook_context",
+        "ok" if ok else "warning",
+        "Session hook statically includes GitWarp context anchoring." if ok else "Session hook is missing executable/context/enter wiring.",
+        path=str(hook_path),
+        exists=True,
+        executable=executable,
+        has_context=has_context,
+        has_enter=has_enter,
+    )
+
+
+def recommended_next_for_findings(ctx: RepoContext, findings: list[dict[str, Any]]) -> list[str]:
+    recommendations: list[str] = []
+    for finding in findings:
+        code = finding["code"]
+        severity = finding["severity"]
+        details = finding.get("details", {})
+        if code in {"gitwarp_initialized", "ledger_schema", "gitwarp_ignored"} and severity in {"warning", "error"}:
+            recommendations.append(f"gitwarp init --cwd \"{ctx.repo_root}\"")
+        elif code == "agent_config" and severity == "error":
+            recommendations.append(f"Fix or remove {ctx.agents_path}")
+        elif code == "gitwarp_launcher" and severity in {"warning", "error"}:
+            recommendations.append("Run the GitWarp CLI installer from the skill scripts directory.")
+        elif code == "codex_plugin_metadata" and severity == "warning" and details.get("codex"):
+            recommendations.append("Install or enable gitwarp@gitwarp-dev in Codex.")
+        elif code == "standard_skill_links" and severity == "warning":
+            recommendations.append("Restore .agents/skills/gitwarp and .claude/skills/gitwarp links.")
+        elif code == "session_hook_context" and severity == "warning":
+            recommendations.append("Update hooks/session-start-codex to include gitwarp enter --cwd context anchoring.")
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in recommendations:
+        if item not in seen:
+            deduped.append(item)
+            seen.add(item)
+    return deduped
+
+
 def print_board_table(rows: list[dict[str, Any]]) -> None:
     headers = ["branch", "agent", "status", "purpose", "progress"]
     print(" | ".join(headers))
@@ -972,6 +1295,47 @@ def cmd_agents(args: argparse.Namespace) -> None:
             "config_loaded": registry["config_loaded"],
             "default_agent": registry["default_agent"],
             "agents": registry["agents"],
+        }
+    )
+
+
+def cmd_init(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    preflight = preflight_init(ctx, write_gitignore=args.write_gitignore)
+    created = {
+        "ledger_dir": not ctx.ledger_dir.exists(),
+        "ledger": not ctx.ledger_path.exists(),
+        "worktree_root": not ctx.worktree_root.exists(),
+        "dossier_root": not ctx.dossier_root.exists(),
+    }
+    updated = {
+        "ledger": bool(preflight["ledger_needs_write"]),
+        "ignore_rule": bool(preflight["ignore_rule_needed"]),
+    }
+
+    ctx.ledger_dir.mkdir(parents=True, exist_ok=True)
+    ctx.worktree_root.mkdir(parents=True, exist_ok=True)
+    ctx.dossier_root.mkdir(parents=True, exist_ok=True)
+
+    if created["ledger"]:
+        write_ledger(ctx, default_ledger(ctx))
+    elif updated["ledger"]:
+        write_ledger(ctx, preflight["ledger"], touch_updated_at=False)
+
+    if updated["ignore_rule"]:
+        append_gitwarp_ignore_rule(preflight["ignore_target"])
+
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "worktree_root": str(ctx.worktree_root),
+            "dossier_root": str(ctx.dossier_root),
+            "created": created,
+            "updated": updated,
+            "ignore_target": str(preflight["ignore_target"]),
+            "recommended_next": init_recommendations(ctx),
         }
     )
 
@@ -1479,6 +1843,7 @@ def cmd_reconcile(args: argparse.Namespace) -> None:
 def cmd_doctor(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     findings: list[dict[str, Any]] = []
+    source_checkout = is_gitwarp_source_checkout(ctx)
 
     git_path = shutil.which("git")
     findings.append(
@@ -1513,23 +1878,13 @@ def cmd_doctor(args: argparse.Namespace) -> None:
             launcher_message = "gitwarp launcher exists but --version failed."
     findings.append(doctor_check("gitwarp_launcher", launcher_severity, launcher_message, **launcher_details))
 
-    ignored = subprocess.run(
-        ["git", "check-ignore", "-q", ".gitwarp"],
-        cwd=str(ctx.repo_root),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    findings.append(
-        doctor_check(
-            "gitwarp_ignored",
-            "ok" if ignored.returncode == 0 else "warning",
-            ".gitwarp is ignored." if ignored.returncode == 0 else ".gitwarp is not ignored by this repository.",
-        )
-    )
+    findings.append(gitwarp_initialized_check(ctx))
+    findings.append(ledger_schema_check(ctx))
+    findings.append(gitwarp_ignored_check(ctx))
 
-    try:
-        registry = load_agent_registry(ctx)
+    agent_config, registry = agent_config_check(ctx)
+    findings.append(agent_config)
+    if registry is not None:
         for agent in registry["agents"]:
             findings.append(
                 doctor_check(
@@ -1540,50 +1895,11 @@ def cmd_doctor(args: argparse.Namespace) -> None:
                     command=agent["command"][0],
                 )
             )
-    except GitWarpError as exc:
-        findings.append(doctor_check("agent_config", "error", str(exc), path=str(ctx.agents_path)))
 
-    codex_path = shutil.which("codex")
-    if codex_path:
-        result = run_command_for_doctor(["codex", "plugin", "list", "--json"], ctx.repo_root, timeout=5.0)
-        enabled = False
-        if result and result.returncode == 0:
-            raw = result.stdout
-            start = raw.find("{")
-            if start >= 0:
-                try:
-                    payload = json.loads(raw[start:])
-                    enabled = any(
-                        item.get("pluginId") == "gitwarp@gitwarp-dev" and item.get("enabled") is True
-                        for item in payload.get("installed", [])
-                    )
-                except json.JSONDecodeError:
-                    enabled = False
-        findings.append(
-            doctor_check(
-                "codex_plugin_metadata",
-                "ok" if enabled else "warning",
-                "Codex GitWarp plugin is installed and enabled." if enabled else "Codex is available but GitWarp plugin metadata was not confirmed.",
-                codex=codex_path,
-            )
-        )
-    else:
-        findings.append(doctor_check("codex_plugin_metadata", "warning", "codex is not available on PATH."))
-
-    hook_path = ctx.repo_root / "hooks" / "session-start-codex"
-    if hook_path.exists() and os.access(hook_path, os.X_OK):
-        result = run_command_for_doctor([str(hook_path)], ctx.repo_root, timeout=5.0)
-        hook_ok = bool(result and result.returncode == 0 and "GitWarp Context:" in result.stdout)
-        findings.append(
-            doctor_check(
-                "session_hook_context",
-                "ok" if hook_ok else "warning",
-                "Session hook produced a GitWarp Context block." if hook_ok else "Session hook did not produce a GitWarp Context block.",
-                path=str(hook_path),
-            )
-        )
-    else:
-        findings.append(doctor_check("session_hook_context", "warning", "Session hook script is not present or executable.", path=str(hook_path)))
+    findings.append(codex_plugin_metadata_check(ctx))
+    if source_checkout:
+        findings.append(standard_skill_links_check(ctx))
+        findings.append(session_hook_context_check(ctx))
 
     emit_json(
         {
@@ -1592,6 +1908,7 @@ def cmd_doctor(args: argparse.Namespace) -> None:
             "ledger_path": str(ctx.ledger_path),
             "findings": findings,
             "summary": summarize_findings(findings),
+            "recommended_next": recommended_next_for_findings(ctx, findings),
         }
     )
 
@@ -1709,6 +2026,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version="gitwarp 0.1.0")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    init = subparsers.add_parser("init", help="Initialize GitWarp runtime state for this repository")
+    init.add_argument("--cwd")
+    init.add_argument("--write-gitignore", action="store_true")
+    init.set_defaults(func=cmd_init)
 
     scan = subparsers.add_parser("scan", help="List live worktrees with GitWarp metadata")
     scan.add_argument("--cwd")
