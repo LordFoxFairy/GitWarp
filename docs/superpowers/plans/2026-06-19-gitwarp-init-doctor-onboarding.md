@@ -79,7 +79,7 @@ Expected: fails because `init` subcommand does not exist.
 - [ ] Update `load_ledger` to call `normalize_ledger_schema` instead of only checking `entries`.
 - [ ] Add ignore helpers:
   - `ignore_target_for_init(ctx, write_gitignore)`.
-  - `git_ignores_gitwarp(ctx)` using `git check-ignore -q .gitwarp`.
+  - `git_ignores_gitwarp(ctx)` using `git check-ignore -q .gitwarp/` and fallback `.gitwarp` so directory-style rules such as `/.gitwarp/` are detected before the directory exists.
   - `target_contains_gitwarp_rule(path)`.
   - `append_gitwarp_ignore_rule(path)`.
 - [ ] Add `preflight_init(ctx, write_gitignore)` returning selected ignore target and needed writes or raising `GitWarpError`.
@@ -197,6 +197,16 @@ git commit -m "test: cover gitwarp init edge cases"
   - Assert marker does not exist.
   - Assert `session_hook_context` is warning only when source-checkout predicate is true.
 
+- [ ] Add `test_doctor_reports_agent_config_for_absent_valid_and_invalid_config`.
+  - Fresh repo before `.gitwarp/agents.json`: doctor emits one `agent_config` finding with severity `ok`.
+  - After valid config: doctor emits one `agent_config` finding with severity `ok` and still emits `agent_binary` rows.
+  - After malformed config: doctor emits one `agent_config` finding with severity `error`, `ok:true`, exit 0, and `recommended_next` mentions `.gitwarp/agents.json`.
+
+- [ ] Add `test_doctor_source_checkout_checks_are_scoped`.
+  - In ordinary temporary repos, assert `standard_skill_links` and `session_hook_context` are absent.
+  - In the GitWarp source checkout, assert both codes are present.
+  - For a fake source checkout with a static hook that lacks `gitwarp enter --cwd`, assert `session_hook_context` warning and no hook marker file is created.
+
 - [ ] Run tests and verify failures.
 
 ### Task 6: Refactor doctor into read-only checks
@@ -215,6 +225,14 @@ git commit -m "test: cover gitwarp init edge cases"
 - [ ] Replace hook execution with static `session_hook_context` inspection for source checkouts only.
 - [ ] Add `recommended_next_for_findings(ctx, findings)`.
 - [ ] Keep `doctor` exit 0 / `ok:true` for diagnostic findings.
+- [ ] Doctor finding JSON shape must remain:
+
+```json
+{"code":"agent_config","severity":"ok","message":"Agent config is valid or absent.","details":{"path":"/abs/repo/.gitwarp/agents.json","configured":false}}
+```
+
+Use `details` for paths, commands, booleans, and remediation context; do not add top-level per-finding fields besides `code`, `severity`, `message`, and `details`.
+
 - [ ] Run full unittest.
 
 Run: `python3 -m unittest discover -s tests -p 'test_*.py' -v`
@@ -237,6 +255,13 @@ git commit -m "feat: make gitwarp doctor setup-aware"
 - Modify: `hooks/session-start`
 - Modify: `hooks/session-start-codex`
 - Modify: `.codex-plugin/plugin.json` if interface text needs init wording
+
+- [ ] Red step: run existing structure/syntax checks before edits to establish baseline.
+
+```bash
+bash -n scripts/verify-install.sh hooks/session-start hooks/session-start-codex scripts/install-codex-plugin.sh
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
 
 - [ ] README install quick start becomes:
 
@@ -263,9 +288,12 @@ gitwarp doctor --cwd "$PWD"
   - `ledger_path`, `worktree_root`, `dossier_root`.
   - `created.ledger` true.
   - `updated.ignore_rule` true on first run.
+  - `recommended_next` includes `gitwarp doctor`.
   - second init has `created.ledger` false and `updated.ignore_rule` false.
 - [ ] Remove manual `mkdir -p "$tmpdir/.gitwarp"` before writing agents config if init already created it.
 - [ ] Update expected doctor codes to include `gitwarp_initialized`, `ledger_schema`, `agent_config`.
+- [ ] Assert doctor before init in a throwaway repo includes `recommended_next` with `gitwarp init`.
+- [ ] Assert doctor after init has `gitwarp_initialized` and `ledger_schema` findings with severity `ok`.
 - [ ] Update final smoke label to include `init`.
 
 ### Task 9: Mirror package and validate
@@ -276,10 +304,19 @@ gitwarp doctor --cwd "$PWD"
 - [ ] Sync canonical skill and scripts into plugin mirror:
 
 ```bash
-cp -R skills/gitwarp plugins/gitwarp/skills/
 cp .codex-plugin/plugin.json plugins/gitwarp/.codex-plugin/plugin.json
+cp .claude-plugin/plugin.json plugins/gitwarp/.claude-plugin/plugin.json
+cp .claude-plugin/marketplace.json plugins/gitwarp/.claude-plugin/marketplace.json
+cp hooks/hooks.json plugins/gitwarp/hooks/hooks.json
+cp hooks/hooks-codex.json plugins/gitwarp/hooks/hooks-codex.json
+cp hooks/run-hook.cmd plugins/gitwarp/hooks/run-hook.cmd
 cp hooks/session-start plugins/gitwarp/hooks/session-start
 cp hooks/session-start-codex plugins/gitwarp/hooks/session-start-codex
+cp skills/gitwarp/SKILL.md plugins/gitwarp/skills/gitwarp/SKILL.md
+cp skills/gitwarp/agents/openai.yaml plugins/gitwarp/skills/gitwarp/agents/openai.yaml
+cp skills/gitwarp/references/install.md plugins/gitwarp/skills/gitwarp/references/install.md
+cp skills/gitwarp/scripts/gitwarp.py plugins/gitwarp/skills/gitwarp/scripts/gitwarp.py
+cp skills/gitwarp/scripts/install_cli.py plugins/gitwarp/skills/gitwarp/scripts/install_cli.py
 ```
 
 - [ ] Run validation:
@@ -301,7 +338,9 @@ git add README.md .codex-plugin/plugin.json hooks/session-start hooks/session-st
 git commit -m "docs: document gitwarp init onboarding"
 ```
 
-## Final Integration
+## Maintainer Release Checklist
+
+This section is for the lead maintainer after implementation is complete and explicitly authorized for release. Generic workers should stop after passing verification and hand off.
 
 - [ ] Install plugin from this worktree if needed:
 
