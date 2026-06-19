@@ -280,3 +280,74 @@ class DoctorTests(GitWarpTestCase):
         source_codes = {finding["code"] for finding in source_doctor["findings"]}  # type: ignore[index]
         self.assertIn("standard_skill_links", source_codes)
         self.assertIn("session_hook_context", source_codes)
+        hook_findings = findings_with_code(source_doctor, "session_hook_context")
+        self.assertEqual(hook_findings[0]["severity"], "ok")
+        configs = hook_findings[0]["details"]["configs"]  # type: ignore[index]
+        self.assertTrue(configs["default"]["ok"])  # type: ignore[index]
+        self.assertTrue(configs["codex"]["ok"])  # type: ignore[index]
+
+    def test_doctor_source_checkout_uses_worktree_hook_files(self) -> None:
+        source_repo = self.make_repo()
+        (source_repo / "skills" / "gitwarp" / "scripts").mkdir(parents=True)
+        (source_repo / "skills" / "gitwarp" / "SKILL.md").write_text("---\nname: gitwarp\n---\n", encoding="utf-8")
+        (source_repo / "skills" / "gitwarp" / "scripts" / "gitwarp.py").write_text("# wrapper\n", encoding="utf-8")
+        (source_repo / ".codex-plugin").mkdir()
+        (source_repo / ".codex-plugin" / "plugin.json").write_text("{}\n", encoding="utf-8")
+        (source_repo / ".agents" / "plugins").mkdir(parents=True)
+        (source_repo / ".agents" / "plugins" / "api_marketplace.json").write_text("{}\n", encoding="utf-8")
+        (source_repo / "hooks").mkdir()
+        (source_repo / "hooks" / "session-start-codex").write_text(
+            'gitwarp enter --cwd "$PWD"\nGitWarp Context:\nDiagnostics:\n',
+            encoding="utf-8",
+        )
+        (source_repo / "hooks" / "session-start-codex").chmod(0o755)
+        hook_command = (
+            "bash -lc 'root=\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}\"; "
+            "[ -n \"$root\" ] || exit 0; "
+            "exec \"$root/hooks/run-hook.cmd\" session-start-codex'"
+        )
+        hook_config = {
+            "hooks": {
+                "SessionStart": [
+                    {
+                        "matcher": "startup|resume|clear",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": hook_command,
+                                "async": False,
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        (source_repo / "hooks" / "hooks.json").write_text(json.dumps(hook_config), encoding="utf-8")
+        (source_repo / "hooks" / "hooks-codex.json").write_text(json.dumps(hook_config), encoding="utf-8")
+        run_git(source_repo, "add", ".")
+        run_git(source_repo, "commit", "-m", "source checkout shape")
+
+        worktree_path = source_repo.parent / "source-worktree"
+        run_git(source_repo, "worktree", "add", "-b", "feature/source-worktree-doctor", str(worktree_path), "HEAD")
+        self.addCleanup(
+            subprocess.run,
+            ["git", "-C", str(source_repo), "branch", "-D", "feature/source-worktree-doctor"],
+            capture_output=True,
+            text=True,
+        )
+        self.addCleanup(
+            subprocess.run,
+            ["git", "-C", str(source_repo), "worktree", "remove", "--force", str(worktree_path)],
+            capture_output=True,
+            text=True,
+        )
+        (source_repo / "hooks" / "session-start-codex").write_text("gitwarp enter --cwd \"$PWD\"\n", encoding="utf-8")
+
+        doctor = run_gitwarp(worktree_path, "doctor", "--cwd", str(worktree_path))
+        hook_finding = findings_with_code(doctor, "session_hook_context")[0]
+
+        self.assertEqual(hook_finding["severity"], "ok")
+        self.assertEqual(
+            hook_finding["details"]["path"],  # type: ignore[index]
+            str((worktree_path / "hooks" / "session-start-codex").resolve()),
+        )

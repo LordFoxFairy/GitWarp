@@ -26,14 +26,16 @@ gitwarp init --cwd "$PWD"
 gitwarp doctor --cwd "$PWD"
 ```
 
-This registers the local marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
+This registers or rebinds the local marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
+If the installer reports `on_path:false`, add `~/.local/bin` to `PATH` or run the returned absolute launcher path.
 
 Manual equivalent:
 
 ```bash
 codex plugin marketplace add "$PWD" --json
-codex plugin add gitwarp@gitwarp-dev --json
-python3 "$HOME/.codex/plugins/cache/gitwarp-dev/gitwarp/0.1.0/skills/gitwarp/scripts/install_cli.py"
+plugin_json="$(codex plugin add gitwarp@gitwarp-dev --json)"
+installed_path="$(PLUGIN_JSON="$plugin_json" python3 -c 'import json, os; print(json.loads(os.environ["PLUGIN_JSON"])["installedPath"])')"
+python3 "$installed_path/skills/gitwarp/scripts/install_cli.py"
 ```
 
 ### Standard Skill Path
@@ -190,9 +192,10 @@ Example `.gitwarp/agents.json`:
 - `.codex-plugin/` and `.claude-plugin/`: plugin metadata shells.
 - `.agents/plugins/api_marketplace.json`: local Codex marketplace entry named `gitwarp-dev`.
 - `plugins/gitwarp -> ..`: Codex marketplace compatibility symlink. Keep it as a symlink; do not add `plugins/gitwarp/src`.
-- `hooks/`: session hook assets for compatible hosts.
+- `hooks/`: session hook assets for compatible hosts. They are packaged as assets; enable them through the host-specific hook mechanism.
 - `web/`: future rich web console source; do not put frontend source under `skills/`.
 - `tests/`: Python regression tests for GitWarp behavior and packaging.
+- `CHANGELOG.md` and `LICENSE`: release history and MIT license text.
 
 ## Development
 

@@ -32,12 +32,15 @@ gitwarp init --cwd "$PWD"
 gitwarp doctor --cwd "$PWD"
 ```
 
+The installer rebinds the local `gitwarp-dev` marketplace to the checkout it is run from, then installs the plugin and launcher from that source.
+
 Manual equivalent:
 
 ```bash
 codex plugin marketplace add /absolute/path/to/GitWarp --json
-codex plugin add gitwarp@gitwarp-dev --json
-python3 "$HOME/.codex/plugins/cache/gitwarp-dev/gitwarp/0.1.0/skills/gitwarp/scripts/install_cli.py"
+plugin_json="$(codex plugin add gitwarp@gitwarp-dev --json)"
+installed_path="$(PLUGIN_JSON="$plugin_json" python3 -c 'import json, os; print(json.loads(os.environ["PLUGIN_JSON"])["installedPath"])')"
+python3 "$installed_path/skills/gitwarp/scripts/install_cli.py"
 ```
 
 For direct skill-only experiments from a source checkout, symlink `skills/gitwarp` into the tool-specific discovery directory:
@@ -64,6 +67,7 @@ python3 /absolute/path/to/skills/gitwarp/scripts/install_cli.py
 ```
 
 By default this writes a launcher to `~/.local/bin/gitwarp`. Override with `--dest /absolute/path/gitwarp` when needed.
+If the installer returns `on_path:false`, add `~/.local/bin` to `PATH` or call the returned absolute `command` path. `scripts/verify-install.sh` also accepts `GITWARP_BIN=/absolute/path/gitwarp`.
 
 Verify:
 
@@ -89,7 +93,7 @@ gitwarp init --cwd /absolute/path/to/git/repo --write-gitignore
 
 Use team mode only when the project wants the ignore rule committed. If `.gitignore` already has the rule, `init` will not duplicate it.
 
-Plugin session hooks install the CLI and attempt `gitwarp enter --cwd "$PWD" --format prompt` at session start. That injects the current main/worktree context for agents, but it does not initialize runtime state or allocate a worktree automatically. Start isolated work explicitly with `gitwarp dispatch` or `gitwarp start`.
+Hook assets under `hooks/` can install the CLI and attempt `gitwarp enter --cwd "$PWD" --format prompt` at session start when wired into a compatible host. The Codex plugin manifest currently publishes the skill package; hook activation remains host-specific. Hooks inject the current main/worktree context for agents, but they do not initialize runtime state or allocate a worktree automatically. Start isolated work explicitly with `gitwarp dispatch` or `gitwarp start`.
 
 For orchestrated agent launches, use `gitwarp dispatch`. It allocates a project-local worktree under `<repo>/.gitwarp/worktrees/<worktree-name>`, creates the dossier files, records ownership, and prints a launch command without executing it. Optional local launch templates live in ignored runtime config at `.gitwarp/agents.json`; built-in templates are available for `codex` and `claude`.
 

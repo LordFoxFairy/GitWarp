@@ -19,9 +19,33 @@ command -v python3 >/dev/null 2>&1 || {
   exit 1
 }
 
-command -v gitwarp >/dev/null 2>&1 || {
-  echo "gitwarp is not on PATH" >&2
+python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' || {
+  echo "Python 3.10 or newer is required" >&2
   exit 1
+}
+
+if [[ -n "${GITWARP_BIN:-}" ]]; then
+  if [[ "$GITWARP_BIN" == */* ]]; then
+    GITWARP_BIN="$(cd "$(dirname "$GITWARP_BIN")" && pwd -P)/$(basename "$GITWARP_BIN")"
+  else
+    GITWARP_BIN="$(command -v "$GITWARP_BIN" || true)"
+  fi
+elif command -v gitwarp >/dev/null 2>&1; then
+  GITWARP_BIN="$(command -v gitwarp)"
+elif [[ -x "$HOME/.local/bin/gitwarp" ]]; then
+  GITWARP_BIN="$HOME/.local/bin/gitwarp"
+else
+  echo "gitwarp is not available; set GITWARP_BIN or add ~/.local/bin to PATH" >&2
+  exit 1
+fi
+
+if [[ ! -x "$GITWARP_BIN" ]]; then
+  echo "GITWARP_BIN is not executable: $GITWARP_BIN" >&2
+  exit 1
+fi
+
+gitwarp() {
+  "$GITWARP_BIN" "$@"
 }
 
 plugin_list="$(codex plugin list --json 2>&1)"
@@ -455,7 +479,7 @@ if [[ -e "$worktree_path" ]]; then
   exit 1
 fi
 
-CLI_PATH="$(command -v gitwarp)" \
+CLI_PATH="$GITWARP_BIN" \
 PLUGIN_ID="$PLUGIN_ID" \
 DISPATCH_PATH="$dispatch_path" \
 python3 - <<'PY'

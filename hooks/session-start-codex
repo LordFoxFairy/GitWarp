@@ -5,13 +5,22 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 export PATH="${HOME}/.local/bin:${PATH:-}"
 
-python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/install_cli.py" >/dev/null 2>&1 || true
+diagnostics=()
+if ! install_output="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/install_cli.py" 2>&1)"; then
+  diagnostics+=("install_cli failed: ${install_output}")
+fi
 
 gitwarp_context=""
 if [[ -f "${PLUGIN_ROOT}/skills/gitwarp/scripts/gitwarp.py" ]]; then
-  gitwarp_context="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/gitwarp.py" enter --cwd "$PWD" --format prompt 2>/dev/null || true)"
+  if ! gitwarp_context="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/gitwarp.py" enter --cwd "$PWD" --format prompt 2>&1)"; then
+    diagnostics+=("gitwarp enter failed: ${gitwarp_context}")
+    gitwarp_context=""
+  fi
 elif command -v gitwarp >/dev/null 2>&1; then
-  gitwarp_context="$(gitwarp enter --cwd "$PWD" --format prompt 2>/dev/null || true)"
+  if ! gitwarp_context="$(gitwarp enter --cwd "$PWD" --format prompt 2>&1)"; then
+    diagnostics+=("gitwarp enter failed: ${gitwarp_context}")
+    gitwarp_context=""
+  fi
 fi
 
 escape_for_json() {
@@ -32,8 +41,17 @@ Agent protocol:
 4. In a worktree, read task.md, progress.md, and lessons.md before editing.
 5. Record milestones with gitwarp handoff and finish with gitwarp finish.
 
-Current context:
-${gitwarp_context:-GitWarp context unavailable. Run gitwarp enter --cwd \"\$PWD\" manually.}"
+Current GitWarp Context:
+${gitwarp_context:-GitWarp Context: unavailable. Run gitwarp enter --cwd \"\$PWD\" manually.}"
+if [[ "${#diagnostics[@]}" -gt 0 ]]; then
+  context="${context}
+
+Diagnostics:"
+  for diagnostic in "${diagnostics[@]}"; do
+    context="${context}
+- ${diagnostic//$'\n'/ }"
+  done
+fi
 context_escaped="$(escape_for_json "$context")"
 
 printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$context_escaped"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from pathlib import Path
 from typing import Any
 
 from ...infrastructure.agents import load_agent_registry
@@ -68,11 +69,12 @@ def gitwarp_ignored_check(ctx: RepoContext) -> dict[str, Any]:
 
 
 def standard_skill_links_check(ctx: RepoContext) -> dict[str, Any]:
+    source_root = ctx.checkout_root
     links = {
-        "codex": ctx.repo_root / ".agents" / "skills" / "gitwarp",
-        "claude": ctx.repo_root / ".claude" / "skills" / "gitwarp",
+        "codex": source_root / ".agents" / "skills" / "gitwarp",
+        "claude": source_root / ".claude" / "skills" / "gitwarp",
     }
-    target = (ctx.repo_root / "skills" / "gitwarp").resolve()
+    target = (source_root / "skills" / "gitwarp").resolve()
     states: dict[str, dict[str, Any]] = {}
     ok = True
     for name, path in links.items():
@@ -151,8 +153,66 @@ def codex_plugin_metadata_check(ctx: RepoContext) -> dict[str, Any]:
     )
 
 
+def hook_config_state(path: Path) -> dict[str, Any]:
+    state: dict[str, Any] = {
+        "path": str(path),
+        "exists": path.exists(),
+        "valid_json": False,
+        "has_session_start": False,
+        "commands": [],
+        "has_run_hook": False,
+        "has_context_hook": False,
+        "has_plugin_root": False,
+        "has_claude_fallback": False,
+        "safe_without_root": False,
+        "ok": False,
+    }
+    if not path.exists():
+        return state
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        state["error"] = str(exc)
+        return state
+
+    state["valid_json"] = True
+    session_start = payload.get("hooks", {}).get("SessionStart") if isinstance(payload, dict) else None
+    if not isinstance(session_start, list) or not session_start:
+        return state
+
+    commands: list[str] = []
+    for group in session_start:
+        if not isinstance(group, dict):
+            continue
+        for hook in group.get("hooks", []):
+            if isinstance(hook, dict) and isinstance(hook.get("command"), str):
+                commands.append(hook["command"])
+
+    joined = "\n".join(commands)
+    state["has_session_start"] = True
+    state["commands"] = commands
+    state["has_run_hook"] = "run-hook.cmd" in joined
+    state["has_context_hook"] = "session-start-codex" in joined
+    state["has_plugin_root"] = "PLUGIN_ROOT" in joined
+    state["has_claude_fallback"] = "CLAUDE_PLUGIN_ROOT" in joined
+    state["safe_without_root"] = "exit 0" in joined
+    state["ok"] = bool(
+        state["has_run_hook"]
+        and state["has_context_hook"]
+        and state["has_plugin_root"]
+        and state["has_claude_fallback"]
+        and state["safe_without_root"]
+    )
+    return state
+
+
 def session_hook_context_check(ctx: RepoContext) -> dict[str, Any]:
-    hook_path = ctx.repo_root / "hooks" / "session-start-codex"
+    hook_path = ctx.checkout_root / "hooks" / "session-start-codex"
+    config_paths = {
+        "default": ctx.checkout_root / "hooks" / "hooks.json",
+        "codex": ctx.checkout_root / "hooks" / "hooks-codex.json",
+    }
+    config_states = {name: hook_config_state(path) for name, path in config_paths.items()}
     if not hook_path.exists():
         return doctor_check(
             "session_hook_context",
@@ -161,19 +221,24 @@ def session_hook_context_check(ctx: RepoContext) -> dict[str, Any]:
             path=str(hook_path),
             exists=False,
             executable=False,
+            configs=config_states,
         )
     text = hook_path.read_text(encoding="utf-8", errors="replace")
     executable = os.access(hook_path, os.X_OK)
     has_context = "GitWarp Context:" in text
     has_enter = "gitwarp enter --cwd" in text
-    ok = executable and has_context and has_enter
+    has_diagnostics = "Diagnostics:" in text
+    configs_ok = all(state["ok"] for state in config_states.values())
+    ok = executable and has_context and has_enter and has_diagnostics and configs_ok
     return doctor_check(
         "session_hook_context",
         "ok" if ok else "warning",
-        "Session hook statically includes GitWarp context anchoring." if ok else "Session hook is missing executable/context/enter wiring.",
+        "Session hook and host hook configs include GitWarp context anchoring." if ok else "Session hook is missing executable/context/config wiring.",
         path=str(hook_path),
         exists=True,
         executable=executable,
         has_context=has_context,
         has_enter=has_enter,
+        has_diagnostics=has_diagnostics,
+        configs=config_states,
     )

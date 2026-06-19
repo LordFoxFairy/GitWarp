@@ -95,10 +95,11 @@ def init_recommendations(ctx: RepoContext) -> list[str]:
 
 
 def is_gitwarp_source_checkout(ctx: RepoContext) -> bool:
+    source_root = ctx.checkout_root
     required = [
-        ctx.repo_root / "skills" / "gitwarp" / "SKILL.md",
-        ctx.repo_root / "skills" / "gitwarp" / "scripts" / "gitwarp.py",
-        ctx.repo_root / ".codex-plugin" / "plugin.json",
-        ctx.repo_root / ".agents" / "plugins" / "api_marketplace.json",
+        source_root / "skills" / "gitwarp" / "SKILL.md",
+        source_root / "skills" / "gitwarp" / "scripts" / "gitwarp.py",
+        source_root / ".codex-plugin" / "plugin.json",
+        source_root / ".agents" / "plugins" / "api_marketplace.json",
     ]
     return all(path.exists() for path in required)

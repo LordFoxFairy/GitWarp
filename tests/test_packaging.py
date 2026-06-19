@@ -44,6 +44,11 @@ class PluginStructureTests(unittest.TestCase):
 
         self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
 
+    def test_release_metadata_files_exist(self) -> None:
+        self.assertIn("MIT License", (REPO_ROOT / "LICENSE").read_text(encoding="utf-8"))
+        changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn("## 0.1.0", changelog)
+
     def test_runtime_source_exists_only_in_root_src(self) -> None:
         self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "cli.py").is_file())
         plugin_link = REPO_ROOT / "plugins" / "gitwarp"
@@ -187,10 +192,14 @@ class PluginStructureTests(unittest.TestCase):
         legacy_marketplace = json.loads((REPO_ROOT / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8"))
         root_marketplace = json.loads((REPO_ROOT / "marketplace.json").read_text(encoding="utf-8"))
         claude_marketplace = json.loads((REPO_ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+        default_hooks = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         hooks = json.loads((REPO_ROOT / "hooks" / "hooks-codex.json").read_text(encoding="utf-8"))
+        default_session_hook = (REPO_ROOT / "hooks" / "session-start").read_text(encoding="utf-8")
         session_hook = (REPO_ROOT / "hooks" / "session-start-codex").read_text(encoding="utf-8")
         codex_skill_link = REPO_ROOT / ".agents" / "skills" / "gitwarp"
         claude_skill_link = REPO_ROOT / ".claude" / "skills" / "gitwarp"
+        default_command = default_hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+        codex_command = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
 
         self.assertEqual(plugin["name"], "gitwarp")
         self.assertEqual(plugin["skills"], "./skills/")
@@ -201,7 +210,19 @@ class PluginStructureTests(unittest.TestCase):
         self.assertEqual(root_marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
         self.assertEqual(claude_marketplace["plugins"][0]["source"], "./")
         self.assertIn("CODEX", marketplace["plugins"][0]["policy"]["products"])
+        self.assertEqual(legacy_marketplace["plugins"][0]["policy"], marketplace["plugins"][0]["policy"])
+        self.assertEqual(root_marketplace["plugins"][0]["policy"], marketplace["plugins"][0]["policy"])
+        self.assertIn("SessionStart", default_hooks["hooks"])
         self.assertIn("SessionStart", hooks["hooks"])
+        self.assertIn("session-start-codex", default_command)
+        self.assertIn("session-start-codex", codex_command)
+        self.assertIn("PLUGIN_ROOT", default_command)
+        self.assertIn("CLAUDE_PLUGIN_ROOT", default_command)
+        self.assertIn("exit 0", default_command)
+        self.assertNotIn("${CLAUDE_PLUGIN_ROOT}/hooks", default_command)
+        self.assertEqual(default_session_hook, session_hook)
+        self.assertIn("GitWarp Context:", session_hook)
+        self.assertIn("Diagnostics:", session_hook)
         self.assertIn("gitwarp enter --cwd", session_hook)
         self.assertIn("gitwarp start", session_hook)
         self.assertIn("gitwarp handoff", session_hook)
@@ -228,9 +249,27 @@ class PluginStructureTests(unittest.TestCase):
             "skills/gitwarp/references/install.md",
             "skills/gitwarp/scripts/gitwarp.py",
             "skills/gitwarp/scripts/install_cli.py",
+            "LICENSE",
+            "CHANGELOG.md",
         ]
 
         for relative_path in relative_paths:
             with self.subTest(path=relative_path):
                 self.assertTrue((REPO_ROOT / relative_path).is_file())
         self.assertTrue((REPO_ROOT / "plugins" / "gitwarp").is_symlink())
+
+    def test_install_scripts_have_version_and_path_guards(self) -> None:
+        installer = (REPO_ROOT / "skills" / "gitwarp" / "scripts" / "install_cli.py").read_text(encoding="utf-8")
+        install_script = (REPO_ROOT / "scripts" / "install-codex-plugin.sh").read_text(encoding="utf-8")
+        verify_script = (REPO_ROOT / "scripts" / "verify-install.sh").read_text(encoding="utf-8")
+
+        self.assertIn("MIN_PYTHON = (3, 10)", installer)
+        self.assertIn("sys.executable", installer)
+        self.assertIn("except OSError", installer)
+        self.assertIn("recommended_next", installer)
+        self.assertIn("sys.version_info >= (3, 10)", install_script)
+        self.assertIn("marketplace_rebound", install_script)
+        self.assertIn("codex plugin marketplace remove", install_script)
+        self.assertIn("recommended_next", install_script)
+        self.assertIn("GITWARP_BIN", verify_script)
+        self.assertIn("~/.local/bin", verify_script)
