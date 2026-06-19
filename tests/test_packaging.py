@@ -69,6 +69,33 @@ class PluginStructureTests(unittest.TestCase):
             REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp",
         )
 
+    def test_runtime_package_has_ddd_boundaries(self) -> None:
+        expected_modules = {
+            "domain/__init__.py",
+            "domain/errors.py",
+            "domain/model.py",
+            "domain/policies.py",
+            "application/__init__.py",
+            "application/dto.py",
+            "application/services.py",
+            "infrastructure/__init__.py",
+            "infrastructure/git_cli.py",
+            "infrastructure/json_ledger.py",
+            "infrastructure/filesystem_dossiers.py",
+            "webapp/__init__.py",
+            "webapp/contracts.py",
+            "webapp/security.py",
+            "webapp/resources.py",
+            "webapp/controllers.py",
+            "webapp/transport.py",
+            "webapp/server.py",
+        }
+
+        for relative_path in sorted(expected_modules):
+            with self.subTest(path=relative_path):
+                self.assertTrue((REPO_ROOT / "src" / "gitwarp" / relative_path).is_file())
+                self.assertTrue((REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp" / relative_path).is_file())
+
     def test_skill_wrappers_do_not_ship_product_core(self) -> None:
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp_core").exists())
         self.assertFalse(

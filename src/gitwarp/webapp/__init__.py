@@ -1,0 +1,1 @@
+"""Web console adapter package."""
