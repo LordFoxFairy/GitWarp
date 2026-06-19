@@ -82,6 +82,13 @@ def load_gitwarp_ledger() -> object:
     return importlib.import_module("gitwarp_core.ledger")
 
 
+def load_gitwarp_web() -> object:
+    script_dir = str(SCRIPT_DIR)
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    return importlib.import_module("gitwarp_core.web")
+
+
 def read_json_response(response: object) -> dict[str, object]:
     body = response.read().decode("utf-8")  # type: ignore[attr-defined]
     return json.loads(body)
@@ -161,6 +168,27 @@ class GitWarpTests(unittest.TestCase):
         if token:
             headers["X-GitWarp-Token"] = token
         request = urllib.request.Request(f"{url}{path}", data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, read_json_response(response)
+        except urllib.error.HTTPError as exc:
+            return exc.code, read_json_response(exc)
+
+    def post_web_raw(
+        self,
+        url: str,
+        path: str,
+        *,
+        token: str | None = None,
+        body: bytes = b"{}",
+        content_type: str | None = None,
+    ) -> tuple[int, dict[str, object]]:
+        headers: dict[str, str] = {}
+        if token:
+            headers["X-GitWarp-Token"] = token
+        if content_type:
+            headers["Content-Type"] = content_type
+        request = urllib.request.Request(f"{url}{path}", data=body, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
                 return response.status, read_json_response(response)
@@ -1539,6 +1567,273 @@ class GitWarpTests(unittest.TestCase):
         self.assertEqual(outside_status, 403)
         self.assertFalse(outside["ok"])
         self.assertEqual(outside["code"], "outside_dossier_root")
+
+    def test_web_mutations_require_csrf_and_json_content_type(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+
+        missing_token_status, missing_token = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/init",
+            method="POST",
+            data={"write_gitignore": False},
+        )
+        bad_type_status, bad_type = self.post_web_raw(
+            str(ready["url"]),
+            "/api/init",
+            token=str(session["token"]),
+            body=b"{}",
+        )
+
+        self.assertEqual(missing_token_status, 403)
+        self.assertEqual(missing_token["code"], "bad_token")
+        self.assertEqual(bad_type_status, 415)
+        self.assertEqual(bad_type["code"], "bad_content_type")
+
+    def test_web_confirmation_token_expires(self) -> None:
+        web = load_gitwarp_web()
+        token, _ = web.encode_confirmation(b"secret", {"action": "collapse"}, ttl_seconds=-1)  # type: ignore[attr-defined]
+
+        with self.assertRaises(TimeoutError):
+            web.decode_confirmation(b"secret", token)  # type: ignore[attr-defined]
+
+    def test_web_init_dispatch_start_and_handoff_mutations(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        init_status, init_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/init",
+            method="POST",
+            token=token,
+            data={"write_gitignore": False},
+        )
+        dispatch_status, dispatch_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/dispatch",
+            method="POST",
+            token=token,
+            data={
+                "agent": "codex",
+                "agent_id": None,
+                "branch": "feature/web-mutation-dispatch",
+                "purpose": "Dispatch through Web API",
+            },
+        )
+        self.assertEqual(dispatch_status, 200, dispatch_payload)
+        start_status, start_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/start",
+            method="POST",
+            token=token,
+            data={
+                "agent_id": "codex-web-start",
+                "branch": "feature/web-mutation-start",
+                "purpose": "Start through Web API",
+            },
+        )
+        self.assertEqual(start_status, 200, start_payload)
+        handoff_status, handoff_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/handoff",
+            method="POST",
+            token=token,
+            data={
+                "cwd": dispatch_payload["path"],
+                "status": "testing",
+                "progress": "Web handoff recorded",
+                "lesson": "Mutation endpoints refresh state after success",
+            },
+        )
+        state_status, state = self.fetch_web_json(str(ready["url"]), "/api/state")
+        board = run_gitwarp(self.repo, "board", "--cwd", str(self.repo), "--verbose")
+
+        self.assertEqual(init_status, 200)
+        self.assertTrue(init_payload["ok"])
+        self.assertTrue((self.repo / ".gitwarp" / "ledger.json").exists())
+        self.assertTrue(Path(str(dispatch_payload["path"])).exists())
+        self.assertIn("launch_command", dispatch_payload)
+        self.assertTrue(Path(str(start_payload["path"])).exists())
+        self.assertEqual(start_payload["status"], "active")
+        self.assertEqual(handoff_status, 200)
+        self.assertEqual(handoff_payload["status"], "testing")
+        self.assertEqual(state_status, 200)
+        state_row = next(item for item in state["worktrees"] if item["branch"] == "feature/web-mutation-dispatch")  # type: ignore[index]
+        board_row = next(item for item in board["worktrees"] if item["branch"] == "feature/web-mutation-dispatch")  # type: ignore[index]
+        self.assertEqual(state_row["status"], "testing")
+        self.assertEqual(board_row["latest_progress"], "Web handoff recorded")
+
+    def test_web_finish_collapse_requires_fresh_confirmation(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-web-finish",
+            "--branch",
+            "feature/web-finish-collapse",
+            "--purpose",
+            "Finish through Web API",
+        )
+        worktree_path = Path(str(start["path"]))
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        missing_status, missing = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/finish",
+            method="POST",
+            token=token,
+            data={
+                "cwd": str(worktree_path),
+                "status": "pushed",
+                "progress": "Ready to collapse",
+                "collapse": True,
+            },
+        )
+        confirm_status, confirmation = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/confirmation",
+            method="POST",
+            token=token,
+            data={"action": "finish-collapse", "cwd": str(worktree_path), "path": None, "branch": None},
+        )
+        self.assertEqual(confirm_status, 200, confirmation)
+        (worktree_path / "new-head.txt").write_text("new head\n", encoding="utf-8")
+        run_git(worktree_path, "add", "new-head.txt")
+        run_git(worktree_path, "commit", "-m", "change head after confirmation")
+        stale_status, stale = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/finish",
+            method="POST",
+            token=token,
+            data={
+                "cwd": str(worktree_path),
+                "status": "pushed",
+                "progress": "Attempt stale collapse",
+                "collapse": True,
+                "confirmation": confirmation["confirmation"],
+            },
+        )
+        self.assertEqual(stale_status, 409)
+        self.assertEqual(stale["code"], "stale_confirmation")
+        self.assertTrue(worktree_path.exists())
+        fresh_status, fresh = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/confirmation",
+            method="POST",
+            token=token,
+            data={"action": "finish-collapse", "cwd": str(worktree_path), "path": None, "branch": None},
+        )
+        finish_status, finish = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/finish",
+            method="POST",
+            token=token,
+            data={
+                "cwd": str(worktree_path),
+                "status": "pushed",
+                "progress": "Fresh confirmation accepted",
+                "collapse": True,
+                "confirmation": fresh["confirmation"],
+            },
+        )
+
+        self.assertEqual(missing_status, 403)
+        self.assertEqual(missing["code"], "confirmation_required")
+        self.assertEqual(confirmation["challenge"]["path"], str(worktree_path))
+        self.assertEqual(fresh_status, 200)
+        self.assertEqual(finish_status, 200)
+        self.assertTrue(finish["collapsed"])
+        self.assertFalse(worktree_path.exists())
+
+    def test_web_collapse_confirmation_rejects_dirty_summary_changes(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-web-collapse",
+            "--branch",
+            "feature/web-collapse-confirmation",
+            "--purpose",
+            "Collapse through Web API",
+        )
+        worktree_path = Path(str(start["path"]))
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        confirm_status, confirmation = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/confirmation",
+            method="POST",
+            token=token,
+            data={"action": "collapse", "cwd": str(worktree_path), "path": None, "branch": None},
+        )
+        self.assertEqual(confirm_status, 200, confirmation)
+        (worktree_path / "dirty-after-confirmation.txt").write_text("dirty\n", encoding="utf-8")
+        stale_status, stale = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/collapse",
+            method="POST",
+            token=token,
+            data={"path": str(worktree_path), "branch": None, "confirmation": confirmation["confirmation"]},
+        )
+        self.assertEqual(stale_status, 409)
+        self.assertEqual(stale["code"], "stale_confirmation")
+        self.assertTrue(worktree_path.exists())
+        fresh_status, fresh = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/confirmation",
+            method="POST",
+            token=token,
+            data={"action": "collapse", "cwd": str(worktree_path), "path": None, "branch": None},
+        )
+        collapse_status, collapse = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/collapse",
+            method="POST",
+            token=token,
+            data={"path": str(worktree_path), "branch": None, "confirmation": fresh["confirmation"]},
+        )
+
+        self.assertEqual(fresh_status, 200)
+        self.assertEqual(collapse_status, 200)
+        self.assertEqual(collapse["removed_path"], str(worktree_path))
+        self.assertFalse(worktree_path.exists())
 
 
 class PluginStructureTests(unittest.TestCase):

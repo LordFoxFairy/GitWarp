@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import ipaddress
 import json
 import secrets
 import socket
 import sys
+import time
 import webbrowser
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,7 +18,16 @@ from urllib.parse import parse_qs, urlparse
 
 from .foundation import GitWarpError, RepoContext, resolve_path
 from .ledger import discover_repo
-from .services import build_web_state_payload
+from .services import (
+    build_collapse_payload,
+    build_dispatch_payload,
+    build_finish_payload,
+    build_handoff_payload,
+    build_init_payload,
+    build_start_payload,
+    build_web_state_payload,
+    inspect_destructive_target,
+)
 
 
 WEB_CONSOLE_HTML = """<!doctype html>
@@ -157,6 +170,41 @@ def build_schema_payload(readonly: bool) -> dict[str, Any]:
     return {"ok": True, "readonly": readonly, "endpoints": endpoints}
 
 
+def _mac_payload(payload: dict[str, Any]) -> bytes:
+    return json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def encode_confirmation(secret: bytes, challenge: dict[str, Any], *, ttl_seconds: int = 300) -> tuple[str, int]:
+    expires_at = int(time.time()) + ttl_seconds
+    payload = {"challenge": challenge, "expires_at": expires_at}
+    mac = hmac.new(secret, _mac_payload(payload), hashlib.sha256).hexdigest()
+    token = base64.urlsafe_b64encode(
+        json.dumps({"payload": payload, "mac": mac}, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    return token, expires_at
+
+
+def decode_confirmation(secret: bytes, token: str) -> dict[str, Any]:
+    try:
+        padded = token + "=" * (-len(token) % 4)
+        raw = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+        envelope = json.loads(raw)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise GitWarpError("invalid confirmation token") from exc
+    if not isinstance(envelope, dict) or not isinstance(envelope.get("payload"), dict) or not isinstance(envelope.get("mac"), str):
+        raise GitWarpError("invalid confirmation token")
+    expected = hmac.new(secret, _mac_payload(envelope["payload"]), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, envelope["mac"]):
+        raise GitWarpError("invalid confirmation token")
+    expires_at = envelope["payload"].get("expires_at")
+    if isinstance(expires_at, bool) or not isinstance(expires_at, int) or expires_at < int(time.time()):
+        raise TimeoutError("confirmation token expired")
+    challenge = envelope["payload"].get("challenge")
+    if not isinstance(challenge, dict):
+        raise GitWarpError("invalid confirmation token")
+    return challenge
+
+
 class GitWarpWebHandler(BaseHTTPRequestHandler):
     server: GitWarpHTTPServer
 
@@ -207,6 +255,38 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
     def require_token(self) -> bool:
         if self.headers.get("X-GitWarp-Token") != self.server.state.token:
             self.send_json(403, {"ok": False, "error": "missing or invalid GitWarp token", "code": "bad_token"})
+            return False
+        return True
+
+    def require_fields(self, payload: dict[str, Any], fields: list[str]) -> bool:
+        missing = [field for field in fields if field not in payload or payload[field] is None or payload[field] == ""]
+        if missing:
+            self.send_json(400, {"ok": False, "error": f"missing required field(s): {', '.join(missing)}", "code": "missing_field"})
+            return False
+        return True
+
+    def require_confirmation(self, action: str, payload: dict[str, Any]) -> bool:
+        token = payload.get("confirmation")
+        if not isinstance(token, str) or not token:
+            self.send_json(403, {"ok": False, "error": "destructive action requires confirmation", "code": "confirmation_required"})
+            return False
+        try:
+            challenge = decode_confirmation(self.server.state.confirmation_secret, token)
+            current = inspect_destructive_target(
+                self.server.state.ctx,
+                action=action,
+                cwd=payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
+                path=payload.get("path") if isinstance(payload.get("path"), str) else None,
+                branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+            )
+        except TimeoutError as exc:
+            self.send_json(403, {"ok": False, "error": str(exc), "code": "confirmation_expired"})
+            return False
+        except GitWarpError as exc:
+            self.send_json(403, {"ok": False, "error": str(exc), "code": "bad_confirmation"})
+            return False
+        if challenge != current:
+            self.send_json(409, {"ok": False, "error": "confirmation no longer matches target state", "code": "stale_confirmation"})
             return False
         return True
 
@@ -268,12 +348,83 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
             return
         if not self.require_token():
             return
-        if self.parse_json_body() is None:
+        payload = self.parse_json_body()
+        if payload is None:
             return
         if self.server.state.readonly:
             self.send_json(403, {"ok": False, "error": "Web console is read-only", "code": "readonly"})
             return
-        self.send_json(501, {"ok": False, "error": "mutation endpoint is not implemented yet", "code": "not_implemented"})
+        required = MUTATION_ENDPOINTS[parsed.path]["required"]
+        if not self.require_fields(payload, required):
+            return
+        try:
+            if parsed.path == "/api/init":
+                result = build_init_payload(self.server.state.ctx, write_gitignore=bool(payload.get("write_gitignore", False)))
+            elif parsed.path == "/api/dispatch":
+                result = build_dispatch_payload(
+                    self.server.state.ctx,
+                    agent=payload.get("agent") if isinstance(payload.get("agent"), str) else None,
+                    agent_id=payload.get("agent_id") if isinstance(payload.get("agent_id"), str) else None,
+                    branch=str(payload["branch"]),
+                    purpose=str(payload["purpose"]),
+                )
+            elif parsed.path == "/api/start":
+                result = build_start_payload(
+                    self.server.state.ctx,
+                    agent_id=str(payload["agent_id"]),
+                    branch=str(payload["branch"]),
+                    purpose=str(payload["purpose"]),
+                )
+            elif parsed.path == "/api/handoff":
+                result = build_handoff_payload(
+                    self.server.state.ctx,
+                    cwd=str(payload["cwd"]),
+                    path=payload.get("path") if isinstance(payload.get("path"), str) else None,
+                    branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+                    status=str(payload["status"]),
+                    progress=str(payload["progress"]),
+                    lesson=payload.get("lesson") if isinstance(payload.get("lesson"), str) else None,
+                )
+            elif parsed.path == "/api/confirmation":
+                action = str(payload["action"])
+                challenge = inspect_destructive_target(
+                    self.server.state.ctx,
+                    action=action,
+                    cwd=payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
+                    path=payload.get("path") if isinstance(payload.get("path"), str) else None,
+                    branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+                )
+                confirmation, expires_at = encode_confirmation(self.server.state.confirmation_secret, challenge)
+                result = {"ok": True, "confirmation": confirmation, "expires_at": expires_at, "challenge": challenge}
+            elif parsed.path == "/api/finish":
+                collapse = bool(payload.get("collapse", False))
+                if collapse and not self.require_confirmation("finish-collapse", payload):
+                    return
+                result = build_finish_payload(
+                    self.server.state.ctx,
+                    cwd=str(payload["cwd"]),
+                    path=payload.get("path") if isinstance(payload.get("path"), str) else None,
+                    branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+                    status=str(payload["status"]),
+                    progress=str(payload["progress"]),
+                    lesson=payload.get("lesson") if isinstance(payload.get("lesson"), str) else None,
+                    collapse=collapse,
+                )
+            elif parsed.path == "/api/collapse":
+                if not self.require_confirmation("collapse", payload):
+                    return
+                result = build_collapse_payload(
+                    self.server.state.ctx,
+                    path=payload.get("path") if isinstance(payload.get("path"), str) else None,
+                    branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+                )
+            else:
+                self.send_json(501, {"ok": False, "error": "mutation endpoint is not implemented yet", "code": "not_implemented"})
+                return
+        except GitWarpError as exc:
+            self.send_json(400, {"ok": False, "error": str(exc), "code": "gitwarp_error"})
+            return
+        self.send_json(200, result)
 
 
 def run_web_console(args: Any) -> None:
