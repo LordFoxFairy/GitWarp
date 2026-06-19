@@ -9,6 +9,7 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -157,6 +158,11 @@ class GitWarpTests(unittest.TestCase):
                 return response.status, read_json_response(response)
         except urllib.error.HTTPError as exc:
             return exc.code, read_json_response(exc)
+
+    def fetch_web_text(self, url: str, path: str) -> tuple[int, str, str]:
+        request = urllib.request.Request(f"{url}{path}", method="GET")
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return response.status, response.read().decode("utf-8"), response.headers.get("Content-Type", "")
 
     def test_scan_summon_statusline_and_collapse(self) -> None:
         scan = run_gitwarp(self.repo, "scan")
@@ -1300,6 +1306,61 @@ class GitWarpTests(unittest.TestCase):
         self.assertEqual(init_status, 403)
         self.assertFalse(init_payload["ok"])
         self.assertEqual(init_payload["code"], "readonly")
+
+    def test_web_root_serves_console_html(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+
+        status, html, content_type = self.fetch_web_text(str(ready["url"]), "/")
+
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", content_type)
+        self.assertIn("GitWarp Web Console", html)
+        self.assertIn("/api/state", html)
+        self.assertIn("data-gitwarp-token", html)
+
+    def test_web_dossier_endpoint_allows_only_dossier_root(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-web-dossier",
+            "--branch",
+            "feature/web-dossier",
+            "--purpose",
+            "Expose dossier reads",
+        )
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+
+        task_query = urllib.parse.urlencode({"path": str(start["task_md"])})
+        status, dossier = self.fetch_web_json(str(ready["url"]), f"/api/dossier?{task_query}")
+        outside_query = urllib.parse.urlencode({"path": str(self.repo / "README.md")})
+        outside_status, outside = self.fetch_web_json(str(ready["url"]), f"/api/dossier?{outside_query}")
+
+        self.assertEqual(status, 200)
+        self.assertTrue(dossier["ok"])
+        self.assertEqual(dossier["path"], start["task_md"])
+        self.assertIn("Expose dossier reads", dossier["content"])
+        self.assertEqual(outside_status, 403)
+        self.assertFalse(outside["ok"])
+        self.assertEqual(outside["code"], "outside_dossier_root")
 
 
 class PluginStructureTests(unittest.TestCase):

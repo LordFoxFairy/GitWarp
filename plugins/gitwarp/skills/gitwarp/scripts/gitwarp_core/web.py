@@ -8,8 +8,9 @@ import sys
 import webbrowser
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from .foundation import GitWarpError, RepoContext, resolve_path
 from .ledger import discover_repo
@@ -209,6 +210,25 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def send_dossier(self, query: str) -> None:
+        values = parse_qs(query)
+        raw_path = values.get("path", [None])[0]
+        if not raw_path:
+            self.send_json(400, {"ok": False, "error": "missing dossier path", "code": "missing_path"})
+            return
+        target = Path(raw_path).expanduser().resolve()
+        dossier_root = self.server.state.ctx.dossier_root.resolve()
+        try:
+            target.relative_to(dossier_root)
+        except ValueError:
+            self.send_json(403, {"ok": False, "error": "path is outside GitWarp dossier root", "code": "outside_dossier_root"})
+            return
+        if not target.is_file():
+            self.send_json(404, {"ok": False, "error": "dossier file not found", "code": "not_found", "path": str(target)})
+            return
+        content = target.read_text(encoding="utf-8", errors="replace")
+        self.send_json(200, {"ok": True, "path": str(target), "content": content})
+
     def do_GET(self) -> None:
         if not self.check_host():
             return
@@ -233,6 +253,9 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
                     doctor_cache=state.doctor_cache,
                 ),
             )
+            return
+        if parsed.path == "/api/dossier":
+            self.send_dossier(parsed.query)
             return
         self.send_json(404, {"ok": False, "error": "unknown route", "code": "not_found"})
 
