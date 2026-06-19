@@ -12,7 +12,7 @@ class PluginStructureTests(unittest.TestCase):
             for path in root.rglob("*")
             if path.is_file() and "__pycache__" not in path.parts
         }
-        self.assertEqual({Path("gitwarp.py"), Path("install_cli.py")}, files)
+        self.assertEqual({Path("install_cli.py")}, files)
 
     def test_pyproject_declares_gitwarp_console_script(self) -> None:
         pyproject_path = REPO_ROOT / "pyproject.toml"
@@ -20,7 +20,7 @@ class PluginStructureTests(unittest.TestCase):
 
         self.assertIn('name = "gitwarp"', content)
         self.assertIn("[project.scripts]", content)
-        self.assertIn('gitwarp = "gitwarp.cli:main"', content)
+        self.assertIn('gitwarp = "gitwarp.adapters.cli.entrypoint:main"', content)
         self.assertIn('package-dir = {"" = "src"}', content)
 
     def test_src_package_imports_and_declares_version(self) -> None:
@@ -28,15 +28,16 @@ class PluginStructureTests(unittest.TestCase):
         if src_dir not in sys.path:
             sys.path.insert(0, src_dir)
         gitwarp = importlib.import_module("gitwarp")
-        cli = importlib.import_module("gitwarp.cli")
+        cli = importlib.import_module("gitwarp.adapters.cli.entrypoint")
 
         self.assertEqual(gitwarp.__version__, "0.1.0")
         self.assertTrue(callable(cli.main))
 
-    def test_skill_wrapper_reports_version_from_package(self) -> None:
+    def test_python_entrypoint_reports_version_from_package(self) -> None:
         result = subprocess.run(
-            ["python3", str(SCRIPT), "--version"],
+            [*gitwarp_command(), "--version"],
             cwd=str(REPO_ROOT),
+            env=gitwarp_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -50,7 +51,7 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("## 0.1.0", changelog)
 
     def test_runtime_source_exists_only_in_root_src(self) -> None:
-        self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "cli.py").is_file())
+        self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "adapters" / "cli" / "entrypoint.py").is_file())
         plugin_link = REPO_ROOT / "plugins" / "gitwarp"
         self.assertTrue(plugin_link.is_symlink())
         self.assertEqual(plugin_link.resolve(), REPO_ROOT.resolve())
@@ -77,6 +78,7 @@ class PluginStructureTests(unittest.TestCase):
             "application/use_cases/cleanup.py",
             "application/use_cases/handoff.py",
             "application/use_cases/init.py",
+            "application/use_cases/navigation.py",
             "application/use_cases/metadata.py",
             "application/use_cases/provisioning.py",
             "application/use_cases/web_state.py",
@@ -138,24 +140,13 @@ class PluginStructureTests(unittest.TestCase):
                 offenders.append(str(path.relative_to(REPO_ROOT)))
         self.assertEqual([], offenders)
 
-    def test_root_runtime_modules_are_compatibility_shims(self) -> None:
-        shim_modules = {
-            "agents.py",
-            "cli.py",
-            "diagnostics.py",
-            "dossiers.py",
-            "foundation.py",
-            "ledger.py",
-            "reconcile.py",
-            "reporting.py",
-            "services.py",
-            "web.py",
-            "worktrees.py",
+    def test_root_package_does_not_keep_compatibility_shims(self) -> None:
+        root_modules = {
+            path.name
+            for path in (REPO_ROOT / "src" / "gitwarp").glob("*.py")
+            if path.name != "__init__.py"
         }
-        for relative_path in sorted(shim_modules):
-            with self.subTest(path=relative_path):
-                line_count = len((REPO_ROOT / "src" / "gitwarp" / relative_path).read_text(encoding="utf-8").splitlines())
-                self.assertLessEqual(line_count, 80)
+        self.assertEqual(set(), root_modules)
 
     def test_skill_wrappers_do_not_ship_product_core(self) -> None:
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp_core").exists())
@@ -191,9 +182,10 @@ class PluginStructureTests(unittest.TestCase):
                 package_asset = REPO_ROOT / "src" / "gitwarp" / "assets" / "web_console" / filename
                 self.assertEqual(web_asset.read_bytes(), package_asset.read_bytes())
 
-    def test_root_plugin_copy_runs_skill_wrapper_from_adjacent_src(self) -> None:
+    def test_root_plugin_copy_installs_launcher_from_adjacent_src(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             plugin_copy = Path(tempdir) / "gitwarp"
+            launcher = Path(tempdir) / "bin" / "gitwarp"
             shutil.copytree(
                 REPO_ROOT,
                 plugin_copy,
@@ -201,20 +193,31 @@ class PluginStructureTests(unittest.TestCase):
                 ignore=shutil.ignore_patterns(".git", ".gitwarp", "tmp", "__pycache__", "node_modules", ".playwright-cli", ".vite"),
             )
 
+            install = subprocess.run(
+                ["python3", str(plugin_copy / "skills" / "gitwarp" / "scripts" / "install_cli.py"), "--dest", str(launcher)],
+                cwd=str(plugin_copy),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
             result = subprocess.run(
-                ["python3", str(plugin_copy / "skills" / "gitwarp" / "scripts" / "gitwarp.py"), "--version"],
+                [str(launcher), "--version"],
                 cwd=str(plugin_copy),
                 capture_output=True,
                 text=True,
                 check=True,
             )
 
-        self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
+            install_payload = json.loads(install.stdout.strip())
+            self.assertEqual(install_payload["package_root"], str((plugin_copy / "src").resolve()))
+            launcher_text = launcher.read_text(encoding="utf-8")
+            self.assertIn("PYTHONPATH", launcher_text)
+            self.assertIn("gitwarp.adapters.cli.entrypoint", launcher_text)
+            self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
 
     def test_codex_plugin_points_at_canonical_skill_and_hooks(self) -> None:
         plugin = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         marketplace = json.loads((REPO_ROOT / ".agents" / "plugins" / "api_marketplace.json").read_text(encoding="utf-8"))
-        legacy_marketplace = json.loads((REPO_ROOT / ".agents" / "plugins" / "marketplace.json").read_text(encoding="utf-8"))
         root_marketplace = json.loads((REPO_ROOT / "marketplace.json").read_text(encoding="utf-8"))
         claude_marketplace = json.loads((REPO_ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
         default_hooks = json.loads((REPO_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
@@ -231,11 +234,10 @@ class PluginStructureTests(unittest.TestCase):
         self.assertNotIn("hooks", plugin)
         self.assertEqual(marketplace["name"], "gitwarp-dev")
         self.assertEqual(marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
-        self.assertEqual(legacy_marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
+        self.assertFalse((REPO_ROOT / ".agents" / "plugins" / "marketplace.json").exists())
         self.assertEqual(root_marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
         self.assertEqual(claude_marketplace["plugins"][0]["source"], "./")
         self.assertIn("CODEX", marketplace["plugins"][0]["policy"]["products"])
-        self.assertEqual(legacy_marketplace["plugins"][0]["policy"], marketplace["plugins"][0]["policy"])
         self.assertEqual(root_marketplace["plugins"][0]["policy"], marketplace["plugins"][0]["policy"])
         self.assertIn("SessionStart", default_hooks["hooks"])
         self.assertIn("SessionStart", hooks["hooks"])
@@ -249,7 +251,10 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("GitWarp Context:", session_hook)
         self.assertIn("Diagnostics:", session_hook)
         self.assertIn("gitwarp enter --cwd", session_hook)
-        self.assertIn("gitwarp start", session_hook)
+        self.assertIn("Run gitwarp enter manually", session_hook)
+        self.assertIn("gitwarp create", session_hook)
+        self.assertIn("gitwarp switch", session_hook)
+        self.assertIn("gitwarp remove", session_hook)
         self.assertIn("gitwarp handoff", session_hook)
         self.assertTrue(codex_skill_link.is_symlink())
         self.assertTrue(claude_skill_link.is_symlink())
@@ -260,7 +265,6 @@ class PluginStructureTests(unittest.TestCase):
         relative_paths = [
             ".codex-plugin/plugin.json",
             ".claude-plugin/plugin.json",
-            ".agents/plugins/marketplace.json",
             ".agents/plugins/api_marketplace.json",
             "marketplace.json",
             ".claude-plugin/marketplace.json",
@@ -272,7 +276,6 @@ class PluginStructureTests(unittest.TestCase):
             "skills/gitwarp/SKILL.md",
             "skills/gitwarp/agents/openai.yaml",
             "skills/gitwarp/references/install.md",
-            "skills/gitwarp/scripts/gitwarp.py",
             "skills/gitwarp/scripts/install_cli.py",
             "src/gitwarp/assets/web_console/index.html",
             "src/gitwarp/assets/web_console/app.css",
@@ -311,6 +314,10 @@ class PluginStructureTests(unittest.TestCase):
         verify_script = (REPO_ROOT / "scripts" / "verify-install.sh").read_text(encoding="utf-8")
 
         self.assertIn("MIN_PYTHON = (3, 10)", installer)
+        self.assertIn('ENTRYPOINT_MODULE = "gitwarp.adapters.cli.entrypoint"', installer)
+        self.assertIn("PYTHONPATH", installer)
+        self.assertIn("package_root", installer)
+        self.assertNotIn("script_path", installer)
         self.assertIn("sys.executable", installer)
         self.assertIn("except OSError", installer)
         self.assertIn("recommended_next", installer)

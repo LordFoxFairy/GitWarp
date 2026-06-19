@@ -57,16 +57,17 @@ def enter_recommendations(ctx: RepoContext | None, cwd: Path, target: dict[str, 
     if ctx is None:
         return ["Open a Git repository or pass --cwd /absolute/path/to/repo."]
     if target is None:
-        return [f"Move inside a live worktree for {ctx.repo_root} or run gitwarp scan --cwd \"{ctx.repo_root}\"."]
+        return [f"Move inside a live worktree for {ctx.repo_root} or run gitwarp scan."]
     if target.get("is_main"):
         return [
-            f"Run gitwarp start --cwd \"{ctx.repo_root}\" --agent-id <agent-id> --branch <branch> --purpose \"<purpose>\" before isolated work.",
-            f"Run gitwarp board --cwd \"{ctx.repo_root}\" to inspect active dimensions.",
+            'Run gitwarp create --branch <branch> --purpose "<purpose>" before isolated work.',
+            "Run gitwarp switch --branch <branch> --format shell to print a cd command for an existing sandbox.",
+            "Run gitwarp board to inspect active sandboxes.",
         ]
     return [
         "Read task.md, progress.md, and lessons.md before editing.",
-        f"Record milestones with gitwarp handoff --cwd \"{cwd}\" --status <status> --progress \"<summary>\".",
-        f"Finish with gitwarp finish --cwd \"{cwd}\" --status pushed --progress \"verified and pushed\" [--collapse].",
+        'Record milestones with gitwarp handoff --status <status> --progress "<summary>".',
+        'Finish with gitwarp finish --status pushed --progress "verified and pushed" [--collapse].',
     ]
 
 

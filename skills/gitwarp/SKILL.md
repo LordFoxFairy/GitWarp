@@ -7,147 +7,97 @@ description: Use when concurrent Claude Code or Codex agents need isolated git w
 
 ## Overview
 
-GitWarp is the worktree isolation protocol for coding agents. It wraps native `git worktree`, stores ownership metadata in `.gitwarp/ledger.json`, and creates `task.md`, `progress.md`, and `lessons.md` dossiers for each isolated branch.
+GitWarp is the worktree isolation protocol for coding agents. It creates task sandboxes with native `git worktree`, records ownership in `.gitwarp/ledger.json`, and gives each sandbox a dossier: `task.md`, `progress.md`, and `lessons.md`.
 
-## Core Rules
+## Core Rule
 
-1. Run `gitwarp init --cwd "$PWD"` once per target repository when GitWarp runtime state is missing or `doctor` recommends it.
-2. Run `gitwarp enter --cwd "$PWD"` before repository work unless a session hook already provided GitWarp Context.
-3. For concurrent or isolated writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main checkout.
-4. Use only absolute paths returned by GitWarp. The default sandbox root is `<repo>/.gitwarp/worktrees/`.
-5. Read `task.md`, `progress.md`, and `lessons.md` before editing inside a sandbox.
-6. Record milestones with `gitwarp handoff` so later agents can recover context.
-7. Mount local instruction files explicitly with `--instruction` or `--instruction-profile`; do not assume global `AGENTS.md` or `CLAUDE.md` files are present in every worktree.
-8. Never edit `.gitwarp/ledger.json` or `.gitwarp/agents.json` by hand while GitWarp commands may be running.
+Do not use `git switch`, `git checkout`, or direct `git worktree add` in the main checkout for agent task work. Use GitWarp commands so branch collisions, ledger state, and dossier files stay consistent.
 
-## Command Contract
+## Primary Commands
 
 | Command | Use |
 | --- | --- |
-| `init` | Create `.gitwarp/`, runtime subdirectories, ledger, and ignore rule safely. |
-| `enter` | Get current main/worktree context and dossier pointers. JSON by default; `--format prompt` for hooks. |
-| `dispatch` | Create a dossier-backed worktree and print a ready-to-run agent launch command. |
-| `start` | Create a dossier-backed worktree for manual coordination. |
-| `adopt` | Bind an existing non-main, non-detached worktree into the ledger. |
-| `handoff` | Append progress and optional lessons to the dossier and ledger. |
-| `pause` | Record a blocked handoff with a reason and optional lesson. |
-| `resume` | Record an active handoff after a blocker is cleared. |
-| `board` | List active worktrees; use `--format table` for humans. |
-| `reconcile` | Non-mutating audit for stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift`. |
-| `doctor` | Check local GitWarp, plugin, hook, ignored runtime state, and agent launch readiness. |
-| `finish` | Record final progress and optionally collapse the worktree. |
-| `statusline` | Print only a raw banner such as `GITWARP[main-repo]`. |
+| `gitwarp create` | Create a dossier-backed isolated worktree. |
+| `gitwarp switch` | Locate an existing worktree and print its absolute path or `cd` command. |
+| `gitwarp remove` | Force-remove a sandbox only when it is no longer needed. |
+| `gitwarp handoff` | Record progress and optional lessons during work. |
+| `gitwarp statusline` | Print a raw prompt banner such as `GITWARP[main-repo]`. |
+| `gitwarp enter` | Return hook/session context and dossier snippets; not the main workflow command. |
+| `gitwarp board` | List active sandboxes. |
+| `gitwarp reconcile` | Read-only audit for dirty, stale, missing, merged, or drifted worktrees. |
+| `gitwarp doctor` | Check install, hook, plugin, and runtime health. |
 
-All automation commands emit deterministic single-line JSON except `statusline`, `enter --format prompt`, and `board --format table`. If any JSON command returns nonzero or `"ok": false`, stop and report the `error` field.
+`start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `create`, `switch`, and `remove` unless you specifically need a rendered launch command from `dispatch`.
 
-`gitwarp web --cwd <repo>` starts the local management UI for human operators. Use it to view the board, inspect dossiers, create or dispatch worktrees, mount instruction files or profiles, record handoffs, and finish/collapse worktrees with confirmation.
-
-## Standard Workflow
+## Agent Workflow
 
 From any repository path:
 
 ```bash
-gitwarp init --cwd "$PWD"
-gitwarp doctor --cwd "$PWD"
-gitwarp enter --cwd "$PWD"
+gitwarp init
+gitwarp statusline
+gitwarp enter
 ```
 
-If `doctor` reports missing runtime state, run or recommend `gitwarp init --cwd "$PWD"` before starting new isolated work. By default it writes `/.gitwarp/` to `.git/info/exclude`; use `--write-gitignore` only when the project wants a committed team ignore rule.
-
-If `location` is `main` and isolated work is needed, prefer dispatch:
+If work requires edits and you are in the main checkout:
 
 ```bash
-gitwarp dispatch --cwd /absolute/path/to/repo \
-  --agent codex \
-  --branch feature/my-task \
+gitwarp create --branch feature/my-task \
   --purpose "Implement isolated task"
 ```
 
-If a worker needs repository-specific rule files, pass them explicitly:
+Move into the returned `path`, or print a shell navigation command:
 
 ```bash
-gitwarp dispatch --cwd /absolute/path/to/repo \
-  --agent claude \
-  --branch feature/my-task \
+gitwarp switch --branch feature/my-task
+gitwarp switch --branch feature/my-task --format shell
+```
+
+Inside the sandbox, read the returned dossier files before editing. Record milestones:
+
+```bash
+gitwarp handoff --status implementing \
+  --progress "Short, factual milestone"
+```
+
+If blocked:
+
+```bash
+gitwarp pause --reason "Waiting for credentials"
+gitwarp resume --progress "Credentials configured; continuing"
+```
+
+When verified and pushed:
+
+```bash
+gitwarp finish --status pushed \
+  --progress "Verified and pushed" \
+  --collapse
+```
+
+Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch <branch>`.
+
+## Instructions
+
+Local instruction files are not mounted automatically. Pass them explicitly when creating a sandbox:
+
+```bash
+gitwarp create --branch feature/my-task \
   --purpose "Implement isolated task" \
   --instruction AGENTS.md \
   --instruction CLAUDE.md=docs/claude-code.md
 ```
 
-Repeatable instruction stacks can be defined in `.gitwarp/instruction_profiles.json` and selected with `--instruction-profile <name>`. Instructions are copied by default; `--instruction-mode symlink` is explicit opt-in.
+Repeatable instruction stacks live in `.gitwarp/instruction_profiles.json` and are selected with `--instruction-profile <name>`. Instructions are copied by default; use `--instruction-mode symlink` only when live rule edits are intended.
 
-Run the returned `launch_command` yourself. `dispatch --command-mode execute` is intentionally unsupported and fails before creating anything.
+## Output Contract
 
-Inside the returned worktree:
+Automation commands print deterministic single-line JSON. `statusline`, `enter --format prompt`, `board --format table`, and `switch --format shell` intentionally print raw text. If a JSON command returns nonzero or `"ok": false`, stop and report the `error` field.
 
-```bash
-gitwarp enter --cwd "$PWD"
-gitwarp handoff --cwd "$PWD" --status implementing --progress "Short milestone"
-gitwarp statusline --cwd "$PWD"
-```
+`--cwd /absolute/path` is optional. Use it from hooks, Web/API handlers, scripts, or when controlling a repository from another directory. For normal terminal use inside the target repo or sandbox, omit it.
 
-If blocked by missing input or an external dependency:
+## Installation Notes
 
-```bash
-gitwarp pause --cwd "$PWD" --reason "Waiting for credentials"
-```
+Use `gitwarp` from `PATH`. The skill `scripts/` directory contains bootstrap helpers only, primarily `scripts/install_cli.py`; it does not contain product runtime code. Runtime changes belong in `src/gitwarp/`.
 
-After the blocker is cleared:
-
-```bash
-gitwarp resume --cwd "$PWD" --progress "Credentials configured; continuing"
-```
-
-When verified:
-
-```bash
-gitwarp finish --cwd "$PWD" \
-  --status pushed \
-  --progress "Verified and pushed" \
-  --collapse
-```
-
-## Coordination Commands
-
-Use these from the main checkout before spawning more agents or cleaning up old work:
-
-```bash
-gitwarp board --cwd /absolute/path/to/repo --format table
-gitwarp reconcile --cwd /absolute/path/to/repo --stale 4
-gitwarp doctor --cwd /absolute/path/to/repo
-gitwarp agents --cwd /absolute/path/to/repo
-```
-
-Treat `head_drift` from `reconcile` or `enter` as evidence that the live worktree HEAD changed after the last GitWarp-recorded handoff. Inspect the commit, then record an explicit `handoff`, `pause`, `resume`, or `finish` instead of relying on hidden auto-repair.
-
-Agent launch templates come from built-ins plus optional `.gitwarp/agents.json`. Template variables include `{repo}`, `{worktree}`, `{branch}`, `{agent_id}`, `{purpose}`, `{task_md}`, `{progress_md}`, `{lessons_md}`, and `{prompt}`.
-
-## Existing Worktrees
-
-If a worktree already exists, adopt it instead of recreating it:
-
-```bash
-gitwarp adopt --cwd /absolute/path/to/repo \
-  --path /absolute/path/to/existing-worktree \
-  --agent-id claude-existing \
-  --purpose "Continue existing sandbox"
-```
-
-GitWarp refuses main and detached worktrees.
-
-## Resources
-
-- CLI wrapper: `scripts/gitwarp.py`
-- CLI installer: `scripts/install_cli.py`
-- Install and distribution notes: read `references/install.md` when installing, packaging, or troubleshooting host discovery.
-
-Use `gitwarp` from `PATH` when installed. If it is unavailable, run the bundled wrapper with `python3 /absolute/path/to/skills/gitwarp/scripts/gitwarp.py`.
-
-The wrapper loads the installable Python package from the source checkout or repository-root plugin package. Do not add product modules under `skills/gitwarp/scripts/`; runtime changes belong only in `src/gitwarp/`.
-
-## Common Failures
-
-- Branch collision: choose a different branch or explicitly collapse the existing worktree.
-- Main checkout handoff refused: start, dispatch, or adopt a non-main worktree first.
-- Missing dossier: run `adopt` for existing worktrees or `reconcile` to audit.
-- Stale prompt context: rerun `gitwarp enter --cwd "$PWD"` and trust the returned statusline.
+Read `references/install.md` only when installing, packaging, or troubleshooting plugin discovery.

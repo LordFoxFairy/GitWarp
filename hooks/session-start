@@ -11,12 +11,7 @@ if ! install_output="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/install_cl
 fi
 
 gitwarp_context=""
-if [[ -f "${PLUGIN_ROOT}/skills/gitwarp/scripts/gitwarp.py" ]]; then
-  if ! gitwarp_context="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/gitwarp.py" enter --cwd "$PWD" --format prompt 2>&1)"; then
-    diagnostics+=("gitwarp enter failed: ${gitwarp_context}")
-    gitwarp_context=""
-  fi
-elif command -v gitwarp >/dev/null 2>&1; then
+if command -v gitwarp >/dev/null 2>&1; then
   if ! gitwarp_context="$(gitwarp enter --cwd "$PWD" --format prompt 2>&1)"; then
     diagnostics+=("gitwarp enter failed: ${gitwarp_context}")
     gitwarp_context=""
@@ -35,14 +30,14 @@ escape_for_json() {
 
 context="GitWarp plugin is installed.
 Agent protocol:
-1. If GitWarp runtime is missing or doctor recommends it, run gitwarp init --cwd \"\$PWD\".
-2. Run gitwarp enter --cwd \"\$PWD\" before repository work.
-3. For isolated or concurrent writes, use gitwarp dispatch or gitwarp start instead of git checkout/git switch.
+1. If GitWarp runtime is missing or doctor recommends it, run gitwarp init.
+2. Use gitwarp statusline or gitwarp enter for context.
+3. For isolated or concurrent writes, use gitwarp create or gitwarp dispatch instead of git checkout/git switch.
 4. In a worktree, read task.md, progress.md, and lessons.md before editing.
-5. Record milestones with gitwarp handoff and finish with gitwarp finish.
+5. Use gitwarp switch to navigate to existing sandboxes, gitwarp handoff for milestones, and gitwarp remove only when a sandbox is no longer needed.
 
 Current GitWarp Context:
-${gitwarp_context:-GitWarp Context: unavailable. Run gitwarp enter --cwd \"\$PWD\" manually.}"
+${gitwarp_context:-GitWarp Context: unavailable. Run gitwarp enter manually.}"
 if [[ "${#diagnostics[@]}" -gt 0 ]]; then
   context="${context}
 

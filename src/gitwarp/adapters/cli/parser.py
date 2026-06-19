@@ -18,13 +18,16 @@ from .workspaces import (
     cmd_adopt,
     cmd_annotate,
     cmd_collapse,
+    cmd_create,
     cmd_dispatch,
     cmd_finish,
     cmd_handoff,
     cmd_pause,
+    cmd_remove,
     cmd_resume,
     cmd_start,
     cmd_summon,
+    cmd_switch,
 )
 
 
@@ -48,6 +51,30 @@ def build_parser() -> argparse.ArgumentParser:
     agents = subparsers.add_parser("agents", help="List configured agent launch templates")
     agents.add_argument("--cwd")
     agents.set_defaults(func=cmd_agents)
+
+    create = subparsers.add_parser("create", help="Create an isolated worktree and dossier")
+    create.add_argument("--cwd")
+    create.add_argument("--agent-id")
+    create.add_argument("--branch", required=True)
+    create.add_argument("--purpose", required=True)
+    create.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
+    create.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
+    create.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
+    create.set_defaults(func=cmd_create)
+
+    switch = subparsers.add_parser("switch", help="Return the path or shell cd command for an existing worktree")
+    switch.add_argument("--cwd")
+    switch.add_argument("--path")
+    switch.add_argument("--branch")
+    switch.add_argument("--main", action="store_true")
+    switch.add_argument("--format", choices=["json", "shell"], default="json")
+    switch.set_defaults(func=cmd_switch)
+
+    remove = subparsers.add_parser("remove", help="Force-remove an isolated worktree when it is no longer needed")
+    remove.add_argument("--cwd")
+    remove.add_argument("--path")
+    remove.add_argument("--branch")
+    remove.set_defaults(func=cmd_remove)
 
     summon = subparsers.add_parser("summon", help="Create an isolated worktree for an agent")
     summon.add_argument("--cwd")

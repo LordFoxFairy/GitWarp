@@ -51,12 +51,7 @@ src/gitwarp/
     server.py          # server lifecycle and readiness JSON
 ```
 
-Existing modules remain as compatibility shims initially:
-
-- `foundation.py` re-exports core constants, `RepoContext`, `GitWarpError`, path/time helpers, and `run_git`.
-- `services.py` re-exports application use cases.
-- `web.py` re-exports the public web API and `run_web_console`.
-- `cli.py` re-exports the CLI adapter package entrypoint.
+Root compatibility shims are removed after the migration. `src/gitwarp/__init__.py` is the only root module; runtime behavior belongs in the domain, application, infrastructure, adapter, and webapp subpackages.
 
 ## Domain Model
 
@@ -105,7 +100,7 @@ The inline UI must use DOM text assignment instead of `innerHTML` for ledger-con
 - `src/gitwarp/domain`, `src/gitwarp/application`, `src/gitwarp/infrastructure`, and `src/gitwarp/webapp` exist with production code, not placeholders.
 - CLI command code is under `src/gitwarp/adapters/cli/`, not a single large adapter file.
 - Doctor/init health checks are under `src/gitwarp/application/health/`, not a single large diagnostics file.
-- `src/gitwarp/web.py` and `src/gitwarp/services.py` are compatibility shims under 80 lines each.
+- `src/gitwarp/web.py` and `src/gitwarp/services.py` do not exist; callers use `gitwarp.webapp.server` and `gitwarp.application.services`.
 - Web security, contracts, resources, controllers, transport, and server lifecycle are separate modules.
 - Inline console no longer injects ledger-controlled strings via template `innerHTML`.
 - All existing tests pass, plus new boundary and XSS tests.

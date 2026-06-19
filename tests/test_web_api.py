@@ -137,8 +137,7 @@ class WebApiTests(GitWarpTestCase):
     def test_web_host_validation_rejects_non_loopback_without_unsafe(self) -> None:
         result = subprocess.run(
             [
-                "python3",
-                str(SCRIPT),
+                *gitwarp_command(),
                 "web",
                 "--cwd",
                 str(self.repo),
@@ -150,6 +149,7 @@ class WebApiTests(GitWarpTestCase):
                 "--readonly",
             ],
             cwd=str(self.repo),
+            env=gitwarp_env(),
             capture_output=True,
             text=True,
             check=False,

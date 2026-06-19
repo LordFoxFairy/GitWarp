@@ -16,9 +16,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp.py"
-SCRIPT_DIR = REPO_ROOT / "skills" / "gitwarp" / "scripts"
 SRC_DIR = REPO_ROOT / "src"
+ENTRYPOINT_MODULE = "gitwarp.adapters.cli.entrypoint"
 
 
 def run_git(repo: Path, *args: str) -> str:
@@ -32,10 +31,22 @@ def run_git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def gitwarp_command() -> list[str]:
+    return ["python3", "-m", ENTRYPOINT_MODULE]
+
+
+def gitwarp_env() -> dict[str, str]:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(SRC_DIR) + (os.pathsep + existing if existing else "")
+    return env
+
+
 def run_gitwarp(repo: Path, *args: str, expect_ok: bool = True) -> dict[str, object]:
     result = subprocess.run(
-        ["python3", str(SCRIPT), *args],
+        [*gitwarp_command(), *args],
         cwd=str(repo),
+        env=gitwarp_env(),
         capture_output=True,
         text=True,
         check=False,
@@ -52,8 +63,9 @@ def run_gitwarp(repo: Path, *args: str, expect_ok: bool = True) -> dict[str, obj
 
 def run_gitwarp_text(repo: Path, *args: str) -> str:
     result = subprocess.run(
-        ["python3", str(SCRIPT), *args],
+        [*gitwarp_command(), *args],
         cwd=str(repo),
+        env=gitwarp_env(),
         capture_output=True,
         text=True,
         check=True,
@@ -77,17 +89,17 @@ def ensure_src_path() -> None:
 
 def load_gitwarp_services() -> object:
     ensure_src_path()
-    return importlib.import_module("gitwarp.services")
+    return importlib.import_module("gitwarp.application.services")
 
 
 def load_gitwarp_ledger() -> object:
     ensure_src_path()
-    return importlib.import_module("gitwarp.ledger")
+    return importlib.import_module("gitwarp.infrastructure.ledger")
 
 
 def load_gitwarp_web() -> object:
     ensure_src_path()
-    return importlib.import_module("gitwarp.web")
+    return importlib.import_module("gitwarp.webapp.security")
 
 
 def read_json_response(response: object) -> dict[str, object]:
@@ -136,8 +148,9 @@ class GitWarpTestCase(unittest.TestCase):
 
     def start_web_server(self, repo: Path, *args: str) -> tuple[subprocess.Popen[str], dict[str, object]]:
         proc = subprocess.Popen(
-            ["python3", str(SCRIPT), *args],
+            [*gitwarp_command(), *args],
             cwd=str(repo),
+            env=gitwarp_env(),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

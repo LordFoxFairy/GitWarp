@@ -13,6 +13,6 @@ def cmd_init(args: argparse.Namespace) -> None:
 
 
 def cmd_web(args: argparse.Namespace) -> None:
-    from ...web import run_web_console
+    from ...webapp.server import run_web_console
 
     run_web_console(args)

@@ -2,7 +2,7 @@
 
 GitWarp is an Agent Skill plus installable CLI package for running Codex, Claude Code, and other coding agents in isolated Git worktrees. It gives each task a physical sandbox, a branch ownership record, and a small dossier (`task.md`, `progress.md`, `lessons.md`) so agents can resume work without guessing what happened before.
 
-The project follows the common Agent Skills layout while keeping product code in a normal Python package. `src/gitwarp/` is the single canonical runtime, `skills/gitwarp/` contains agent instructions plus tiny wrappers, and the repository root is the plugin package. `plugins/gitwarp` is only a marketplace compatibility symlink back to the repository root; it must not contain copied runtime files.
+The project follows the common Agent Skills layout while keeping product code in a normal Python package. `src/gitwarp/` is the single canonical runtime, `skills/gitwarp/` contains agent instructions plus bootstrap helpers, and the repository root is the plugin package. `plugins/gitwarp` is only a marketplace discovery symlink back to the repository root; it must not contain copied runtime files.
 
 ## Why GitWarp
 
@@ -22,8 +22,8 @@ From this checkout:
 
 ```bash
 scripts/install-codex-plugin.sh
-gitwarp init --cwd "$PWD"
-gitwarp doctor --cwd "$PWD"
+gitwarp init
+gitwarp doctor
 ```
 
 This registers or rebinds the local marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
@@ -45,7 +45,7 @@ GitWarp also exposes repo-local standard skill locations:
 - Codex: `.agents/skills/gitwarp -> ../../skills/gitwarp`
 - Claude Code: `.claude/skills/gitwarp -> ../../skills/gitwarp`
 
-For source checkout installs, symlink the canonical skill folder so the wrapper can resolve the adjacent `src/gitwarp` package:
+For source checkout installs, symlink the canonical skill folder and install the launcher from the adjacent `src/gitwarp` package:
 
 ```bash
 mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
@@ -61,31 +61,35 @@ For copy-only installs, copy the repository root or install the Python package f
 Initialize each target repository once, then run a read-only diagnostic:
 
 ```bash
-gitwarp init --cwd "$PWD"
-gitwarp doctor --cwd "$PWD"
+gitwarp init
+gitwarp doctor
 ```
 
-Start every repository session with context:
+Check repository context when a session starts:
 
 ```bash
-gitwarp enter --cwd "$PWD"
+gitwarp statusline
+gitwarp enter
 ```
 
-Create a sandbox and get a ready-to-run worker command:
+Create a sandbox:
 
 ```bash
-gitwarp dispatch --cwd "$PWD" \
-  --agent codex \
-  --branch feature/my-task \
+gitwarp create --branch feature/my-task \
   --purpose "Implement isolated task"
+```
+
+Move into an existing sandbox:
+
+```bash
+gitwarp switch --branch feature/my-task
+eval "$(gitwarp switch --branch feature/my-task --format shell)"
 ```
 
 If the worker needs local instruction files such as `AGENTS.md` or `CLAUDE.md`, mount them explicitly:
 
 ```bash
-gitwarp dispatch --cwd "$PWD" \
-  --agent claude \
-  --branch feature/my-task \
+gitwarp create --branch feature/my-task \
   --purpose "Implement isolated task" \
   --instruction AGENTS.md \
   --instruction CLAUDE.md=docs/claude-code.md
@@ -110,11 +114,10 @@ Use `.gitwarp/instruction_profiles.json` for repeatable stacks:
 
 Then pass `--instruction-profile claude-code`. Instructions are copied by default as a safe snapshot; pass `--instruction-mode symlink` only when the worker should track live rule edits.
 
-Run the returned `launch_command`. The worker should begin inside the returned absolute `path`, read `task.md`, `progress.md`, and `lessons.md`, then record milestones:
+Begin inside the returned absolute `path`, read `task.md`, `progress.md`, and `lessons.md`, then record milestones:
 
 ```bash
-gitwarp handoff --cwd "$PWD" \
-  --status testing \
+gitwarp handoff --status testing \
   --progress "Implemented regression test and minimal fix" \
   --lesson "Read dossier before editing nested paths"
 ```
@@ -122,22 +125,21 @@ gitwarp handoff --cwd "$PWD" \
 If work is blocked waiting for a human or external dependency:
 
 ```bash
-gitwarp pause --cwd "$PWD" \
-  --reason "Waiting for credentials" \
+gitwarp pause --reason "Waiting for credentials" \
   --lesson "Do not retry deployment without credentials"
 
-gitwarp resume --cwd "$PWD" \
-  --progress "Credentials configured; continuing"
+gitwarp resume --progress "Credentials configured; continuing"
 ```
 
 When the task is verified and pushed:
 
 ```bash
-gitwarp finish --cwd "$PWD" \
-  --status pushed \
+gitwarp finish --status pushed \
   --progress "Verified and pushed" \
   --collapse
 ```
+
+Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch feature/my-task`.
 
 ## Usage Modes
 
@@ -146,23 +148,23 @@ gitwarp finish --cwd "$PWD" \
 Use these commands when you are coordinating agents from the main checkout:
 
 ```bash
-gitwarp board --cwd "$PWD" --format table
-gitwarp reconcile --cwd "$PWD" --stale 4
-gitwarp doctor --cwd "$PWD"
-gitwarp web --cwd "$PWD"
+gitwarp board --format table
+gitwarp reconcile --stale 4
+gitwarp doctor
+gitwarp web
 ```
 
-`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console for creating worktrees, dispatching agents, mounting instruction files, inspecting dossiers, and recording handoffs.
+`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console for creating worktrees, switching context, dispatching agents, mounting instruction files, inspecting dossiers, and recording handoffs.
 
 ### Automated Agent
 
 Agents should use this minimal loop:
 
 ```bash
-gitwarp enter --cwd "$PWD"
+gitwarp statusline
+gitwarp enter
 # read returned task_md, progress_md, lessons_md
-gitwarp handoff --cwd "$PWD" --status implementing --progress "Short milestone"
-gitwarp statusline --cwd "$PWD"
+gitwarp handoff --status implementing --progress "Short milestone"
 ```
 
 `statusline` prints an unquoted banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]` for shell prompts and downstream model context.
@@ -180,7 +182,7 @@ gitwarp adopt --cwd /absolute/path/to/repo \
 
 ## Runtime Model
 
-GitWarp stores runtime state under `.gitwarp/` in the target repository. Run `gitwarp init --cwd "$PWD"` to create this state safely before dispatching agents.
+GitWarp stores runtime state under `.gitwarp/` in the target repository. Run `gitwarp init` to create this state safely before dispatching agents.
 
 - Worktrees: `.gitwarp/worktrees/<worktree-name>`
 - Ledger: `.gitwarp/ledger.json`
@@ -211,19 +213,19 @@ Example `.gitwarp/agents.json`:
 
 ## Repository Layout
 
-- `src/gitwarp/`: the only canonical runtime package. Root modules here are compatibility shims; implementation lives in the subpackages below.
+- `src/gitwarp/`: the only canonical runtime package root. It contains package metadata only; implementation lives in the DDD subpackages below.
 - `src/gitwarp/domain/`: value objects and pure policies for worktree snapshots, workspace records, branch collisions, guarded paths, and head drift.
-- `src/gitwarp/application/use_cases/`: orchestration for init, dispatch/start/handoff/finish/collapse, and read-only web state.
+- `src/gitwarp/application/use_cases/`: orchestration for init, create/switch/remove, dispatch/start/handoff/finish/collapse, and read-only web state.
 - `src/gitwarp/application/health/`: doctor/init health checks, findings, process probes, and recommendations.
 - `src/gitwarp/infrastructure/`: Git subprocess, ledger persistence, dossier files, agent registry, and repository discovery adapters.
 - `src/gitwarp/adapters/cli/`: argparse parser, entrypoint, read commands, system commands, and workspace commands.
 - `src/gitwarp/webapp/`: Web Console contracts, security, static resources, controllers, HTTP transport, and server lifecycle.
 - `src/gitwarp/assets/web_console/`: packaged static assets served by `gitwarp web` without requiring Node.js at runtime.
-- `skills/gitwarp/`: canonical Agent Skill instructions, wrapper script, installer, and references.
+- `skills/gitwarp/`: canonical Agent Skill instructions, launcher installer, and references.
 - `.agents/skills/gitwarp` and `.claude/skills/gitwarp`: repo-local standard skill discovery links.
 - `.codex-plugin/` and `.claude-plugin/`: plugin metadata shells.
 - `.agents/plugins/api_marketplace.json`: local Codex marketplace entry named `gitwarp-dev`.
-- `plugins/gitwarp -> ..`: Codex marketplace compatibility symlink. Keep it as a symlink; do not add `plugins/gitwarp/src`.
+- `plugins/gitwarp -> ..`: Codex marketplace discovery symlink. Keep it as a symlink; do not add `plugins/gitwarp/src`.
 - `hooks/`: session hook assets for compatible hosts. They are packaged as assets; enable them through the host-specific hook mechanism.
 - `web/console/`: React + TypeScript Web Console source, Vite config, and checked-in runtime `dist/` assets.
 - `tests/`: Python regression tests for GitWarp behavior and packaging.
@@ -242,4 +244,4 @@ scripts/verify-install.sh
 
 `npm run check:dist` builds React into a temporary directory and fails if the generated runtime assets differ from both `web/console/dist/` and `src/gitwarp/assets/web_console/`; use `npm run build` to intentionally regenerate them.
 
-Keep runtime behavior in `src/gitwarp/` only. Do not recreate `plugins/gitwarp/src`; `plugins/gitwarp` is a symlink for marketplace discovery, not a second source tree. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.
+Keep runtime behavior in DDD subpackages under `src/gitwarp/`. Do not recreate `plugins/gitwarp/src`; `plugins/gitwarp` is a symlink for marketplace discovery, not a second source tree. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.

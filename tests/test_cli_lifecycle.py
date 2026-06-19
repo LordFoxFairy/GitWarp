@@ -1,9 +1,71 @@
 from __future__ import annotations
 
+import shlex
+
 from helpers import *
 
 
 class CliLifecycleTests(GitWarpTestCase):
+    def test_create_switch_and_remove_are_primary_workspace_commands(self) -> None:
+        create = run_gitwarp(
+            self.repo,
+            "create",
+            "--branch",
+            "feature/primary-commands",
+            "--purpose",
+            "Exercise primary workspace commands",
+        )
+        worktree_path = Path(str(create["path"]))
+
+        self.assertTrue(worktree_path.exists())
+        self.assertEqual(create["branch"], "feature/primary-commands")
+        self.assertEqual(create["agent_id"], "agent-feature-primary-commands")
+        self.assertEqual(create["status"], "active")
+        self.assertEqual(create["shell_command"], f"cd {shlex.quote(str(worktree_path))}")
+        self.assertTrue(Path(str(create["task_md"])).exists())
+
+        switch_json = run_gitwarp(self.repo, "switch", "--branch", "feature/primary-commands")
+        self.assertEqual(switch_json["path"], str(worktree_path))
+        self.assertEqual(switch_json["branch"], "feature/primary-commands")
+        self.assertEqual(switch_json["agent_id"], "agent-feature-primary-commands")
+        self.assertEqual(switch_json["shell_command"], f"cd {shlex.quote(str(worktree_path))}")
+        self.assertEqual(switch_json["statusline"], "GITWARP[agent-feature-primary-commands@feature/primary-commands]")
+
+        switch_shell = run_gitwarp_text(
+            self.repo,
+            "switch",
+            "--branch",
+            "feature/primary-commands",
+            "--format",
+            "shell",
+        )
+        self.assertEqual(switch_shell, f"cd {shlex.quote(str(worktree_path))}")
+
+        switch_main = run_gitwarp(self.repo, "switch", "--main")
+        self.assertEqual(switch_main["path"], str(self.repo.resolve()))
+        self.assertEqual(switch_main["statusline"], "GITWARP[main-repo]")
+
+        remove = run_gitwarp(self.repo, "remove", "--branch", "feature/primary-commands")
+        self.assertEqual(remove["removed_path"], str(worktree_path))
+        self.assertEqual(remove["removed_branch"], "feature/primary-commands")
+        self.assertFalse(worktree_path.exists())
+
+        current_create = run_gitwarp(
+            self.repo,
+            "create",
+            "--branch",
+            "feature/remove-current",
+            "--purpose",
+            "Remove current sandbox",
+        )
+        current_path = Path(str(current_create["path"]))
+        nested_current_path = current_path / "packages" / "agent"
+        nested_current_path.mkdir(parents=True)
+        current_remove = run_gitwarp(nested_current_path, "remove")
+        self.assertEqual(current_remove["removed_path"], str(current_path))
+        self.assertEqual(current_remove["removed_branch"], "feature/remove-current")
+        self.assertFalse(current_path.exists())
+
     def test_scan_summon_statusline_and_collapse(self) -> None:
         scan = run_gitwarp(self.repo, "scan")
         self.assertEqual(Path(str(scan["repo_root"])).resolve(), self.repo.resolve())
@@ -37,8 +99,9 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertEqual(live[str(worktree_path)]["purpose"], "Implement prompt banner")
 
         statusline = subprocess.run(
-            ["python3", str(SCRIPT), "statusline", "--cwd", str(nested_path)],
+            [*gitwarp_command(), "statusline", "--cwd", str(nested_path)],
             cwd=str(self.repo),
+            env=gitwarp_env(),
             capture_output=True,
             text=True,
             check=True,
@@ -122,7 +185,7 @@ class CliLifecycleTests(GitWarpTestCase):
         main_enter = run_gitwarp(self.repo, "enter", "--cwd", str(self.repo))
         self.assertEqual(main_enter["location"], "main")
         self.assertEqual(main_enter["statusline"], "GITWARP[main-repo]")
-        self.assertIn("gitwarp start", " ".join(main_enter["recommended_next"]))  # type: ignore[arg-type]
+        self.assertIn("gitwarp create", " ".join(main_enter["recommended_next"]))  # type: ignore[arg-type]
 
         start = run_gitwarp(
             self.repo,
@@ -216,8 +279,9 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertEqual(row["lessons_md"], str(lessons_md))  # type: ignore[index]
 
         table = subprocess.run(
-            ["python3", str(SCRIPT), "board", "--cwd", str(self.repo), "--format", "table"],
+            [*gitwarp_command(), "board", "--cwd", str(self.repo), "--format", "table"],
             cwd=str(self.repo),
+            env=gitwarp_env(),
             capture_output=True,
             text=True,
             check=True,

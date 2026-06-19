@@ -82,7 +82,7 @@ def render_agent_prompt(purpose: str) -> str:
     return "\n".join(
         [
             "You are assigned to a GitWarp isolated worktree.",
-            'Run: gitwarp enter --cwd "$PWD"',
+            "Run: gitwarp enter",
             "Read task.md, progress.md, and lessons.md from that context before editing.",
             "Do not run git checkout/git switch in the main repository.",
             "Do not switch branches inside the isolated worktree.",

@@ -12,7 +12,7 @@ license = "MIT"
 dependencies = []
 
 [project.scripts]
-gitwarp = "gitwarp.cli:main"
+gitwarp = "gitwarp.adapters.cli.entrypoint:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

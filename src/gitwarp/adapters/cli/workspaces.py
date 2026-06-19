@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 from ...application.services import (
     build_adopt_payload,
@@ -10,15 +11,43 @@ from ...application.services import (
     build_finish_payload,
     build_handoff_payload,
     build_start_payload,
+    build_switch_payload,
     build_summon_payload,
+    shell_cd_command,
 )
+from ...infrastructure.agents import build_agent_id
 from ...infrastructure.ledger import discover_repo
 from ...infrastructure.runtime import GitWarpError, emit_json, resolve_path
+from ...infrastructure.worktrees import parse_worktrees, select_live_target, sync_ledger
+
+
+def default_agent_id(branch: str) -> str:
+    return (
+        os.environ.get("GITWARP_AGENT_ID")
+        or os.environ.get("CODEX_AGENT_ID")
+        or os.environ.get("CLAUDE_AGENT_ID")
+        or build_agent_id("agent", branch)
+    )
 
 
 def cmd_summon(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     emit_json(build_summon_payload(ctx, agent_id=args.agent_id, branch=args.branch, purpose=args.purpose))
+
+
+def cmd_create(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    payload = build_start_payload(
+        ctx,
+        agent_id=args.agent_id or default_agent_id(args.branch),
+        branch=args.branch,
+        purpose=args.purpose,
+        instructions=args.instruction,
+        instruction_profile=args.instruction_profile,
+        instruction_mode=args.instruction_mode,
+    )
+    payload["shell_command"] = shell_cd_command(str(payload["path"]))
+    emit_json(payload)
 
 
 def cmd_start(args: argparse.Namespace) -> None:
@@ -149,3 +178,23 @@ def cmd_finish(args: argparse.Namespace) -> None:
 def cmd_collapse(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     emit_json(build_collapse_payload(ctx, path=args.path, branch=args.branch))
+
+
+def cmd_remove(args: argparse.Namespace) -> None:
+    cwd = resolve_path(args.cwd or args.path)
+    ctx = discover_repo(cwd)
+    target_path = args.path
+    if target_path is None and args.branch is None:
+        _, worktrees = sync_ledger(ctx, parse_worktrees(ctx), persist=False)
+        target_path = select_live_target(worktrees=worktrees, cwd=cwd, path_arg=None, branch_arg=None)["path"]
+    emit_json(build_collapse_payload(ctx, path=target_path, branch=args.branch))
+
+
+def cmd_switch(args: argparse.Namespace) -> None:
+    anchor = args.cwd or args.path
+    ctx = discover_repo(resolve_path(anchor))
+    payload = build_switch_payload(ctx, cwd=args.cwd, path=args.path, branch=args.branch, main=args.main)
+    if args.format == "shell":
+        print(payload["shell_command"])
+        return
+    emit_json(payload)

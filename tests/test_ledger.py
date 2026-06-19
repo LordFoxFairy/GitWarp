@@ -28,8 +28,7 @@ class LedgerTests(GitWarpTestCase):
                 def run_handoff(index: int = worker_index, note: str = progress) -> None:
                     results[index] = subprocess.run(
                         [
-                            "python3",
-                            str(SCRIPT),
+                            *gitwarp_command(),
                             "handoff",
                             "--cwd",
                             str(worktree_path),
@@ -39,6 +38,7 @@ class LedgerTests(GitWarpTestCase):
                             note,
                         ],
                         cwd=str(self.repo),
+                        env=gitwarp_env(),
                         capture_output=True,
                         text=True,
                         check=False,

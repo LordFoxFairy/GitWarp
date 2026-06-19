@@ -167,7 +167,7 @@ payload = json.loads(os.environ["MAIN_ENTER"])
 assert payload["ok"] is True
 assert payload["location"] == "main"
 assert payload["statusline"] == "GITWARP[main-repo]"
-assert any("gitwarp start" in item for item in payload["recommended_next"])
+assert any("gitwarp create" in item for item in payload["recommended_next"])
 PY
 
 agents_output="$(gitwarp agents --cwd "$tmpdir")"
@@ -226,6 +226,60 @@ print(payload["path"])
 PY
 )"
 
+create_remove_output="$(
+  gitwarp create --cwd "$tmpdir" \
+    --branch feature/verify-remove \
+    --purpose "Verify primary create switch remove commands"
+)"
+remove_path="$(
+  CREATE_REMOVE_OUTPUT="$create_remove_output" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(os.environ["CREATE_REMOVE_OUTPUT"])
+assert payload["ok"] is True
+assert payload["agent_id"] == "agent-feature-verify-remove"
+assert payload["status"] == "active"
+assert payload["branch"] == "feature/verify-remove"
+assert payload["shell_command"].startswith("cd ")
+for key in ("task_md", "progress_md", "lessons_md"):
+    assert Path(payload[key]).exists()
+print(payload["path"])
+PY
+)"
+
+switch_output="$(gitwarp switch --cwd "$tmpdir" --branch feature/verify-remove)"
+SWITCH_OUTPUT="$switch_output" REMOVE_PATH="$remove_path" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["SWITCH_OUTPUT"])
+assert payload["ok"] is True
+assert payload["path"] == os.environ["REMOVE_PATH"]
+assert payload["statusline"] == "GITWARP[agent-feature-verify-remove@feature/verify-remove]"
+assert payload["shell_command"].startswith("cd ")
+PY
+
+switch_shell="$(gitwarp switch --cwd "$tmpdir" --branch feature/verify-remove --format shell)"
+if [[ "$switch_shell" != cd\ * ]]; then
+  echo "switch shell output did not produce a cd command: $switch_shell" >&2
+  exit 1
+fi
+
+remove_output="$(gitwarp remove --cwd "$tmpdir" --branch feature/verify-remove)"
+REMOVE_OUTPUT="$remove_output" REMOVE_PATH="$remove_path" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(os.environ["REMOVE_OUTPUT"])
+assert payload["ok"] is True
+assert payload["removed_path"] == os.environ["REMOVE_PATH"]
+assert payload["removed_branch"] == "feature/verify-remove"
+assert not Path(os.environ["REMOVE_PATH"]).exists()
+PY
+
 set +e
 execute_output="$(
   gitwarp dispatch --cwd "$tmpdir" \
@@ -274,7 +328,7 @@ for key in ("task_md", "progress_md", "lessons_md"):
 PY
 
 start_output="$(
-  gitwarp start --cwd "$tmpdir" \
+  gitwarp create --cwd "$tmpdir" \
     --agent-id verify-agent \
     --branch feature/verify-install \
     --purpose "Verify GitWarp install"
@@ -493,7 +547,7 @@ print(
             "plugin": os.environ["PLUGIN_ID"],
             "cli": os.environ["CLI_PATH"],
             "dispatch_path": os.environ["DISPATCH_PATH"],
-            "smoke": "init-agents-dispatch-adopt-reconcile-doctor-enter-start-context-handoff-board-statusline-finish",
+            "smoke": "init-agents-create-switch-remove-dispatch-adopt-reconcile-doctor-enter-context-handoff-board-statusline-finish",
         },
         separators=(",", ":"),
         sort_keys=True,

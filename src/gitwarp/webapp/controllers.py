@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..domain.errors import GitWarpError
-from ..foundation import RepoContext
+from ..infrastructure.runtime import RepoContext
 from ..application.services import (
     build_collapse_payload,
     build_dispatch_payload,

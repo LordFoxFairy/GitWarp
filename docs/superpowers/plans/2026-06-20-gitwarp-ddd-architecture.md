@@ -4,7 +4,7 @@
 
 **Goal:** Refactor GitWarp into a production-grade DDD-inspired architecture while preserving CLI, Web, plugin, and JSON behavior.
 
-**Architecture:** Introduce typed domain objects and application use cases, isolate infrastructure adapters, split CLI adapters into a command package, split health checks into an application subpackage, and split the web console into contracts/security/resources/controllers/transport/server modules. Keep compatibility shims during migration so behavior remains stable.
+**Architecture:** Introduce typed domain objects and application use cases, isolate infrastructure adapters, split CLI adapters into a command package, split health checks into an application subpackage, and split the web console into contracts/security/resources/controllers/transport/server modules. Root compatibility shims are removed; callers use the DDD package paths directly.
 
 **Tech Stack:** Python standard library, Git CLI, unittest, setuptools package layout.
 
@@ -30,8 +30,8 @@
 - Create: `src/gitwarp/domain/errors.py`
 - Create: `src/gitwarp/domain/model.py`
 - Create: `src/gitwarp/domain/policies.py`
-- Modify: `src/gitwarp/foundation.py`
-- Modify: `src/gitwarp/worktrees.py`
+- Modify: `src/gitwarp/infrastructure/runtime.py`
+- Modify: `src/gitwarp/infrastructure/worktrees.py`
 - Test: `tests/test_domain.py`
 
 - [ ] Add tests for `WorktreeSnapshot`, `WorkspaceRecord`, `DossierRef`, `HeadDrift`, branch collision, target selection, and guarded-root policy.
@@ -47,13 +47,12 @@
 - Create: `src/gitwarp/application/services.py`
 - Create: `src/gitwarp/application/use_cases/`
 - Create: `src/gitwarp/application/health/`
-- Modify: `src/gitwarp/services.py`
-- Modify: `src/gitwarp/cli.py`
+- Modify: `src/gitwarp/adapters/cli/`
 - Test: existing CLI and web workflow tests.
 
 - [ ] Move web-facing use case builders from root `services.py` to `application/use_cases/`.
 - [ ] Split doctor/init health checks into `application/health/`.
-- [ ] Make root and application `services.py` compatibility re-exports.
+- [ ] Export use cases through `application/services.py`; do not recreate root `src/gitwarp/services.py`.
 - [ ] Replace duplicated `cmd_start`, `cmd_dispatch`, `cmd_handoff`, `cmd_finish`, and `cmd_collapse` workflow logic in `cli.py` with application service calls.
 - [ ] Run CLI lifecycle, worktree, and web API tests.
 - [ ] Commit `refactor: route gitwarp commands through application services`.
@@ -62,11 +61,11 @@
 
 **Files:**
 - Create: `src/gitwarp/adapters/cli/`
-- Modify: `src/gitwarp/cli.py`
+- Modify: `src/gitwarp/adapters/cli/entrypoint.py`
 - Modify: `tests/test_packaging.py`
 
 - [ ] Replace the single CLI adapter file with parser, entrypoint, read command, system command, and workspace command modules.
-- [ ] Keep `gitwarp.cli:main` and `gitwarp.adapters.cli` import-compatible.
+- [ ] Keep `gitwarp.adapters.cli.entrypoint:main` as the only console-script entrypoint; do not recreate root `gitwarp.cli`.
 - [ ] Add packaging guardrails for the CLI package files.
 - [ ] Run packaging and CLI lifecycle tests.
 
@@ -79,7 +78,7 @@
 - Create: `src/gitwarp/webapp/controllers.py`
 - Create: `src/gitwarp/webapp/transport.py`
 - Create: `src/gitwarp/webapp/server.py`
-- Modify: `src/gitwarp/web.py`
+- Modify: `src/gitwarp/adapters/cli/system.py`
 - Split/Add tests: `tests/test_web_contracts.py`, `tests/test_web_security.py`, `tests/test_web_resources.py`, `tests/test_web_api.py`
 
 - [ ] Characterize current schema, token, host validation, confirmation, and dossier behavior.

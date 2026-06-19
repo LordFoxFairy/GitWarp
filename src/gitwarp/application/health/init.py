@@ -88,9 +88,9 @@ def preflight_init(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, Any]
 
 def init_recommendations(ctx: RepoContext) -> list[str]:
     return [
-        f"gitwarp doctor --cwd \"{ctx.repo_root}\"",
-        f"gitwarp enter --cwd \"{ctx.repo_root}\"",
-        f"gitwarp dispatch --cwd \"{ctx.repo_root}\" --agent codex --branch <branch> --purpose \"<purpose>\"",
+        "gitwarp doctor",
+        "gitwarp enter",
+        'gitwarp create --branch <branch> --purpose "<purpose>"',
     ]
 
 
@@ -98,7 +98,8 @@ def is_gitwarp_source_checkout(ctx: RepoContext) -> bool:
     source_root = ctx.checkout_root
     required = [
         source_root / "skills" / "gitwarp" / "SKILL.md",
-        source_root / "skills" / "gitwarp" / "scripts" / "gitwarp.py",
+        source_root / "skills" / "gitwarp" / "scripts" / "install_cli.py",
+        source_root / "src" / "gitwarp" / "adapters" / "cli" / "entrypoint.py",
         source_root / ".codex-plugin" / "plugin.json",
         source_root / ".agents" / "plugins" / "api_marketplace.json",
     ]
