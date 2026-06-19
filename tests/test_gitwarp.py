@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import json
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -10,6 +12,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp.py"
+SCRIPT_DIR = REPO_ROOT / "skills" / "gitwarp" / "scripts"
 
 
 def run_git(repo: Path, *args: str) -> str:
@@ -58,6 +61,13 @@ def findings_with_code(payload: dict[str, object], code: str) -> list[dict[str, 
         for finding in payload["findings"]  # type: ignore[index]
         if finding["code"] == code
     ]
+
+
+def load_gitwarp_services() -> object:
+    script_dir = str(SCRIPT_DIR)
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    return importlib.import_module("gitwarp_core.services")
 
 
 class GitWarpTests(unittest.TestCase):
@@ -1040,6 +1050,60 @@ class GitWarpTests(unittest.TestCase):
         source_codes = {finding["code"] for finding in source_doctor["findings"]}  # type: ignore[index]
         self.assertIn("standard_skill_links", source_codes)
         self.assertIn("session_hook_context", source_codes)
+
+    def test_web_state_does_not_create_or_rewrite_ledger(self) -> None:
+        services = load_gitwarp_services()
+        ledger_path = self.repo / ".gitwarp" / "ledger.json"
+
+        payload = services.build_web_state_payload(self.repo, readonly=True)
+
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["readonly"])
+        self.assertEqual(payload["repo_root"], str(self.repo.resolve()))
+        self.assertFalse(ledger_path.exists())
+
+        ledger_path.parent.mkdir()
+        ledger_path.write_text("{not-json", encoding="utf-8")
+        before = ledger_path.read_bytes()
+        invalid_payload = services.build_web_state_payload(self.repo, readonly=True)
+        after = ledger_path.read_bytes()
+
+        self.assertEqual(before, after)
+        self.assertEqual(invalid_payload["doctor"]["summary"]["by_code"]["ledger_schema"], 1)
+        ledger_schema = findings_with_code(invalid_payload["doctor"], "ledger_schema")[0]  # type: ignore[arg-type]
+        self.assertEqual(ledger_schema["severity"], "error")
+
+    def test_web_state_includes_dispatch_metadata(self) -> None:
+        services = load_gitwarp_services()
+        dispatch = run_gitwarp(
+            self.repo,
+            "dispatch",
+            "--cwd",
+            str(self.repo),
+            "--agent",
+            "codex",
+            "--branch",
+            "feature/web-dispatch-metadata",
+            "--purpose",
+            "Verify web dispatch metadata",
+        )
+
+        payload = services.build_web_state_payload(self.repo, readonly=True)
+        row = next(item for item in payload["worktrees"] if item["branch"] == "feature/web-dispatch-metadata")
+
+        self.assertEqual(row["dispatch"]["launch_command"], dispatch["launch_command"])
+        self.assertEqual(row["dispatch"]["launch_preview"], dispatch["launch_preview"])
+
+    def test_web_doctor_cache_marks_and_reuses_external_checks(self) -> None:
+        services = load_gitwarp_services()
+        doctor_cache: dict[str, object] = {}
+
+        first = services.build_web_state_payload(self.repo, readonly=True, doctor_cache=doctor_cache)
+        second = services.build_web_state_payload(self.repo, readonly=True, doctor_cache=doctor_cache)
+
+        self.assertFalse(first["doctor"]["cached"])
+        self.assertTrue(second["doctor"]["cached"])
+        self.assertIsInstance(second["doctor"]["cache_age_seconds"], int)
 
 
 class PluginStructureTests(unittest.TestCase):
