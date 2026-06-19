@@ -126,11 +126,13 @@ git commit -m "feat: add gitwarp init"
 ```python
 cases = [
     "[]",
+    "{not-json",
     {"version": 1},
     {"version": 1, "entries": {}},
     {"version": "1", "entries": []},
     {"version": 2, "entries": []},
     {"version": None, "entries": []},
+    {"version": True, "entries": []},
     {"version": 1, "repo_root": [], "entries": []},
 ]
 ```
@@ -200,6 +202,13 @@ git commit -m "test: cover gitwarp init edge cases"
 - [ ] Add `test_doctor_reports_agent_config_for_absent_valid_and_invalid_config`.
   - Fresh repo before `.gitwarp/agents.json`: doctor emits one `agent_config` finding with severity `ok`.
   - After valid config: doctor emits one `agent_config` finding with severity `ok` and still emits `agent_binary` rows.
+
+Minimal valid config:
+
+```json
+{"version":1,"default_agent":"local","agents":{"local":{"description":"Local test agent","command":["python3","-c","{prompt}","{worktree}"],"status":"enabled"}}}
+```
+
   - After malformed config: doctor emits one `agent_config` finding with severity `error`, `ok:true`, exit 0, and `recommended_next` mentions `.gitwarp/agents.json`.
 
 - [ ] Add `test_doctor_source_checkout_checks_are_scoped`.
@@ -224,6 +233,7 @@ git commit -m "test: cover gitwarp init edge cases"
 - [ ] Keep `agent_binary` findings for registry agents when registry is valid.
 - [ ] Replace hook execution with static `session_hook_context` inspection for source checkouts only.
 - [ ] Add `recommended_next_for_findings(ctx, findings)`.
+- [ ] Add deterministic recommendation de-duplication. If both `gitwarp_initialized` and `gitwarp_ignored` recommend init, `recommended_next` contains one stable `gitwarp init --cwd "<repo>"` string.
 - [ ] Keep `doctor` exit 0 / `ok:true` for diagnostic findings.
 - [ ] Doctor finding JSON shape must remain:
 
@@ -256,7 +266,7 @@ git commit -m "feat: make gitwarp doctor setup-aware"
 - Modify: `hooks/session-start-codex`
 - Modify: `.codex-plugin/plugin.json` if interface text needs init wording
 
-- [ ] Red step: run existing structure/syntax checks before edits to establish baseline.
+- [ ] Baseline verification: run existing structure/syntax checks before edits to establish the current passing state.
 
 ```bash
 bash -n scripts/verify-install.sh hooks/session-start hooks/session-start-codex scripts/install-codex-plugin.sh
