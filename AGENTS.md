@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`skills/gitwarp/` is the canonical skill source. It contains `SKILL.md`, UI metadata in `agents/openai.yaml`, install notes in `references/`, and executable helpers in `scripts/`. `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` provide the plugin shells, `.agents/plugins/api_marketplace.json` is the Codex marketplace entry, and `hooks/` installs the `gitwarp` CLI plus session context. `tests/` contains Python regression tests for the Git worktree helper.
+`skills/gitwarp/` is the canonical skill source. It contains `SKILL.md`, UI metadata in `agents/openai.yaml`, install notes in `references/`, and executable helpers in `scripts/`. `.agents/skills/gitwarp` and `.claude/skills/gitwarp` are repo-local standard skill discovery links back to the canonical folder. `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` provide the plugin shells, `.agents/plugins/api_marketplace.json` is the Codex marketplace entry, and `hooks/` installs the `gitwarp` CLI plus session context. `tests/` contains Python regression tests for the Git worktree helper.
 
 ## Build, Test, and Development Commands
 - `python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp`: validate the canonical skill shape.
@@ -25,3 +25,4 @@ Use short, imperative Conventional Commit messages, for example `feat: add gitwa
 
 ## Configuration Notes
 Runtime ledgers live under `.gitwarp/` inside target repositories and must stay ignored. Do not commit editor state, `__pycache__/`, `.pytest_cache/`, or temporary worktree contents. Keep the plugin manifest, hooks, and canonical skill source synchronized when changing install behavior.
+Keep `.agents/skills/gitwarp` and `.claude/skills/gitwarp` as symlinks to `../../skills/gitwarp`; do not replace them with copied skill folders.

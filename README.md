@@ -1,25 +1,29 @@
 # GitWarp
 
-GitWarp is a Codex/Claude skill-plugin for coordinating concurrent coding agents with isolated `git worktree` sandboxes and task records. It follows the Agent Skills pattern: the reusable behavior lives in `skills/gitwarp/SKILL.md`, deterministic operations live in `scripts/`, and plugin shells expose the skill to supported agents.
+GitWarp is an Agent Skill plus CLI for running Codex, Claude Code, and other coding agents in isolated Git worktrees. It gives each task a physical sandbox, a branch ownership record, and a small dossier (`task.md`, `progress.md`, `lessons.md`) so agents can resume work without guessing what happened before.
 
-The bundled CLI is implemented in Python with only the standard library plus the system `git` command. Treat Python as an implementation detail; after installation, agents should call `gitwarp`.
+The project follows the common Agent Skills layout: `SKILL.md` contains the agent instructions, `scripts/` contains deterministic tools, `references/` contains optional details, and plugin wrappers expose the same skill to supported hosts.
 
-## Repository Layout
+## Why GitWarp
 
-- `skills/gitwarp/`: canonical skill source, CLI helper, installer, and install reference.
-- `plugins/gitwarp/`: marketplace-ready plugin package mirror used by Codex installation.
-- `.codex-plugin/` and `.claude-plugin/`: plugin metadata shells.
-- `.agents/plugins/api_marketplace.json`: local Codex marketplace entry named `gitwarp-dev`.
-- `hooks/`: session hook assets kept for compatible hosts.
-- `tests/`: Python regression tests for worktree lifecycle behavior.
+- Prevent branch collisions by refusing to allocate a branch already bound to a worktree.
+- Keep the main checkout stable; agents do not run `git switch` in the public repo.
+- Give every isolated workspace a task dossier for handoff and memory.
+- Emit strict one-line JSON for automation and a raw `statusline` banner for prompts.
+- Support both standard skill discovery and Codex plugin installation.
 
-## Install For Codex
+## Install
+
+### Codex Plugin Path
 
 From this checkout:
 
 ```bash
 scripts/install-codex-plugin.sh
+gitwarp doctor --cwd "$PWD"
 ```
+
+This registers the local marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
 
 Manual equivalent:
 
@@ -29,55 +33,107 @@ codex plugin add gitwarp@gitwarp-dev --json
 python3 "$HOME/.codex/plugins/cache/gitwarp-dev/gitwarp/0.1.0/skills/gitwarp/scripts/install_cli.py"
 ```
 
-Ensure `~/.local/bin` is on `PATH`, then verify:
+### Standard Skill Path
+
+GitWarp also exposes repo-local standard skill locations:
+
+- Codex: `.agents/skills/gitwarp -> ../../skills/gitwarp`
+- Claude Code: `.claude/skills/gitwarp -> ../../skills/gitwarp`
+
+For user-global installs, copy or symlink the canonical skill folder:
 
 ```bash
-gitwarp --version
-gitwarp scan --cwd "$PWD"
+mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
+ln -s "$PWD/skills/gitwarp" "$HOME/.agents/skills/gitwarp"
+ln -s "$PWD/skills/gitwarp" "$HOME/.claude/skills/gitwarp"
+python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
 ```
 
-## CLI Usage
+The skill works without the plugin wrapper as long as the host can discover `SKILL.md` and the `gitwarp` launcher is on `PATH`.
+
+## Quick Start
+
+Start every repository session with context:
 
 ```bash
 gitwarp enter --cwd "$PWD"
-gitwarp scan --cwd /absolute/path/to/repo
-gitwarp agents --cwd /absolute/path/to/repo
-gitwarp dispatch --cwd /absolute/path/to/repo \
+```
+
+Create a sandbox and get a ready-to-run worker command:
+
+```bash
+gitwarp dispatch --cwd "$PWD" \
   --agent codex \
   --branch feature/my-task \
   --purpose "Implement isolated task"
-gitwarp start --cwd /absolute/path/to/repo \
-  --agent-id codex-alpha \
-  --branch feature/my-task \
-  --purpose "Implement isolated task"
-gitwarp adopt --cwd /absolute/path/to/repo \
-  --path /absolute/path/to/existing-worktree \
-  --agent-id claude-existing \
-  --purpose "Continue existing sandbox"
-gitwarp context --cwd "$PWD"
+```
+
+Run the returned `launch_command`. The worker should begin inside the returned absolute `path`, read `task.md`, `progress.md`, and `lessons.md`, then record milestones:
+
+```bash
 gitwarp handoff --cwd "$PWD" \
   --status testing \
-  --progress "Implemented first passing test" \
-  --lesson "Read context before editing nested paths"
-gitwarp board --cwd /absolute/path/to/repo --format table
-gitwarp board --cwd /absolute/path/to/repo --status blocked --verbose
-gitwarp board --cwd /absolute/path/to/repo --stale 4
-gitwarp reconcile --cwd /absolute/path/to/repo --stale 4
-gitwarp doctor --cwd /absolute/path/to/repo
-gitwarp statusline --cwd "$PWD"
+  --progress "Implemented regression test and minimal fix" \
+  --lesson "Read dossier before editing nested paths"
+```
+
+When the task is verified and pushed:
+
+```bash
 gitwarp finish --cwd "$PWD" \
   --status pushed \
   --progress "Verified and pushed" \
   --collapse
 ```
 
-`enter`, `scan`, `agents`, `dispatch`, `start`, `summon`, `adopt`, `context`, `annotate`, `handoff`, `board`, `reconcile`, `doctor`, `finish`, and `collapse` emit strict one-line JSON by default. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`. `enter --format prompt` and `board --format table` are the human-readable exceptions.
+## Usage Modes
 
-Use `enter` at the start of a session. In the main repo it returns the main badge and a recommended `gitwarp start` command; inside a sandbox it returns the active agent, branch, dossier paths, and short task/progress/lesson snippets. The session hooks call `gitwarp enter --format prompt` automatically when supported, but they do not create a worktree for you.
+### Human Operator
 
-Use `dispatch` when you want GitWarp to allocate a sandbox and return a ready-to-run Codex or Claude command without executing it. The default physical layout is project-local: `<repo>/.gitwarp/worktrees/<worktree-name>`. Agents should use the returned absolute `path`; they should not invent paths or switch branches manually. Local launch templates can be stored in ignored runtime config at `.gitwarp/agents.json`. `dispatch --command-mode execute` is intentionally rejected before mutation in this release.
+Use these commands when you are coordinating agents from the main checkout:
 
-Use `start` for manual isolated agent work because it creates the worktree plus `task.md`, `progress.md`, and `lessons.md` under `.gitwarp/dossiers/`. Use `adopt` to bind an existing non-main worktree into the ledger. Use `context` for deeper machine-readable inspection. Use `handoff` after meaningful milestones so later agents can see progress and lessons through `enter`, `context`, or `board`. Use `reconcile` for a non-mutating audit of stale ledger rows, dirty worktrees, missing dossiers, and merge-ready branches. Use `doctor` to inspect local CLI, hook, plugin, and agent launch readiness. Low-level `summon`, `annotate`, and `collapse` remain available for scripts.
+```bash
+gitwarp board --cwd "$PWD" --format table
+gitwarp reconcile --cwd "$PWD" --stale 4
+gitwarp doctor --cwd "$PWD"
+```
+
+`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, and merged branches without mutating state. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries.
+
+### Automated Agent
+
+Agents should use this minimal loop:
+
+```bash
+gitwarp enter --cwd "$PWD"
+# read returned task_md, progress_md, lessons_md
+gitwarp handoff --cwd "$PWD" --status implementing --progress "Short milestone"
+gitwarp statusline --cwd "$PWD"
+```
+
+`statusline` prints an unquoted banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]` for shell prompts and downstream model context.
+
+### Existing Worktree
+
+If a non-main worktree already exists, bind it into GitWarp instead of recreating it:
+
+```bash
+gitwarp adopt --cwd /absolute/path/to/repo \
+  --path /absolute/path/to/existing-worktree \
+  --agent-id claude-existing \
+  --purpose "Continue existing sandbox"
+```
+
+## Runtime Model
+
+GitWarp stores runtime state under `.gitwarp/` in the target repository. This directory is ignored and should not be committed.
+
+- Worktrees: `.gitwarp/worktrees/<worktree-name>`
+- Ledger: `.gitwarp/ledger.json`
+- Agent launch config: `.gitwarp/agents.json`
+- Dossiers: `.gitwarp/dossiers/<branch-slug>-<id>/`
+
+`dispatch` is intentionally print-only in this release. `--command-mode execute` fails before creating anything so humans can review agent launch commands and host-specific flags.
 
 Example `.gitwarp/agents.json`:
 
@@ -96,7 +152,17 @@ Example `.gitwarp/agents.json`:
 }
 ```
 
-## Development Checks
+## Repository Layout
+
+- `skills/gitwarp/`: canonical skill source, CLI helper, installer, and references.
+- `.agents/skills/gitwarp` and `.claude/skills/gitwarp`: repo-local standard skill discovery links.
+- `plugins/gitwarp/`: marketplace-ready Codex plugin package mirror.
+- `.codex-plugin/` and `.claude-plugin/`: plugin metadata shells.
+- `.agents/plugins/api_marketplace.json`: local Codex marketplace entry named `gitwarp-dev`.
+- `hooks/`: session hook assets for compatible hosts.
+- `tests/`: Python regression tests for GitWarp behavior and packaging.
+
+## Development
 
 ```bash
 python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp
@@ -105,4 +171,4 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 scripts/verify-install.sh
 ```
 
-Keep `skills/gitwarp/` and `plugins/gitwarp/skills/gitwarp/` synchronized when changing skill behavior. Runtime ledgers live in `.gitwarp/` and must stay ignored.
+Keep `skills/gitwarp/` and `plugins/gitwarp/skills/gitwarp/` synchronized when changing skill behavior. Keep the standard discovery links pointing at the canonical skill folder.

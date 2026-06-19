@@ -17,7 +17,12 @@
 
 ## Recommended repo strategy
 
-For authoring, keep the canonical skill in `skills/gitwarp/` and mirror it into `plugins/gitwarp/skills/gitwarp/` before installing the plugin. The local Codex marketplace is defined at `.agents/plugins/api_marketplace.json` with marketplace name `gitwarp-dev`.
+For authoring, keep the canonical skill in `skills/gitwarp/` and mirror it into `plugins/gitwarp/skills/gitwarp/` before installing the plugin. Repo-local standard discovery paths are symlinks:
+
+- `.agents/skills/gitwarp -> ../../skills/gitwarp`
+- `.claude/skills/gitwarp -> ../../skills/gitwarp`
+
+The local Codex marketplace is defined at `.agents/plugins/api_marketplace.json` with marketplace name `gitwarp-dev`.
 
 Install from the repository root:
 
@@ -35,8 +40,16 @@ python3 "$HOME/.codex/plugins/cache/gitwarp-dev/gitwarp/0.1.0/skills/gitwarp/scr
 
 For direct skill-only experiments, copy or symlink `skills/gitwarp` into the tool-specific discovery directory:
 
-- Codex: `$HOME/.codex/skills/gitwarp` or `$HOME/.agents/skills/gitwarp`
+- Codex: `$HOME/.agents/skills/gitwarp`
 - Claude Code: `$HOME/.claude/skills/gitwarp`
+
+Example:
+
+```bash
+mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
+ln -s /absolute/path/to/GitWarp/skills/gitwarp "$HOME/.agents/skills/gitwarp"
+ln -s /absolute/path/to/GitWarp/skills/gitwarp "$HOME/.claude/skills/gitwarp"
+```
 
 ## CLI command
 
@@ -59,7 +72,7 @@ gitwarp context --cwd /absolute/path/to/git/repo
 gitwarp board --cwd /absolute/path/to/git/repo --format table
 ```
 
-Plugin session hooks install the CLI and attempt `gitwarp enter --cwd "$PWD" --format prompt` at session start. That injects the current main/worktree context for agents, but it does not allocate a worktree automatically. Start isolated work explicitly with `gitwarp start`.
+Plugin session hooks install the CLI and attempt `gitwarp enter --cwd "$PWD" --format prompt` at session start. That injects the current main/worktree context for agents, but it does not allocate a worktree automatically. Start isolated work explicitly with `gitwarp dispatch` or `gitwarp start`.
 
 For orchestrated agent launches, use `gitwarp dispatch`. It allocates a project-local worktree under `<repo>/.gitwarp/worktrees/<worktree-name>`, creates the dossier files, records ownership, and prints a launch command without executing it. Optional local launch templates live in ignored runtime config at `.gitwarp/agents.json`; built-in templates are available for `codex` and `claude`.
 

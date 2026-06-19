@@ -780,6 +780,8 @@ class PluginStructureTests(unittest.TestCase):
         marketplace = json.loads((REPO_ROOT / ".agents" / "plugins" / "api_marketplace.json").read_text(encoding="utf-8"))
         hooks = json.loads((REPO_ROOT / "hooks" / "hooks-codex.json").read_text(encoding="utf-8"))
         session_hook = (REPO_ROOT / "hooks" / "session-start-codex").read_text(encoding="utf-8")
+        codex_skill_link = REPO_ROOT / ".agents" / "skills" / "gitwarp"
+        claude_skill_link = REPO_ROOT / ".claude" / "skills" / "gitwarp"
 
         self.assertEqual(plugin["name"], "gitwarp")
         self.assertEqual(plugin["skills"], "./skills/")
@@ -791,6 +793,10 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("gitwarp enter --cwd", session_hook)
         self.assertIn("gitwarp start", session_hook)
         self.assertIn("gitwarp handoff", session_hook)
+        self.assertTrue(codex_skill_link.is_symlink())
+        self.assertTrue(claude_skill_link.is_symlink())
+        self.assertEqual(codex_skill_link.resolve(), (REPO_ROOT / "skills" / "gitwarp").resolve())
+        self.assertEqual(claude_skill_link.resolve(), (REPO_ROOT / "skills" / "gitwarp").resolve())
 
     def test_marketplace_plugin_package_matches_root_sources(self) -> None:
         relative_paths = [
