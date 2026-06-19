@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -17,6 +18,10 @@ from typing import Any
 LEDGER_DIRNAME = ".gitwarp"
 LEDGER_FILENAME = "ledger.json"
 WORKTREE_DIRNAME = "worktrees"
+DOSSIER_DIRNAME = "dossiers"
+TASK_FILENAME = "task.md"
+PROGRESS_FILENAME = "progress.md"
+LESSONS_FILENAME = "lessons.md"
 
 
 class GitWarpError(RuntimeError):
@@ -41,6 +46,10 @@ class RepoContext:
     @property
     def worktree_root(self) -> Path:
         return self.ledger_dir / WORKTREE_DIRNAME
+
+    @property
+    def dossier_root(self) -> Path:
+        return self.ledger_dir / DOSSIER_DIRNAME
 
 
 def now_iso() -> str:
@@ -150,6 +159,12 @@ def sync_ledger(ctx: RepoContext, live_worktrees: list[dict[str, Any]]) -> tuple
                 "purpose": meta.get("purpose"),
                 "status": meta.get("status"),
                 "notes": meta.get("notes", []),
+                "dossier_path": meta.get("dossier_path"),
+                "task_md": meta.get("task_md"),
+                "progress_md": meta.get("progress_md"),
+                "lessons_md": meta.get("lessons_md"),
+                "latest_progress": meta.get("latest_progress"),
+                "latest_lesson": meta.get("latest_lesson"),
                 "created_at": meta.get("created_at"),
                 "updated_at": meta.get("updated_at"),
             }
@@ -175,6 +190,103 @@ def sanitize_name(value: str) -> str:
     return cleaned or "workspace"
 
 
+def short_hash(value: str) -> str:
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()[:6]
+
+
+def dossier_paths(ctx: RepoContext, branch: str, worktree_path: Path) -> dict[str, str]:
+    workspace_id = f"{sanitize_name(branch)}-{short_hash(str(worktree_path))}"
+    dossier_path = (ctx.dossier_root / workspace_id).resolve()
+    return {
+        "dossier_path": str(dossier_path),
+        "task_md": str(dossier_path / TASK_FILENAME),
+        "progress_md": str(dossier_path / PROGRESS_FILENAME),
+        "lessons_md": str(dossier_path / LESSONS_FILENAME),
+    }
+
+
+def create_dossier_files(
+    paths: dict[str, str],
+    *,
+    agent_id: str | None,
+    branch: str | None,
+    worktree_path: str,
+    purpose: str | None,
+    status: str | None,
+    created_at: str,
+) -> None:
+    dossier_path = Path(paths["dossier_path"])
+    dossier_path.mkdir(parents=True, exist_ok=True)
+    task = Path(paths["task_md"])
+    progress = Path(paths["progress_md"])
+    lessons = Path(paths["lessons_md"])
+
+    if not task.exists():
+        task.write_text(
+            "\n".join(
+                [
+                    "# Task",
+                    "",
+                    f"- Agent: {agent_id or 'unassigned'}",
+                    f"- Branch: {branch or 'detached'}",
+                    f"- Worktree: {worktree_path}",
+                    f"- Purpose: {purpose or 'unspecified'}",
+                    f"- Status: {status or 'active'}",
+                    f"- Created: {created_at}",
+                    "",
+                    "## Scope",
+                    "",
+                    purpose or "Unspecified task.",
+                    "",
+                    "## Success Criteria",
+                    "",
+                    "- [ ] Define concrete verification before finishing",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+    if not progress.exists():
+        progress.write_text(
+            "\n".join(
+                [
+                    "# Progress",
+                    "",
+                    f"## {created_at}",
+                    "",
+                    f"- Status: {status or 'active'}",
+                    "- Note: Workspace created.",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+    if not lessons.exists():
+        lessons.write_text(
+            "\n".join(
+                [
+                    "# Lessons",
+                    "",
+                    "## Notes For Future Agents",
+                    "",
+                    "- Add findings, pitfalls, and decisions that should survive handoff.",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+
+def append_markdown_event(path: str, timestamp: str, lines: list[str]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as handle:
+        handle.write(f"\n## {timestamp}\n\n")
+        for line in lines:
+            handle.write(f"{line}\n")
+        handle.write("\n")
+
+
 def ensure_branch_available(worktrees: list[dict[str, Any]], branch: str) -> None:
     for item in worktrees:
         if item.get("branch") == branch:
@@ -190,6 +302,22 @@ def branch_exists(ctx: RepoContext, branch: str) -> bool:
         check=False,
     )
     return result.returncode == 0
+
+
+def create_worktree(ctx: RepoContext, branch: str) -> tuple[Path, bool, str]:
+    target_dir = (ctx.worktree_root / sanitize_name(branch)).resolve()
+    if target_dir.exists():
+        raise GitWarpError(f"target path already exists: {target_dir}")
+
+    ctx.worktree_root.mkdir(parents=True, exist_ok=True)
+    existing_branch = branch_exists(ctx, branch)
+    if existing_branch:
+        run_git(ctx.repo_root, "worktree", "add", str(target_dir), branch)
+    else:
+        run_git(ctx.repo_root, "worktree", "add", "-b", branch, str(target_dir), "HEAD")
+
+    head = run_git(target_dir, "rev-parse", "HEAD")
+    return target_dir, existing_branch, head
 
 
 def select_collapse_target(
@@ -250,6 +378,117 @@ def select_live_target(
     return target
 
 
+def ledger_entry_for_target(ledger: dict[str, Any], target: dict[str, Any]) -> dict[str, Any]:
+    target_path = target["path"]
+    entry = next((item for item in ledger["entries"] if item.get("path") == target_path), None)
+    if entry is not None:
+        return entry
+    entry = {
+        "path": target_path,
+        "branch": target.get("branch"),
+        "agent_id": None,
+        "purpose": None,
+        "status": None,
+        "notes": [],
+        "created_at": now_iso(),
+    }
+    ledger["entries"].append(entry)
+    return entry
+
+
+def ensure_dossier_for_entry(ctx: RepoContext, entry: dict[str, Any], target: dict[str, Any]) -> dict[str, str]:
+    branch = entry.get("branch") or target.get("branch") or "detached"
+    paths = {
+        "dossier_path": entry.get("dossier_path"),
+        "task_md": entry.get("task_md"),
+        "progress_md": entry.get("progress_md"),
+        "lessons_md": entry.get("lessons_md"),
+    }
+    if not all(paths.values()):
+        paths = dossier_paths(ctx, branch, Path(target["path"]))
+        entry.update(paths)
+    concrete_paths = {key: str(value) for key, value in paths.items()}
+    create_dossier_files(
+        concrete_paths,
+        agent_id=entry.get("agent_id"),
+        branch=branch,
+        worktree_path=target["path"],
+        purpose=entry.get("purpose"),
+        status=entry.get("status") or "active",
+        created_at=entry.get("created_at") or now_iso(),
+    )
+    return concrete_paths
+
+
+def record_handoff(
+    ctx: RepoContext,
+    ledger: dict[str, Any],
+    target: dict[str, Any],
+    *,
+    status: str,
+    progress: str,
+    lesson: str | None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    if target.get("is_main"):
+        raise GitWarpError("refusing to hand off the main repository checkout")
+
+    entry = ledger_entry_for_target(ledger, target)
+    paths = ensure_dossier_for_entry(ctx, entry, target)
+    timestamp = now_iso()
+    append_markdown_event(
+        paths["progress_md"],
+        timestamp,
+        [f"- Status: {status}", f"- Note: {progress}"],
+    )
+    if lesson:
+        append_markdown_event(paths["lessons_md"], timestamp, [f"- {lesson}"])
+
+    entry["status"] = status
+    entry["updated_at"] = timestamp
+    entry["latest_progress"] = progress
+    if lesson:
+        entry["latest_lesson"] = lesson
+    entry.setdefault("notes", [])
+    entry["notes"].append({"note": progress, "created_at": timestamp, "kind": "progress"})
+    write_ledger(ctx, ledger)
+    return entry, paths
+
+
+def board_row(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "path": item["path"],
+        "branch": item.get("branch"),
+        "agent_id": item.get("agent_id"),
+        "purpose": item.get("purpose"),
+        "status": item.get("status"),
+        "is_main": item.get("is_main", False),
+        "dossier_path": item.get("dossier_path"),
+        "task_md": item.get("task_md"),
+        "progress_md": item.get("progress_md"),
+        "lessons_md": item.get("lessons_md"),
+        "latest_progress": item.get("latest_progress"),
+        "latest_lesson": item.get("latest_lesson"),
+    }
+
+
+def print_board_table(rows: list[dict[str, Any]]) -> None:
+    headers = ["branch", "agent", "status", "purpose", "progress"]
+    print(" | ".join(headers))
+    print(" | ".join("---" for _ in headers))
+    for row in rows:
+        print(
+            " | ".join(
+                [
+                    str(row.get("branch") or ""),
+                    str(row.get("agent_id") or ""),
+                    str(row.get("status") or ""),
+                    str(row.get("purpose") or ""),
+                    str(row.get("latest_progress") or ""),
+                ]
+            )
+        )
+
+
 def cmd_scan(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
@@ -271,18 +510,7 @@ def cmd_summon(args: argparse.Namespace) -> None:
     ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     ensure_branch_available(worktrees, args.branch)
 
-    target_dir = (ctx.worktree_root / sanitize_name(args.branch)).resolve()
-    if target_dir.exists():
-        raise GitWarpError(f"target path already exists: {target_dir}")
-
-    ctx.worktree_root.mkdir(parents=True, exist_ok=True)
-    existing_branch = branch_exists(ctx, args.branch)
-    if existing_branch:
-        run_git(ctx.repo_root, "worktree", "add", str(target_dir), args.branch)
-    else:
-        run_git(ctx.repo_root, "worktree", "add", "-b", args.branch, str(target_dir), "HEAD")
-
-    head = run_git(target_dir, "rev-parse", "HEAD")
+    target_dir, existing_branch, head = create_worktree(ctx, args.branch)
     entry = {
         "path": str(target_dir),
         "branch": args.branch,
@@ -307,6 +535,56 @@ def cmd_summon(args: argparse.Namespace) -> None:
             "agent_id": args.agent_id,
             "purpose": args.purpose,
             "branch_created": not existing_branch,
+        }
+    )
+
+
+def cmd_start(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    ensure_branch_available(worktrees, args.branch)
+
+    target_dir, existing_branch, head = create_worktree(ctx, args.branch)
+    created_at = now_iso()
+    dossier = dossier_paths(ctx, args.branch, target_dir)
+    entry = {
+        "path": str(target_dir),
+        "branch": args.branch,
+        "agent_id": args.agent_id,
+        "purpose": args.purpose,
+        "status": "active",
+        "notes": [],
+        "latest_progress": "Workspace created.",
+        "created_at": created_at,
+        **dossier,
+    }
+    create_dossier_files(
+        dossier,
+        agent_id=args.agent_id,
+        branch=args.branch,
+        worktree_path=str(target_dir),
+        purpose=args.purpose,
+        status="active",
+        created_at=created_at,
+    )
+    ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
+    ledger["entries"].append(entry)
+    write_ledger(ctx, ledger)
+
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "path": str(target_dir),
+            "branch": args.branch,
+            "head": head,
+            "agent_id": args.agent_id,
+            "purpose": args.purpose,
+            "status": "active",
+            "branch_created": not existing_branch,
+            "latest_progress": "Workspace created.",
+            **dossier,
         }
     )
 
@@ -382,6 +660,120 @@ def cmd_annotate(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_handoff(args: argparse.Namespace) -> None:
+    anchor = args.cwd or args.path
+    cwd = resolve_path(anchor)
+    ctx = discover_repo(cwd)
+    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    target = select_live_target(
+        worktrees=worktrees,
+        cwd=cwd,
+        path_arg=args.path,
+        branch_arg=args.branch,
+    )
+    entry, paths = record_handoff(
+        ctx,
+        ledger,
+        target,
+        status=args.status,
+        progress=args.progress,
+        lesson=args.lesson,
+    )
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "path": target["path"],
+            "branch": target.get("branch"),
+            "agent_id": entry.get("agent_id"),
+            "purpose": entry.get("purpose"),
+            "status": entry.get("status"),
+            "latest_progress": entry.get("latest_progress"),
+            "latest_lesson": entry.get("latest_lesson"),
+            **paths,
+        }
+    )
+
+
+def cmd_board(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    rows = [board_row(item) for item in worktrees]
+    if args.format == "table":
+        print_board_table(rows)
+        return
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "worktrees": rows,
+        }
+    )
+
+
+def cmd_finish(args: argparse.Namespace) -> None:
+    anchor = args.cwd or args.path
+    cwd = resolve_path(anchor)
+    ctx = discover_repo(cwd)
+    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    target = select_live_target(
+        worktrees=worktrees,
+        cwd=cwd,
+        path_arg=args.path,
+        branch_arg=args.branch,
+    )
+    entry, paths = record_handoff(
+        ctx,
+        ledger,
+        target,
+        status=args.status,
+        progress=args.progress,
+        lesson=args.lesson,
+    )
+
+    collapsed = False
+    removed_branch = None
+    if args.collapse:
+        target_path, removed_branch = select_collapse_target(
+            worktrees=worktrees,
+            ledger=ledger,
+            path_arg=target["path"],
+            branch_arg=None,
+            repo_root=ctx.repo_root,
+        )
+        run_git(ctx.repo_root, "worktree", "remove", "--force", target_path)
+        run_git(ctx.repo_root, "worktree", "prune", "--expire", "now")
+        target_dir = Path(target_path)
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != target_path]
+        write_ledger(ctx, ledger)
+        collapsed = True
+    if args.purge_dossier and paths.get("dossier_path"):
+        shutil.rmtree(paths["dossier_path"], ignore_errors=True)
+
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "path": target["path"],
+            "branch": target.get("branch"),
+            "removed_branch": removed_branch,
+            "agent_id": entry.get("agent_id"),
+            "purpose": entry.get("purpose"),
+            "status": entry.get("status"),
+            "latest_progress": entry.get("latest_progress"),
+            "latest_lesson": entry.get("latest_lesson"),
+            "collapsed": collapsed,
+            "purged_dossier": bool(args.purge_dossier),
+            **paths,
+        }
+    )
+
+
 def cmd_collapse(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
@@ -453,6 +845,13 @@ def build_parser() -> argparse.ArgumentParser:
     summon.add_argument("--purpose", required=True)
     summon.set_defaults(func=cmd_summon)
 
+    start = subparsers.add_parser("start", help="Create an isolated worktree with dossier files")
+    start.add_argument("--cwd")
+    start.add_argument("--agent-id", required=True)
+    start.add_argument("--branch", required=True)
+    start.add_argument("--purpose", required=True)
+    start.set_defaults(func=cmd_start)
+
     context = subparsers.add_parser("context", help="Print JSON context for the current worktree")
     context.add_argument("--cwd")
     context.set_defaults(func=cmd_context)
@@ -464,6 +863,31 @@ def build_parser() -> argparse.ArgumentParser:
     annotate.add_argument("--status")
     annotate.add_argument("--note", required=True)
     annotate.set_defaults(func=cmd_annotate)
+
+    handoff = subparsers.add_parser("handoff", help="Append progress and optional lessons to a worktree dossier")
+    handoff.add_argument("--cwd")
+    handoff.add_argument("--path")
+    handoff.add_argument("--branch")
+    handoff.add_argument("--status", required=True)
+    handoff.add_argument("--progress", required=True)
+    handoff.add_argument("--lesson")
+    handoff.set_defaults(func=cmd_handoff)
+
+    board = subparsers.add_parser("board", help="List active GitWarp worktrees for humans or automation")
+    board.add_argument("--cwd")
+    board.add_argument("--format", choices=["json", "table"], default="json")
+    board.set_defaults(func=cmd_board)
+
+    finish = subparsers.add_parser("finish", help="Record final progress and optionally collapse a worktree")
+    finish.add_argument("--cwd")
+    finish.add_argument("--path")
+    finish.add_argument("--branch")
+    finish.add_argument("--status", required=True)
+    finish.add_argument("--progress", required=True)
+    finish.add_argument("--lesson")
+    finish.add_argument("--collapse", action="store_true")
+    finish.add_argument("--purge-dossier", action="store_true")
+    finish.set_defaults(func=cmd_finish)
 
     collapse = subparsers.add_parser("collapse", help="Force-remove a tracked isolated worktree")
     collapse.add_argument("--cwd")

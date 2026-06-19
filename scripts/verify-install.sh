@@ -50,7 +50,7 @@ if [[ "$version" != "gitwarp 0.1.0" ]]; then
 fi
 
 banner="$(gitwarp statusline --cwd "$REPO_ROOT")"
-if [[ "$banner" != "GITWARP[main-repo]" ]]; then
+if [[ "$banner" != "GITWARP[main-repo]" && "$banner" != GITWARP\[*@*\] ]]; then
   echo "unexpected repository banner: $banner" >&2
   exit 1
 fi
@@ -78,20 +78,23 @@ assert payload["ok"] is True
 assert len(payload["worktrees"]) == 1
 PY
 
-summon_output="$(
-  gitwarp summon --cwd "$tmpdir" \
+start_output="$(
+  gitwarp start --cwd "$tmpdir" \
     --agent-id verify-agent \
     --branch feature/verify-install \
     --purpose "Verify GitWarp install"
 )"
 
 worktree_path="$(
-  SUMMON_OUTPUT="$summon_output" python3 - <<'PY'
+  START_OUTPUT="$start_output" python3 - <<'PY'
 import json
 import os
 
-payload = json.loads(os.environ["SUMMON_OUTPUT"])
+payload = json.loads(os.environ["START_OUTPUT"])
 assert payload["ok"] is True
+assert payload["status"] == "active"
+for key in ("task_md", "progress_md", "lessons_md"):
+    assert payload[key]
 print(payload["path"])
 PY
 )"
@@ -105,19 +108,21 @@ if [[ "$worktree_banner" != "GITWARP[verify-agent@feature/verify-install]" ]]; t
   exit 1
 fi
 
-annotate_output="$(
-  gitwarp annotate --cwd "$nested_path" \
+handoff_output="$(
+  gitwarp handoff --cwd "$nested_path" \
     --status verified \
-    --note "Verified install smoke flow"
+    --progress "Verified install smoke flow" \
+    --lesson "Dossier smoke test passed"
 )"
-ANNOTATE_OUTPUT="$annotate_output" python3 - <<'PY'
+HANDOFF_OUTPUT="$handoff_output" python3 - <<'PY'
 import json
 import os
 
-payload = json.loads(os.environ["ANNOTATE_OUTPUT"])
+payload = json.loads(os.environ["HANDOFF_OUTPUT"])
 assert payload["ok"] is True
 assert payload["status"] == "verified"
-assert payload["notes_count"] == 1
+assert payload["latest_progress"] == "Verified install smoke flow"
+assert payload["latest_lesson"] == "Dossier smoke test passed"
 PY
 
 context_output="$(gitwarp context --cwd "$nested_path")"
@@ -133,17 +138,48 @@ assert worktree["branch"] == "feature/verify-install"
 assert worktree["agent_id"] == "verify-agent"
 assert worktree["purpose"] == "Verify GitWarp install"
 assert worktree["status"] == "verified"
-assert worktree["notes"][-1]["note"] == "Verified install smoke flow"
+assert worktree["latest_progress"] == "Verified install smoke flow"
+assert worktree["latest_lesson"] == "Dossier smoke test passed"
+for key in ("task_md", "progress_md", "lessons_md"):
+    assert worktree[key]
 PY
 
-collapse_output="$(gitwarp collapse --cwd "$tmpdir" --branch feature/verify-install)"
-COLLAPSE_OUTPUT="$collapse_output" python3 - <<'PY'
+board_output="$(gitwarp board --cwd "$tmpdir")"
+BOARD_OUTPUT="$board_output" python3 - <<'PY'
 import json
 import os
 
-payload = json.loads(os.environ["COLLAPSE_OUTPUT"])
+payload = json.loads(os.environ["BOARD_OUTPUT"])
 assert payload["ok"] is True
-assert payload["removed_branch"] == "feature/verify-install"
+row = next(item for item in payload["worktrees"] if item["branch"] == "feature/verify-install")
+assert row["latest_progress"] == "Verified install smoke flow"
+assert row["latest_lesson"] == "Dossier smoke test passed"
+PY
+
+table_output="$(gitwarp board --cwd "$tmpdir" --format table)"
+if [[ "$table_output" != *"feature/verify-install"* ]]; then
+  echo "board table did not include feature/verify-install" >&2
+  exit 1
+fi
+
+finish_output="$(
+  gitwarp finish --cwd "$nested_path" \
+    --status pushed \
+    --progress "Verified and pushed" \
+    --lesson "Dossier preserved after collapse" \
+    --collapse
+)"
+FINISH_OUTPUT="$finish_output" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = json.loads(os.environ["FINISH_OUTPUT"])
+assert payload["ok"] is True
+assert payload["status"] == "pushed"
+assert payload["collapsed"] is True
+assert Path(payload["progress_md"]).exists()
+assert Path(payload["lessons_md"]).exists()
 PY
 
 if [[ -e "$worktree_path" ]]; then
@@ -163,7 +199,7 @@ print(
             "ok": True,
             "plugin": os.environ["PLUGIN_ID"],
             "cli": os.environ["CLI_PATH"],
-            "smoke": "scan-summon-context-annotate-statusline-collapse",
+            "smoke": "scan-start-context-handoff-board-statusline-finish",
         },
         separators=(",", ":"),
         sort_keys=True,

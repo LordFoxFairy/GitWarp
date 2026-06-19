@@ -53,6 +53,7 @@ Verify:
 ```bash
 gitwarp scan --cwd /absolute/path/to/git/repo
 gitwarp context --cwd /absolute/path/to/git/repo
+gitwarp board --cwd /absolute/path/to/git/repo --format table
 ```
 
 The implementation is Python by design: it uses only the standard library plus the system `git` command, which keeps the skill portable while making JSON and path handling safer than shell-only parsing. Day to day, users should call `gitwarp`, not the Python file.

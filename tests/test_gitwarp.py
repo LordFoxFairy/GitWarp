@@ -155,6 +155,121 @@ class GitWarpTests(unittest.TestCase):
         )
         self.assertIn("branch collision", str(collision["error"]))
 
+    def test_start_creates_dossier_and_context_exposes_paths(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-dossier",
+            "--branch",
+            "feature/dossier",
+            "--purpose",
+            "Build dossier workflow",
+        )
+        worktree_path = Path(str(start["path"]))
+        nested_path = worktree_path / "packages" / "cli"
+        nested_path.mkdir(parents=True)
+
+        self.assertTrue(worktree_path.exists())
+        self.assertEqual(start["branch"], "feature/dossier")
+        self.assertEqual(start["agent_id"], "codex-dossier")
+        self.assertEqual(start["purpose"], "Build dossier workflow")
+        self.assertEqual(start["status"], "active")
+
+        dossier_path = Path(str(start["dossier_path"]))
+        task_md = Path(str(start["task_md"]))
+        progress_md = Path(str(start["progress_md"]))
+        lessons_md = Path(str(start["lessons_md"]))
+        self.assertEqual(dossier_path.parent.resolve(), (self.repo / ".gitwarp" / "dossiers").resolve())
+        self.assertTrue(task_md.exists())
+        self.assertTrue(progress_md.exists())
+        self.assertTrue(lessons_md.exists())
+        self.assertIn("Build dossier workflow", task_md.read_text(encoding="utf-8"))
+        self.assertIn("Workspace created.", progress_md.read_text(encoding="utf-8"))
+        self.assertIn("Notes For Future Agents", lessons_md.read_text(encoding="utf-8"))
+
+        context = run_gitwarp(self.repo, "context", "--cwd", str(nested_path))
+        worktree = context["worktree"]  # type: ignore[index]
+        self.assertEqual(worktree["path"], str(worktree_path))  # type: ignore[index]
+        self.assertEqual(worktree["dossier_path"], str(dossier_path))  # type: ignore[index]
+        self.assertEqual(worktree["task_md"], str(task_md))  # type: ignore[index]
+        self.assertEqual(worktree["progress_md"], str(progress_md))  # type: ignore[index]
+        self.assertEqual(worktree["lessons_md"], str(lessons_md))  # type: ignore[index]
+
+    def test_handoff_board_and_finish_preserve_dossier(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-dossier",
+            "--branch",
+            "feature/dossier-flow",
+            "--purpose",
+            "Build dossier flow",
+        )
+        worktree_path = Path(str(start["path"]))
+        progress_md = Path(str(start["progress_md"]))
+        lessons_md = Path(str(start["lessons_md"]))
+
+        handoff = run_gitwarp(
+            self.repo,
+            "handoff",
+            "--cwd",
+            str(worktree_path),
+            "--status",
+            "testing",
+            "--progress",
+            "Parser done",
+            "--lesson",
+            "Use context before edits",
+        )
+        self.assertEqual(handoff["status"], "testing")
+        self.assertEqual(handoff["latest_progress"], "Parser done")
+        self.assertEqual(handoff["latest_lesson"], "Use context before edits")
+        self.assertIn("Parser done", progress_md.read_text(encoding="utf-8"))
+        self.assertIn("Use context before edits", lessons_md.read_text(encoding="utf-8"))
+
+        board = run_gitwarp(self.repo, "board", "--format", "json")
+        rows = board["worktrees"]  # type: ignore[index]
+        row = next(item for item in rows if item["branch"] == "feature/dossier-flow")  # type: ignore[index]
+        self.assertEqual(row["agent_id"], "codex-dossier")  # type: ignore[index]
+        self.assertEqual(row["status"], "testing")  # type: ignore[index]
+        self.assertEqual(row["latest_progress"], "Parser done")  # type: ignore[index]
+        self.assertEqual(row["latest_lesson"], "Use context before edits")  # type: ignore[index]
+        self.assertEqual(row["progress_md"], str(progress_md))  # type: ignore[index]
+        self.assertEqual(row["lessons_md"], str(lessons_md))  # type: ignore[index]
+
+        table = subprocess.run(
+            ["python3", str(SCRIPT), "board", "--cwd", str(self.repo), "--format", "table"],
+            cwd=str(self.repo),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertIn("feature/dossier-flow", table.stdout)
+        self.assertIn("Parser done", table.stdout)
+
+        finish = run_gitwarp(
+            self.repo,
+            "finish",
+            "--cwd",
+            str(worktree_path),
+            "--status",
+            "pushed",
+            "--progress",
+            "Verified and pushed",
+            "--lesson",
+            "Keep dossier after collapse",
+            "--collapse",
+        )
+        self.assertEqual(finish["status"], "pushed")
+        self.assertEqual(finish["collapsed"], True)
+        self.assertFalse(worktree_path.exists())
+        self.assertTrue(progress_md.exists())
+        self.assertTrue(lessons_md.exists())
+        self.assertIn("Verified and pushed", progress_md.read_text(encoding="utf-8"))
+        self.assertIn("Keep dossier after collapse", lessons_md.read_text(encoding="utf-8"))
+
 
 class PluginStructureTests(unittest.TestCase):
     def test_codex_plugin_points_at_canonical_skill_and_hooks(self) -> None:

@@ -40,21 +40,26 @@ gitwarp scan --cwd "$PWD"
 
 ```bash
 gitwarp scan --cwd /absolute/path/to/repo
-gitwarp summon --cwd /absolute/path/to/repo \
+gitwarp start --cwd /absolute/path/to/repo \
   --agent-id codex-alpha \
   --branch feature/my-task \
   --purpose "Implement isolated task"
 gitwarp context --cwd "$PWD"
-gitwarp annotate --cwd "$PWD" \
+gitwarp handoff --cwd "$PWD" \
   --status testing \
-  --note "Implemented first passing test"
+  --progress "Implemented first passing test" \
+  --lesson "Read context before editing nested paths"
+gitwarp board --cwd /absolute/path/to/repo --format table
 gitwarp statusline --cwd "$PWD"
-gitwarp collapse --cwd /absolute/path/to/repo --branch feature/my-task
+gitwarp finish --cwd "$PWD" \
+  --status pushed \
+  --progress "Verified and pushed" \
+  --collapse
 ```
 
-`scan`, `summon`, `context`, `annotate`, and `collapse` emit strict one-line JSON. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`.
+`scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, and `collapse` emit strict one-line JSON by default. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`. `board --format table` is the human-readable exception.
 
-Use `context` when an agent needs to understand where it is and what the workspace is for. Use `annotate` after meaningful milestones so later agents can see status and notes in `.gitwarp/ledger.json` through `scan` or `context`.
+Use `start` for new agent work because it creates the worktree plus `task.md`, `progress.md`, and `lessons.md` under `.gitwarp/dossiers/`. Use `context` when an agent needs to understand where it is and which dossier files to read. Use `handoff` after meaningful milestones so later agents can see progress and lessons through `context` or `board`. Low-level `summon`, `annotate`, and `collapse` remain available for scripts.
 
 ## Development Checks
 
