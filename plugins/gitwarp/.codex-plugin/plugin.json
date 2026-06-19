@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "GitWarp",
     "shortDescription": "Git worktree isolation and task records for agents",
-    "longDescription": "Use GitWarp to scan, start, inspect, hand off, view, and finish isolated git worktree sandboxes with task dossiers for automated coding agents.",
+    "longDescription": "Use GitWarp to enter with context, start, inspect, hand off, view, and finish isolated git worktree sandboxes with task dossiers for automated coding agents.",
     "developerName": "thefoxfairy",
     "category": "Coding",
     "capabilities": [
@@ -26,8 +26,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Start an isolated workspace with a GitWarp task dossier for this agent task.",
-      "Scan active GitWarp worktrees, inspect context, and read the dossier before starting parallel work."
+      "Run gitwarp enter --cwd \"$PWD\" before repository work.",
+      "Start an isolated workspace with a GitWarp task dossier for concurrent agent tasks.",
+      "Inspect context and read task.md, progress.md, and lessons.md before editing inside a sandbox."
     ]
   }
 }

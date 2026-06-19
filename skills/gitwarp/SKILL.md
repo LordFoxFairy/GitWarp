@@ -7,11 +7,11 @@ description: Use when concurrent Claude Code or Codex agents need isolated git w
 
 ## Overview
 
-GitWarp provides a deterministic helper around native `git worktree` so agents can claim, track, annotate, inspect, and destroy isolated sandboxes without reusing a branch or contaminating the main checkout index. It stores runtime state in the target repository under `.gitwarp/ledger.json` and task dossiers under `.gitwarp/dossiers/`.
+GitWarp provides a deterministic helper around native `git worktree` so agents can enter with context, claim, track, annotate, inspect, and destroy isolated sandboxes without reusing a branch or contaminating the main checkout index. It stores runtime state in the target repository under `.gitwarp/ledger.json` and task dossiers under `.gitwarp/dossiers/`.
 
 ## Core Rule
 
-When a task requires isolated concurrent writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main repository. Use GitWarp to scan, start, inspect, hand off, and finish the workspace so branch ownership and task history stay machine-readable.
+At the start of repository work, run `gitwarp enter --cwd "$PWD"` if the hook has not already supplied a GitWarp Context block. When a task requires isolated concurrent writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main repository. Use GitWarp to enter, start, inspect, hand off, and finish the workspace so branch ownership and task history stay machine-readable.
 
 ## When To Use
 
@@ -28,9 +28,9 @@ Do not use this skill for single-agent edits in the main checkout when no branch
 
 ## Command Contract
 
-1. `scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, and `collapse` emit deterministic single-line JSON by default.
+1. `enter`, `scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, and `collapse` emit deterministic single-line JSON by default.
 2. `statusline` emits a raw unquoted prompt banner only.
-3. `board --format table` emits deterministic multi-line text for humans.
+3. `enter --format prompt` and `board --format table` emit deterministic multi-line text for humans.
 4. All `--cwd`, returned workspace paths, ledger paths, dossier paths, and worktree roots must be treated as absolute paths.
 5. If any JSON command returns nonzero or `"ok": false`, stop the workflow, report the `error` field, and do not keep editing from an assumed workspace.
 6. Never edit `.gitwarp/ledger.json` by hand.
@@ -78,7 +78,29 @@ After installation, use:
 gitwarp --help
 ```
 
-### 2. Scan and inspect context before allocating or editing
+### 2. Enter and inspect context before allocating or editing
+
+Run this first unless session startup already injected a current GitWarp Context block:
+
+```bash
+gitwarp enter --cwd "$PWD"
+```
+
+Interpretation:
+
+1. `location: "main"` means you are in the public checkout. For isolated or concurrent work, run `start` before editing.
+2. `location: "worktree"` means you are inside a sandbox. Read the returned `task_md`, `progress_md`, and `lessons_md`; the JSON also includes short `snippets`.
+3. `location: "outside"` means move into a Git repository or pass an absolute `--cwd`.
+
+For hook or prompt integration:
+
+```bash
+gitwarp enter --cwd "$PWD" --format prompt
+```
+
+This returns raw multi-line text, not JSON.
+
+### 3. Scan all dimensions
 
 Run:
 
@@ -110,7 +132,7 @@ gitwarp statusline --cwd "$PWD"
 
 Continue in place only when the context or banner matches the intended agent and branch.
 
-### 3. Start an isolated workspace
+### 4. Start an isolated workspace
 
 Prefer `start` for agent work because it creates the worktree plus dossier files:
 
@@ -124,7 +146,7 @@ gitwarp start \
 
 The returned JSON includes `path`, `task_md`, `progress_md`, and `lessons_md`. `cd` into `path`, then read the three Markdown files before editing.
 
-### 4. Summon an isolated workspace without a dossier
+### 5. Summon an isolated workspace without a dossier
 
 Run:
 
@@ -143,7 +165,7 @@ Rules:
 3. Assume the workspace path is absolute and stable for the lifetime of the task.
 4. Do not edit in the public root after a sandbox has been summoned for the task.
 
-### 5. Record progress and lessons
+### 6. Record progress and lessons
 
 After meaningful milestones, write a short note:
 
@@ -158,7 +180,7 @@ Use terse status values such as `active`, `implementing`, `testing`, `blocked`, 
 
 Use low-level `annotate` only when a script needs ledger notes without Markdown dossier writes.
 
-### 6. View all active work
+### 7. View all active work
 
 For automation:
 
@@ -172,7 +194,16 @@ For a human-readable table:
 gitwarp board --cwd /absolute/path/to/repo --format table
 ```
 
-### 7. Finish when the task is done
+Useful filters:
+
+```bash
+gitwarp board --cwd /absolute/path/to/repo --status blocked --verbose
+gitwarp board --cwd /absolute/path/to/repo --stale 4
+```
+
+Use `--verbose` when handing off coordination; it includes short snippets from `task.md`, `progress.md`, and `lessons.md`. Use `--stale N` to list worktrees whose ledger record has not changed for at least N hours.
+
+### 8. Finish when the task is done
 
 Run:
 
@@ -186,7 +217,7 @@ gitwarp finish --cwd "$PWD" \
 
 `finish` records final progress first. It only destroys the worktree when `--collapse` is passed. Dossiers are preserved by default; add `--purge-dossier` only when the user explicitly wants to delete the record.
 
-### 8. Surface context in prompts
+### 9. Surface context in prompts
 
 Run:
 
@@ -202,7 +233,7 @@ This prints a raw string such as `GITWARP[main-repo]` or `GITWARP[codex-reviewer
 - Missing Git repository: run from a real repository or pass `--cwd /absolute/path/to/repo`.
 - Invalid ledger: stop and report the ledger path; do not rewrite it manually unless the user asks for repair.
 - Collapse target missing: run `scan`, verify the branch/path, then retry with the exact live path or branch.
-- Annotation refused on main repo: summon or enter an isolated workspace first.
+- Annotation refused on main repo: start or enter an isolated workspace first.
 - Handoff refused on main repo: use `start` first or pass a non-main `--path`/`--branch`.
 
 ## Expectations

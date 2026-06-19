@@ -51,9 +51,12 @@ By default this writes a launcher to `~/.local/bin/gitwarp`. Override with `--de
 Verify:
 
 ```bash
+gitwarp enter --cwd /absolute/path/to/git/repo
 gitwarp scan --cwd /absolute/path/to/git/repo
 gitwarp context --cwd /absolute/path/to/git/repo
 gitwarp board --cwd /absolute/path/to/git/repo --format table
 ```
+
+Plugin session hooks install the CLI and attempt `gitwarp enter --cwd "$PWD" --format prompt` at session start. That injects the current main/worktree context for agents, but it does not allocate a worktree automatically. Start isolated work explicitly with `gitwarp start`.
 
 The implementation is Python by design: it uses only the standard library plus the system `git` command, which keeps the skill portable while making JSON and path handling safer than shell-only parsing. Day to day, users should call `gitwarp`, not the Python file.

@@ -8,7 +8,7 @@
 - `python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/gitwarp`: validate the packaged Codex plugin.
 - `python3 -m unittest discover -s tests -p 'test_*.py' -v`: run GitWarp worktree behavior tests.
 - `scripts/install-codex-plugin.sh`: register the local marketplace, install the plugin, and expose the `gitwarp` launcher.
-- `scripts/verify-install.sh`: verify the installed plugin and run a real scan/start/context/handoff/board/statusline/finish smoke test.
+- `scripts/verify-install.sh`: verify the installed plugin and run a real enter/start/context/handoff/board/statusline/finish smoke test.
 - `python3 skills/gitwarp/scripts/install_cli.py`: install only the `gitwarp` launcher to `~/.local/bin`.
 - `gitwarp scan --cwd "$PWD"`: verify the installed CLI can inspect the current repository.
 - `codex plugin marketplace add "$PWD" --json`: register this checkout as a local Codex marketplace.
@@ -18,7 +18,7 @@
 Use Python standard library code for deterministic Git and JSON operations; avoid adding runtime dependencies unless the benefit is clear. Keep skill instructions concise and put fragile or repeatable operations in `scripts/`. Use lowercase hyphenated skill names, snake_case Python identifiers, and explicit JSON output for automation-facing commands.
 
 ## Testing Guidelines
-Behavior changes must include or update `tests/test_gitwarp.py`. Tests should create temporary Git repositories and exercise public CLI behavior such as `scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, `statusline`, and `collapse`. Always run both skill validation and unittest discovery before claiming the skill is ready.
+Behavior changes must include or update `tests/test_gitwarp.py`. Tests should create temporary Git repositories and exercise public CLI behavior such as `enter`, `scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, `statusline`, and `collapse`. Keep hook files and `plugins/gitwarp/` mirrors covered by structure tests. Always run both skill validation and unittest discovery before claiming the skill is ready.
 
 ## Commit & Pull Request Guidelines
 Use short, imperative Conventional Commit messages, for example `feat: add gitwarp skill` or `fix: reject branch collisions`. Pull requests should describe the skill behavior, mention installation impact, include verification commands, and show representative CLI JSON when command output changes.

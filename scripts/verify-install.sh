@@ -55,6 +55,17 @@ if [[ "$banner" != "GITWARP[main-repo]" && "$banner" != GITWARP\[*@*\] ]]; then
   exit 1
 fi
 
+repo_enter="$(gitwarp enter --cwd "$REPO_ROOT")"
+REPO_ENTER="$repo_enter" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["REPO_ENTER"])
+assert payload["ok"] is True
+assert payload["statusline"].startswith("GITWARP[")
+assert payload["location"] in {"main", "worktree"}
+PY
+
 tmpdir="$(mktemp -d)"
 cleanup() {
   rm -rf "$tmpdir"
@@ -67,6 +78,18 @@ git -C "$tmpdir" config user.email "verify@example.com"
 printf "hello\n" > "$tmpdir/README.md"
 git -C "$tmpdir" add README.md
 git -C "$tmpdir" commit -m init >/dev/null
+
+main_enter="$(gitwarp enter --cwd "$tmpdir")"
+MAIN_ENTER="$main_enter" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["MAIN_ENTER"])
+assert payload["ok"] is True
+assert payload["location"] == "main"
+assert payload["statusline"] == "GITWARP[main-repo]"
+assert any("gitwarp start" in item for item in payload["recommended_next"])
+PY
 
 scan_output="$(gitwarp scan --cwd "$tmpdir")"
 SCAN_OUTPUT="$scan_output" python3 - <<'PY'
@@ -125,6 +148,31 @@ assert payload["latest_progress"] == "Verified install smoke flow"
 assert payload["latest_lesson"] == "Dossier smoke test passed"
 PY
 
+enter_output="$(gitwarp enter --cwd "$nested_path")"
+ENTER_OUTPUT="$enter_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["ENTER_OUTPUT"])
+assert payload["ok"] is True
+assert payload["location"] == "worktree"
+assert payload["statusline"] == "GITWARP[verify-agent@feature/verify-install]"
+assert payload["worktree"]["branch"] == "feature/verify-install"
+assert "Verify GitWarp install" in payload["snippets"]["task"]
+assert "Verified install smoke flow" in payload["snippets"]["progress"]
+assert "Dossier smoke test passed" in payload["snippets"]["lessons"]
+PY
+
+enter_prompt="$(gitwarp enter --cwd "$nested_path" --format prompt)"
+if [[ "$enter_prompt" != *"GitWarp Context: GITWARP[verify-agent@feature/verify-install]"* ]]; then
+  echo "enter prompt did not include GitWarp context" >&2
+  exit 1
+fi
+if [[ "$enter_prompt" != *"task.md"* || "$enter_prompt" != *"progress.md"* || "$enter_prompt" != *"lessons.md"* ]]; then
+  echo "enter prompt did not include dossier paths" >&2
+  exit 1
+fi
+
 context_output="$(gitwarp context --cwd "$nested_path")"
 CONTEXT_OUTPUT="$context_output" python3 - <<'PY'
 import json
@@ -154,6 +202,40 @@ assert payload["ok"] is True
 row = next(item for item in payload["worktrees"] if item["branch"] == "feature/verify-install")
 assert row["latest_progress"] == "Verified install smoke flow"
 assert row["latest_lesson"] == "Dossier smoke test passed"
+PY
+
+board_status_output="$(gitwarp board --cwd "$tmpdir" --status verified)"
+BOARD_STATUS_OUTPUT="$board_status_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["BOARD_STATUS_OUTPUT"])
+assert payload["ok"] is True
+branches = {item["branch"] for item in payload["worktrees"]}
+assert branches == {"feature/verify-install"}
+PY
+
+board_stale_output="$(gitwarp board --cwd "$tmpdir" --stale 0)"
+BOARD_STALE_OUTPUT="$board_stale_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["BOARD_STALE_OUTPUT"])
+row = next(item for item in payload["worktrees"] if item["branch"] == "feature/verify-install")
+assert row["stale"] is True
+assert isinstance(row["age_seconds"], int)
+PY
+
+board_verbose_output="$(gitwarp board --cwd "$tmpdir" --verbose)"
+BOARD_VERBOSE_OUTPUT="$board_verbose_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["BOARD_VERBOSE_OUTPUT"])
+row = next(item for item in payload["worktrees"] if item["branch"] == "feature/verify-install")
+assert "Verify GitWarp install" in row["snippets"]["task"]
+assert "Verified install smoke flow" in row["snippets"]["progress"]
+assert "Dossier smoke test passed" in row["snippets"]["lessons"]
 PY
 
 table_output="$(gitwarp board --cwd "$tmpdir" --format table)"
@@ -199,7 +281,7 @@ print(
             "ok": True,
             "plugin": os.environ["PLUGIN_ID"],
             "cli": os.environ["CLI_PATH"],
-            "smoke": "scan-start-context-handoff-board-statusline-finish",
+            "smoke": "enter-start-context-handoff-board-statusline-finish",
         },
         separators=(",", ":"),
         sort_keys=True,

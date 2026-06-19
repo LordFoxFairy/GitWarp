@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -138,11 +137,17 @@ def parse_worktrees(ctx: RepoContext) -> list[dict[str, Any]]:
     return worktrees
 
 
-def sync_ledger(ctx: RepoContext, live_worktrees: list[dict[str, Any]]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def sync_ledger(
+    ctx: RepoContext,
+    live_worktrees: list[dict[str, Any]],
+    *,
+    persist: bool = True,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     ledger = load_ledger(ctx)
     live_paths = {item["path"] for item in live_worktrees}
     ledger["entries"] = [entry for entry in ledger["entries"] if entry.get("path") in live_paths]
-    write_ledger(ctx, ledger)
+    if persist:
+        write_ledger(ctx, ledger)
 
     metadata_by_path = {entry["path"]: entry for entry in ledger["entries"]}
     enriched: list[dict[str, Any]] = []
@@ -454,8 +459,27 @@ def record_handoff(
     return entry, paths
 
 
-def board_row(item: dict[str, Any]) -> dict[str, Any]:
-    return {
+def parse_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def age_seconds(item: dict[str, Any], now: datetime) -> int | None:
+    timestamp = parse_timestamp(item.get("updated_at") or item.get("created_at"))
+    if timestamp is None:
+        return None
+    return max(0, int((now - timestamp).total_seconds()))
+
+
+def board_row(item: dict[str, Any], *, verbose: bool = False) -> dict[str, Any]:
+    row = {
         "path": item["path"],
         "branch": item.get("branch"),
         "agent_id": item.get("agent_id"),
@@ -469,6 +493,43 @@ def board_row(item: dict[str, Any]) -> dict[str, Any]:
         "latest_progress": item.get("latest_progress"),
         "latest_lesson": item.get("latest_lesson"),
     }
+    if verbose:
+        row.update(
+            {
+                "created_at": item.get("created_at"),
+                "updated_at": item.get("updated_at"),
+                "snippets": {
+                    "task": read_snippet(item.get("task_md")),
+                    "progress": read_snippet(item.get("progress_md")),
+                    "lessons": read_snippet(item.get("lessons_md")),
+                },
+            }
+        )
+    return row
+
+
+def filter_board_rows(
+    rows: list[dict[str, Any]],
+    *,
+    status: str | None,
+    stale_hours: float | None,
+    now: datetime,
+) -> list[dict[str, Any]]:
+    filtered = rows
+    if status is not None:
+        filtered = [row for row in filtered if row.get("status") == status]
+    if stale_hours is not None:
+        cutoff = max(0, int(stale_hours * 3600))
+        stale_rows = []
+        for row in filtered:
+            age = age_seconds(row, now)
+            if age is None or age < cutoff:
+                continue
+            row["age_seconds"] = age
+            row["stale"] = True
+            stale_rows.append(row)
+        filtered = stale_rows
+    return filtered
 
 
 def print_board_table(rows: list[dict[str, Any]]) -> None:
@@ -487,6 +548,129 @@ def print_board_table(rows: list[dict[str, Any]]) -> None:
                 ]
             )
         )
+
+
+def statusline_banner(target: dict[str, Any] | None) -> str:
+    if target is None:
+        return "GITWARP[outside]"
+    if target.get("is_main"):
+        return "GITWARP[main-repo]"
+    agent_id = target.get("agent_id") or "unassigned"
+    branch = target.get("branch") or "detached"
+    return f"GITWARP[{agent_id}@{branch}]"
+
+
+def read_snippet(path: str | None, *, max_chars: int = 900) -> str | None:
+    if not path:
+        return None
+    target = Path(path)
+    if not target.exists():
+        return None
+    text = target.read_text(encoding="utf-8", errors="replace").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 4].rstrip() + "\n..."
+
+
+def enter_recommendations(ctx: RepoContext | None, cwd: Path, target: dict[str, Any] | None) -> list[str]:
+    if ctx is None:
+        return ["Open a Git repository or pass --cwd /absolute/path/to/repo."]
+    if target is None:
+        return [f"Move inside a live worktree for {ctx.repo_root} or run gitwarp scan --cwd \"{ctx.repo_root}\"."]
+    if target.get("is_main"):
+        return [
+            f"Run gitwarp start --cwd \"{ctx.repo_root}\" --agent-id <agent-id> --branch <branch> --purpose \"<purpose>\" before isolated work.",
+            f"Run gitwarp board --cwd \"{ctx.repo_root}\" to inspect active dimensions.",
+        ]
+    return [
+        "Read task.md, progress.md, and lessons.md before editing.",
+        f"Record milestones with gitwarp handoff --cwd \"{cwd}\" --status <status> --progress \"<summary>\".",
+        f"Finish with gitwarp finish --cwd \"{cwd}\" --status pushed --progress \"verified and pushed\" [--collapse].",
+    ]
+
+
+def build_enter_payload(cwd: Path) -> dict[str, Any]:
+    try:
+        ctx = discover_repo(cwd)
+    except GitWarpError:
+        return {
+            "ok": True,
+            "location": "outside",
+            "cwd": str(cwd),
+            "statusline": "GITWARP[outside]",
+            "recommended_next": enter_recommendations(None, cwd, None),
+        }
+
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx), persist=False)
+    target = find_worktree_for_cwd(cwd, worktrees)
+    if target is None:
+        return {
+            "ok": True,
+            "location": "outside-worktree",
+            "repo_root": str(ctx.repo_root),
+            "checkout_root": str(ctx.checkout_root),
+            "cwd": str(cwd),
+            "ledger_path": str(ctx.ledger_path),
+            "statusline": "GITWARP[outside]",
+            "recommended_next": enter_recommendations(ctx, cwd, None),
+        }
+
+    location = "main" if target.get("is_main") else "worktree"
+    snippets: dict[str, str | None] = {}
+    if location == "worktree":
+        snippets = {
+            "task": read_snippet(target.get("task_md")),
+            "progress": read_snippet(target.get("progress_md")),
+            "lessons": read_snippet(target.get("lessons_md")),
+        }
+
+    payload: dict[str, Any] = {
+        "ok": True,
+        "location": location,
+        "repo_root": str(ctx.repo_root),
+        "checkout_root": str(ctx.checkout_root),
+        "cwd": str(cwd),
+        "ledger_path": str(ctx.ledger_path),
+        "statusline": statusline_banner(target),
+        "worktree": target,
+        "recommended_next": enter_recommendations(ctx, cwd, target),
+    }
+    if snippets:
+        payload["snippets"] = snippets
+    return payload
+
+
+def format_enter_prompt(payload: dict[str, Any]) -> str:
+    lines = [
+        f"GitWarp Context: {payload['statusline']}",
+        f"Location: {payload['location']}",
+        f"CWD: {payload['cwd']}",
+    ]
+    worktree = payload.get("worktree")
+    if isinstance(worktree, dict):
+        lines.extend(
+            [
+                f"Branch: {worktree.get('branch') or 'detached'}",
+                f"Agent: {worktree.get('agent_id') or 'unassigned'}",
+                f"Purpose: {worktree.get('purpose') or 'unspecified'}",
+                f"Status: {worktree.get('status') or 'unknown'}",
+            ]
+        )
+        if not worktree.get("is_main"):
+            lines.extend(
+                [
+                    f"Task: {worktree.get('task_md') or 'missing'}",
+                    f"Progress: {worktree.get('progress_md') or 'missing'}",
+                    f"Lessons: {worktree.get('lessons_md') or 'missing'}",
+                    f"Latest progress: {worktree.get('latest_progress') or 'none'}",
+                    f"Latest lesson: {worktree.get('latest_lesson') or 'none'}",
+                ]
+            )
+    recommendations = payload.get("recommended_next") or []
+    if recommendations:
+        lines.append("Next:")
+        lines.extend(f"- {item}" for item in recommendations)
+    return "\n".join(lines)
 
 
 def cmd_scan(args: argparse.Namespace) -> None:
@@ -608,6 +792,14 @@ def cmd_context(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_enter(args: argparse.Namespace) -> None:
+    payload = build_enter_payload(resolve_path(args.cwd))
+    if args.format == "prompt":
+        print(format_enter_prompt(payload))
+        return
+    emit_json(payload)
+
+
 def cmd_annotate(args: argparse.Namespace) -> None:
     anchor = args.cwd or args.path
     cwd = resolve_path(anchor)
@@ -699,7 +891,13 @@ def cmd_handoff(args: argparse.Namespace) -> None:
 def cmd_board(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    rows = [board_row(item) for item in worktrees]
+    rows = [board_row(item, verbose=args.verbose or args.stale is not None) for item in worktrees]
+    rows = filter_board_rows(
+        rows,
+        status=args.status,
+        stale_hours=args.stale,
+        now=datetime.now(timezone.utc),
+    )
     if args.format == "table":
         print_board_table(rows)
         return
@@ -809,21 +1007,11 @@ def cmd_statusline(args: argparse.Namespace) -> None:
     try:
         ctx = discover_repo(cwd)
     except GitWarpError:
-        print("GITWARP[outside]")
+        print(statusline_banner(None))
         return
 
-    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    cwd_str = str(cwd)
-    for item in worktrees:
-        path = item["path"]
-        if item.get("is_main"):
-            continue
-        if cwd_str == path or cwd_str.startswith(path + os.sep):
-            agent_id = item.get("agent_id") or "unassigned"
-            branch = item.get("branch") or "detached"
-            print(f"GITWARP[{agent_id}@{branch}]")
-            return
-    print("GITWARP[main-repo]")
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx), persist=False)
+    print(statusline_banner(find_worktree_for_cwd(cwd, worktrees)))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -856,6 +1044,11 @@ def build_parser() -> argparse.ArgumentParser:
     context.add_argument("--cwd")
     context.set_defaults(func=cmd_context)
 
+    enter = subparsers.add_parser("enter", help="Print startup context and dossier pointers")
+    enter.add_argument("--cwd")
+    enter.add_argument("--format", choices=["json", "prompt"], default="json")
+    enter.set_defaults(func=cmd_enter)
+
     annotate = subparsers.add_parser("annotate", help="Append a progress note to a tracked worktree")
     annotate.add_argument("--cwd")
     annotate.add_argument("--path")
@@ -876,6 +1069,9 @@ def build_parser() -> argparse.ArgumentParser:
     board = subparsers.add_parser("board", help="List active GitWarp worktrees for humans or automation")
     board.add_argument("--cwd")
     board.add_argument("--format", choices=["json", "table"], default="json")
+    board.add_argument("--status", help="Only include worktrees with this GitWarp status")
+    board.add_argument("--stale", type=float, help="Only include worktrees unchanged for at least N hours")
+    board.add_argument("--verbose", action="store_true", help="Include timestamps and dossier snippets")
     board.set_defaults(func=cmd_board)
 
     finish = subparsers.add_parser("finish", help="Record final progress and optionally collapse a worktree")

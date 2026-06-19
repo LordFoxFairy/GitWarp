@@ -40,6 +40,17 @@ def run_gitwarp(repo: Path, *args: str, expect_ok: bool = True) -> dict[str, obj
     return payload
 
 
+def run_gitwarp_text(repo: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["python3", str(SCRIPT), *args],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
 class GitWarpTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
@@ -196,6 +207,60 @@ class GitWarpTests(unittest.TestCase):
         self.assertEqual(worktree["progress_md"], str(progress_md))  # type: ignore[index]
         self.assertEqual(worktree["lessons_md"], str(lessons_md))  # type: ignore[index]
 
+    def test_enter_reports_main_and_worktree_dossier_context(self) -> None:
+        main_enter = run_gitwarp(self.repo, "enter", "--cwd", str(self.repo))
+        self.assertEqual(main_enter["location"], "main")
+        self.assertEqual(main_enter["statusline"], "GITWARP[main-repo]")
+        self.assertIn("gitwarp start", " ".join(main_enter["recommended_next"]))  # type: ignore[arg-type]
+
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-enter",
+            "--branch",
+            "feature/enter-context",
+            "--purpose",
+            "Build automatic entry context",
+        )
+        worktree_path = Path(str(start["path"]))
+        nested_path = worktree_path / "packages" / "cli"
+        nested_path.mkdir(parents=True)
+
+        run_gitwarp(
+            self.repo,
+            "handoff",
+            "--cwd",
+            str(nested_path),
+            "--status",
+            "testing",
+            "--progress",
+            "Parser done",
+            "--lesson",
+            "Read dossier before edits",
+        )
+
+        enter = run_gitwarp(self.repo, "enter", "--cwd", str(nested_path))
+        self.assertEqual(enter["location"], "worktree")
+        self.assertEqual(enter["statusline"], "GITWARP[codex-enter@feature/enter-context]")
+        self.assertEqual(enter["cwd"], str(nested_path))
+        worktree = enter["worktree"]  # type: ignore[index]
+        snippets = enter["snippets"]  # type: ignore[index]
+        self.assertEqual(worktree["branch"], "feature/enter-context")  # type: ignore[index]
+        self.assertEqual(worktree["agent_id"], "codex-enter")  # type: ignore[index]
+        self.assertEqual(worktree["task_md"], start["task_md"])  # type: ignore[index]
+        self.assertIn("Build automatic entry context", snippets["task"])  # type: ignore[index]
+        self.assertIn("Parser done", snippets["progress"])  # type: ignore[index]
+        self.assertIn("Read dossier before edits", snippets["lessons"])  # type: ignore[index]
+        self.assertIn("gitwarp handoff", " ".join(enter["recommended_next"]))  # type: ignore[arg-type]
+
+        prompt = run_gitwarp_text(self.repo, "enter", "--cwd", str(nested_path), "--format", "prompt")
+        self.assertIn("GitWarp Context: GITWARP[codex-enter@feature/enter-context]", prompt)
+        self.assertIn("task.md", prompt)
+        self.assertIn("progress.md", prompt)
+        self.assertIn("lessons.md", prompt)
+        self.assertIn("Parser done", prompt)
+
     def test_handoff_board_and_finish_preserve_dossier(self) -> None:
         start = run_gitwarp(
             self.repo,
@@ -270,12 +335,74 @@ class GitWarpTests(unittest.TestCase):
         self.assertIn("Verified and pushed", progress_md.read_text(encoding="utf-8"))
         self.assertIn("Keep dossier after collapse", lessons_md.read_text(encoding="utf-8"))
 
+    def test_board_filters_status_stale_and_verbose_snippets(self) -> None:
+        testing = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-board",
+            "--branch",
+            "feature/board-testing",
+            "--purpose",
+            "Build board filtering",
+        )
+        blocked = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "claude-board",
+            "--branch",
+            "feature/board-blocked",
+            "--purpose",
+            "Investigate blocker visibility",
+        )
+
+        run_gitwarp(
+            self.repo,
+            "handoff",
+            "--cwd",
+            str(testing["path"]),
+            "--status",
+            "testing",
+            "--progress",
+            "Parser done",
+            "--lesson",
+            "Use board before dispatch",
+        )
+        run_gitwarp(
+            self.repo,
+            "handoff",
+            "--cwd",
+            str(blocked["path"]),
+            "--status",
+            "blocked",
+            "--progress",
+            "Waiting for dependency",
+        )
+
+        filtered = run_gitwarp(self.repo, "board", "--status", "testing")
+        filtered_branches = {row["branch"] for row in filtered["worktrees"]}  # type: ignore[index]
+        self.assertEqual(filtered_branches, {"feature/board-testing"})
+
+        stale = run_gitwarp(self.repo, "board", "--stale", "0")
+        stale_row = next(row for row in stale["worktrees"] if row["branch"] == "feature/board-testing")  # type: ignore[index]
+        self.assertEqual(stale_row["stale"], True)  # type: ignore[index]
+        self.assertIsInstance(stale_row["age_seconds"], int)  # type: ignore[index]
+
+        verbose = run_gitwarp(self.repo, "board", "--verbose")
+        verbose_row = next(row for row in verbose["worktrees"] if row["branch"] == "feature/board-testing")  # type: ignore[index]
+        snippets = verbose_row["snippets"]  # type: ignore[index]
+        self.assertIn("Build board filtering", snippets["task"])  # type: ignore[index]
+        self.assertIn("Parser done", snippets["progress"])  # type: ignore[index]
+        self.assertIn("Use board before dispatch", snippets["lessons"])  # type: ignore[index]
+
 
 class PluginStructureTests(unittest.TestCase):
     def test_codex_plugin_points_at_canonical_skill_and_hooks(self) -> None:
         plugin = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         marketplace = json.loads((REPO_ROOT / ".agents" / "plugins" / "api_marketplace.json").read_text(encoding="utf-8"))
         hooks = json.loads((REPO_ROOT / "hooks" / "hooks-codex.json").read_text(encoding="utf-8"))
+        session_hook = (REPO_ROOT / "hooks" / "session-start-codex").read_text(encoding="utf-8")
 
         self.assertEqual(plugin["name"], "gitwarp")
         self.assertEqual(plugin["skills"], "./skills/")
@@ -284,14 +411,19 @@ class PluginStructureTests(unittest.TestCase):
         self.assertEqual(marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
         self.assertIn("CODEX", marketplace["plugins"][0]["policy"]["products"])
         self.assertIn("SessionStart", hooks["hooks"])
+        self.assertIn("gitwarp enter --cwd", session_hook)
+        self.assertIn("gitwarp start", session_hook)
+        self.assertIn("gitwarp handoff", session_hook)
 
     def test_marketplace_plugin_package_matches_root_sources(self) -> None:
         relative_paths = [
             ".codex-plugin/plugin.json",
             ".claude-plugin/plugin.json",
             ".claude-plugin/marketplace.json",
+            "hooks/hooks.json",
             "hooks/hooks-codex.json",
             "hooks/run-hook.cmd",
+            "hooks/session-start",
             "hooks/session-start-codex",
             "skills/gitwarp/SKILL.md",
             "skills/gitwarp/agents/openai.yaml",

@@ -39,6 +39,7 @@ gitwarp scan --cwd "$PWD"
 ## CLI Usage
 
 ```bash
+gitwarp enter --cwd "$PWD"
 gitwarp scan --cwd /absolute/path/to/repo
 gitwarp start --cwd /absolute/path/to/repo \
   --agent-id codex-alpha \
@@ -50,6 +51,8 @@ gitwarp handoff --cwd "$PWD" \
   --progress "Implemented first passing test" \
   --lesson "Read context before editing nested paths"
 gitwarp board --cwd /absolute/path/to/repo --format table
+gitwarp board --cwd /absolute/path/to/repo --status blocked --verbose
+gitwarp board --cwd /absolute/path/to/repo --stale 4
 gitwarp statusline --cwd "$PWD"
 gitwarp finish --cwd "$PWD" \
   --status pushed \
@@ -57,9 +60,11 @@ gitwarp finish --cwd "$PWD" \
   --collapse
 ```
 
-`scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, and `collapse` emit strict one-line JSON by default. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`. `board --format table` is the human-readable exception.
+`enter`, `scan`, `start`, `summon`, `context`, `annotate`, `handoff`, `board`, `finish`, and `collapse` emit strict one-line JSON by default. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`. `enter --format prompt` and `board --format table` are the human-readable exceptions.
 
-Use `start` for new agent work because it creates the worktree plus `task.md`, `progress.md`, and `lessons.md` under `.gitwarp/dossiers/`. Use `context` when an agent needs to understand where it is and which dossier files to read. Use `handoff` after meaningful milestones so later agents can see progress and lessons through `context` or `board`. Low-level `summon`, `annotate`, and `collapse` remain available for scripts.
+Use `enter` at the start of a session. In the main repo it returns the main badge and a recommended `gitwarp start` command; inside a sandbox it returns the active agent, branch, dossier paths, and short task/progress/lesson snippets. The session hooks call `gitwarp enter --format prompt` automatically when supported, but they do not create a worktree for you.
+
+Use `start` for new isolated agent work because it creates the worktree plus `task.md`, `progress.md`, and `lessons.md` under `.gitwarp/dossiers/`. Use `context` for deeper machine-readable inspection. Use `handoff` after meaningful milestones so later agents can see progress and lessons through `enter`, `context`, or `board`. Low-level `summon`, `annotate`, and `collapse` remain available for scripts.
 
 ## Development Checks
 

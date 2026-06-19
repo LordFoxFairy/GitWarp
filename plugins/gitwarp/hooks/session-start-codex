@@ -3,8 +3,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+export PATH="${HOME}/.local/bin:${PATH:-}"
 
 python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/install_cli.py" >/dev/null 2>&1 || true
+
+gitwarp_context=""
+if [[ -f "${PLUGIN_ROOT}/skills/gitwarp/scripts/gitwarp.py" ]]; then
+  gitwarp_context="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/gitwarp.py" enter --cwd "$PWD" --format prompt 2>/dev/null || true)"
+elif command -v gitwarp >/dev/null 2>&1; then
+  gitwarp_context="$(gitwarp enter --cwd "$PWD" --format prompt 2>/dev/null || true)"
+fi
 
 escape_for_json() {
   local s="$1"
@@ -16,7 +24,15 @@ escape_for_json() {
   printf '%s' "$s"
 }
 
-context="GitWarp plugin is installed. Use the gitwarp skill when concurrent agent work needs isolated git worktrees. Prefer the installed gitwarp CLI command for scan, summon, collapse, and statusline operations."
+context="GitWarp plugin is installed.
+Agent protocol:
+1. Run gitwarp enter --cwd \"\$PWD\" before repository work.
+2. For isolated or concurrent writes, use gitwarp start instead of git checkout/git switch.
+3. In a worktree, read task.md, progress.md, and lessons.md before editing.
+4. Record milestones with gitwarp handoff and finish with gitwarp finish.
+
+Current context:
+${gitwarp_context:-GitWarp context unavailable. Run gitwarp enter --cwd \"\$PWD\" manually.}"
 context_escaped="$(escape_for_json "$context")"
 
 printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$context_escaped"
