@@ -1,9 +1,30 @@
 from __future__ import annotations
 
+import shutil
+
 from helpers import *
 
 
 class PluginStructureTests(unittest.TestCase):
+    def assert_directory_mirror(self, source: Path, target: Path) -> None:
+        source_files = {
+            path.relative_to(source)
+            for path in source.rglob("*")
+            if path.is_file() and "__pycache__" not in path.parts
+        }
+        target_files = {
+            path.relative_to(target)
+            for path in target.rglob("*")
+            if path.is_file() and "__pycache__" not in path.parts
+        }
+        self.assertEqual(source_files, target_files)
+        for relative_path in sorted(source_files):
+            with self.subTest(path=str(relative_path)):
+                self.assertEqual(
+                    (source / relative_path).read_text(encoding="utf-8"),
+                    (target / relative_path).read_text(encoding="utf-8"),
+                )
+
     def test_pyproject_declares_gitwarp_console_script(self) -> None:
         pyproject_path = REPO_ROOT / "pyproject.toml"
         content = pyproject_path.read_text(encoding="utf-8")
@@ -31,6 +52,24 @@ class PluginStructureTests(unittest.TestCase):
             text=True,
             check=True,
         )
+
+        self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
+
+    def test_plugin_src_package_matches_root_package(self) -> None:
+        self.assert_directory_mirror(REPO_ROOT / "src" / "gitwarp", REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp")
+
+    def test_plugin_wrapper_runs_from_installed_plugin_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            plugin_copy = Path(tempdir) / "gitwarp"
+            shutil.copytree(REPO_ROOT / "plugins" / "gitwarp", plugin_copy)
+
+            result = subprocess.run(
+                ["python3", str(plugin_copy / "skills" / "gitwarp" / "scripts" / "gitwarp.py"), "--version"],
+                cwd=str(plugin_copy),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
 
         self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
 
