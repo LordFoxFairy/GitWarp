@@ -146,6 +146,10 @@ def load_ledger(ctx: RepoContext) -> dict[str, Any]:
     return data
 
 
+def load_raw_ledger(ctx: RepoContext) -> dict[str, Any]:
+    return load_ledger(ctx)
+
+
 @contextmanager
 def ledger_write_lock(ctx: RepoContext, timeout: float = LOCK_TIMEOUT_SECONDS) -> Any:
     ctx.ledger_dir.mkdir(parents=True, exist_ok=True)
@@ -733,6 +737,73 @@ def filter_board_rows(
     return filtered
 
 
+def worktree_dirty(path: str) -> bool:
+    return bool(run_git(Path(path), "status", "--porcelain"))
+
+
+def branch_merged_into_main(ctx: RepoContext, branch: str | None) -> bool:
+    if not branch or branch == "main":
+        return False
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", branch, "main"],
+        cwd=str(ctx.repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def build_finding(
+    code: str,
+    severity: str,
+    message: str,
+    *,
+    item: dict[str, Any] | None = None,
+    path: str | None = None,
+    branch: str | None = None,
+    agent_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "code": code,
+        "severity": severity,
+        "message": message,
+        "path": path if path is not None else (item or {}).get("path"),
+        "branch": branch if branch is not None else (item or {}).get("branch"),
+        "agent_id": agent_id if agent_id is not None else (item or {}).get("agent_id"),
+    }
+
+
+def summarize_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    by_severity: dict[str, int] = {}
+    by_code: dict[str, int] = {}
+    for finding in findings:
+        by_severity[finding["severity"]] = by_severity.get(finding["severity"], 0) + 1
+        by_code[finding["code"]] = by_code.get(finding["code"], 0) + 1
+    return {"total": len(findings), "by_severity": by_severity, "by_code": by_code}
+
+
+def doctor_check(code: str, severity: str, message: str, **details: Any) -> dict[str, Any]:
+    finding = {"code": code, "severity": severity, "message": message}
+    if details:
+        finding["details"] = details
+    return finding
+
+
+def run_command_for_doctor(command: list[str], cwd: Path, timeout: float = 3.0) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
 def print_board_table(rows: list[dict[str, Any]]) -> None:
     headers = ["branch", "agent", "status", "purpose", "progress"]
     print(" | ".join(headers))
@@ -1087,6 +1158,86 @@ def cmd_dispatch(args: argparse.Namespace) -> None:
     )
 
 
+def guarded_worktree_root_contains(ctx: RepoContext, path: str) -> bool:
+    return path_contains(str(ctx.worktree_root), Path(path).resolve())
+
+
+def cmd_adopt(args: argparse.Namespace) -> None:
+    anchor = args.cwd or args.path
+    cwd = resolve_path(anchor)
+    ctx = discover_repo(cwd)
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    target = select_live_target(
+        worktrees=worktrees,
+        cwd=cwd,
+        path_arg=args.path,
+        branch_arg=None,
+    )
+    if target.get("is_main"):
+        raise GitWarpError("refusing to adopt the main repository checkout")
+    if target.get("detached") or not target.get("branch"):
+        raise GitWarpError("refusing to adopt a detached worktree")
+
+    target_path = target["path"]
+    target_branch = target.get("branch")
+    outside_guarded_root = not guarded_worktree_root_contains(ctx, target_path)
+    result: dict[str, Any] = {}
+
+    def update(ledger: dict[str, Any]) -> None:
+        same_path = next((item for item in ledger["entries"] if item.get("path") == target_path), None)
+        same_branch = next(
+            (item for item in ledger["entries"] if item.get("branch") == target_branch and item.get("path") != target_path),
+            None,
+        )
+        if same_branch is not None:
+            raise GitWarpError(f"branch '{target_branch}' is already tracked at {same_branch.get('path')}")
+        same_agent = next(
+            (item for item in ledger["entries"] if item.get("agent_id") == args.agent_id and item.get("path") != target_path),
+            None,
+        )
+        if same_agent is not None:
+            raise GitWarpError(f"agent '{args.agent_id}' is already assigned to {same_agent.get('path')}")
+
+        entry = same_path
+        if entry is None:
+            entry = {
+                "path": target_path,
+                "branch": target_branch,
+                "notes": [],
+                "created_at": now_iso(),
+            }
+            ledger["entries"].append(entry)
+        entry["path"] = target_path
+        entry["branch"] = target_branch
+        entry["agent_id"] = args.agent_id
+        entry["purpose"] = args.purpose
+        entry["status"] = "adopted"
+        entry["updated_at"] = now_iso()
+        entry["latest_progress"] = "Worktree adopted."
+        paths = ensure_dossier_for_entry(ctx, entry, target)
+        result["entry"] = dict(entry)
+        result["paths"] = dict(paths)
+
+    mutate_ledger(ctx, update)
+    entry = result["entry"]
+    paths = result["paths"]
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "path": target_path,
+            "branch": target_branch,
+            "head": target.get("head"),
+            "agent_id": entry.get("agent_id"),
+            "purpose": entry.get("purpose"),
+            "status": entry.get("status"),
+            "outside_guarded_root": outside_guarded_root,
+            **paths,
+        }
+    )
+
+
 def cmd_context(args: argparse.Namespace) -> None:
     cwd = resolve_path(args.cwd)
     ctx = discover_repo(cwd)
@@ -1226,6 +1377,221 @@ def cmd_board(args: argparse.Namespace) -> None:
             "repo_root": str(ctx.repo_root),
             "ledger_path": str(ctx.ledger_path),
             "worktrees": rows,
+        }
+    )
+
+
+def cmd_reconcile(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    ledger = load_raw_ledger(ctx)
+    live_worktrees = parse_worktrees(ctx)
+    live_by_path = {item["path"]: item for item in live_worktrees}
+    ledger_by_path = {entry.get("path"): entry for entry in ledger["entries"] if entry.get("path")}
+    now = datetime.now(timezone.utc)
+    findings: list[dict[str, Any]] = []
+
+    for entry in ledger["entries"]:
+        entry_path = entry.get("path")
+        if entry_path and entry_path not in live_by_path:
+            findings.append(
+                build_finding(
+                    "stale_ledger_entry",
+                    "warning",
+                    "Ledger entry points to a missing live worktree.",
+                    item=entry,
+                )
+            )
+        for key in ("task_md", "progress_md", "lessons_md"):
+            value = entry.get(key)
+            if value and not Path(value).exists():
+                findings.append(
+                    build_finding(
+                        "missing_dossier_file",
+                        "warning",
+                        f"Tracked dossier file is missing: {key}.",
+                        item=entry,
+                    )
+                )
+        status = entry.get("status")
+        if status in {"blocked", "dispatch_failed", "merged"}:
+            findings.append(
+                build_finding(
+                    "attention_status",
+                    "warning",
+                    f"Worktree has attention status: {status}.",
+                    item=entry,
+                )
+            )
+        if args.stale is not None:
+            age = age_seconds(entry, now)
+            if age is not None and age >= max(0, int(args.stale * 3600)):
+                findings.append(
+                    build_finding(
+                        "stale_worktree",
+                        "warning",
+                        f"Worktree ledger has not changed for {age} seconds.",
+                        item=entry,
+                    )
+                )
+
+    for item in live_worktrees:
+        if item.get("is_main"):
+            continue
+        if item["path"] not in ledger_by_path:
+            findings.append(
+                build_finding(
+                    "untracked_worktree",
+                    "warning",
+                    "Live non-main worktree is missing from the GitWarp ledger.",
+                    item=item,
+                )
+            )
+        if worktree_dirty(item["path"]):
+            findings.append(
+                build_finding(
+                    "dirty_worktree",
+                    "warning",
+                    "Live worktree has uncommitted or untracked changes.",
+                    item=ledger_by_path.get(item["path"], item),
+                )
+            )
+        if branch_merged_into_main(ctx, item.get("branch")):
+            findings.append(
+                build_finding(
+                    "merged_head",
+                    "warning",
+                    "Worktree branch HEAD is already merged into main.",
+                    item=ledger_by_path.get(item["path"], item),
+                )
+            )
+
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "findings": findings,
+            "summary": summarize_findings(findings),
+        }
+    )
+
+
+def cmd_doctor(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    findings: list[dict[str, Any]] = []
+
+    git_path = shutil.which("git")
+    findings.append(
+        doctor_check(
+            "git",
+            "ok" if git_path else "error",
+            "git is available." if git_path else "git is not available on PATH.",
+            path=git_path,
+        )
+    )
+    python_path = shutil.which("python3")
+    findings.append(
+        doctor_check(
+            "python3",
+            "ok" if python_path else "error",
+            "python3 is available." if python_path else "python3 is not available on PATH.",
+            path=python_path,
+        )
+    )
+    launcher_path = shutil.which("gitwarp")
+    launcher_severity = "warning"
+    launcher_message = "gitwarp launcher is not available on PATH."
+    launcher_details: dict[str, Any] = {"path": launcher_path}
+    if launcher_path:
+        version = run_command_for_doctor([launcher_path, "--version"], ctx.repo_root)
+        if version and version.returncode == 0:
+            launcher_severity = "ok"
+            launcher_message = "gitwarp launcher is available."
+            launcher_details["version"] = version.stdout.strip()
+        else:
+            launcher_severity = "error"
+            launcher_message = "gitwarp launcher exists but --version failed."
+    findings.append(doctor_check("gitwarp_launcher", launcher_severity, launcher_message, **launcher_details))
+
+    ignored = subprocess.run(
+        ["git", "check-ignore", "-q", ".gitwarp"],
+        cwd=str(ctx.repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    findings.append(
+        doctor_check(
+            "gitwarp_ignored",
+            "ok" if ignored.returncode == 0 else "warning",
+            ".gitwarp is ignored." if ignored.returncode == 0 else ".gitwarp is not ignored by this repository.",
+        )
+    )
+
+    try:
+        registry = load_agent_registry(ctx)
+        for agent in registry["agents"]:
+            findings.append(
+                doctor_check(
+                    "agent_binary",
+                    "ok" if agent["available"] else "warning",
+                    f"Agent binary for '{agent['name']}' is {'available' if agent['available'] else 'not available'}.",
+                    agent=agent["name"],
+                    command=agent["command"][0],
+                )
+            )
+    except GitWarpError as exc:
+        findings.append(doctor_check("agent_config", "error", str(exc), path=str(ctx.agents_path)))
+
+    codex_path = shutil.which("codex")
+    if codex_path:
+        result = run_command_for_doctor(["codex", "plugin", "list", "--json"], ctx.repo_root, timeout=5.0)
+        enabled = False
+        if result and result.returncode == 0:
+            raw = result.stdout
+            start = raw.find("{")
+            if start >= 0:
+                try:
+                    payload = json.loads(raw[start:])
+                    enabled = any(
+                        item.get("pluginId") == "gitwarp@gitwarp-dev" and item.get("enabled") is True
+                        for item in payload.get("installed", [])
+                    )
+                except json.JSONDecodeError:
+                    enabled = False
+        findings.append(
+            doctor_check(
+                "codex_plugin_metadata",
+                "ok" if enabled else "warning",
+                "Codex GitWarp plugin is installed and enabled." if enabled else "Codex is available but GitWarp plugin metadata was not confirmed.",
+                codex=codex_path,
+            )
+        )
+    else:
+        findings.append(doctor_check("codex_plugin_metadata", "warning", "codex is not available on PATH."))
+
+    hook_path = ctx.repo_root / "hooks" / "session-start-codex"
+    if hook_path.exists() and os.access(hook_path, os.X_OK):
+        result = run_command_for_doctor([str(hook_path)], ctx.repo_root, timeout=5.0)
+        hook_ok = bool(result and result.returncode == 0 and "GitWarp Context:" in result.stdout)
+        findings.append(
+            doctor_check(
+                "session_hook_context",
+                "ok" if hook_ok else "warning",
+                "Session hook produced a GitWarp Context block." if hook_ok else "Session hook did not produce a GitWarp Context block.",
+                path=str(hook_path),
+            )
+        )
+    else:
+        findings.append(doctor_check("session_hook_context", "warning", "Session hook script is not present or executable.", path=str(hook_path)))
+
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "findings": findings,
+            "summary": summarize_findings(findings),
         }
     )
 
@@ -1375,6 +1741,13 @@ def build_parser() -> argparse.ArgumentParser:
     dispatch.add_argument("--command-mode", choices=["print", "execute"], default="print")
     dispatch.set_defaults(func=cmd_dispatch)
 
+    adopt = subparsers.add_parser("adopt", help="Bind an existing non-main worktree to GitWarp metadata")
+    adopt.add_argument("--cwd")
+    adopt.add_argument("--path")
+    adopt.add_argument("--agent-id", required=True)
+    adopt.add_argument("--purpose", required=True)
+    adopt.set_defaults(func=cmd_adopt)
+
     context = subparsers.add_parser("context", help="Print JSON context for the current worktree")
     context.add_argument("--cwd")
     context.set_defaults(func=cmd_context)
@@ -1408,6 +1781,15 @@ def build_parser() -> argparse.ArgumentParser:
     board.add_argument("--stale", type=float, help="Only include worktrees unchanged for at least N hours")
     board.add_argument("--verbose", action="store_true", help="Include timestamps and dossier snippets")
     board.set_defaults(func=cmd_board)
+
+    reconcile = subparsers.add_parser("reconcile", help="Audit live Git worktrees against GitWarp ledger and dossiers")
+    reconcile.add_argument("--cwd")
+    reconcile.add_argument("--stale", type=float)
+    reconcile.set_defaults(func=cmd_reconcile)
+
+    doctor = subparsers.add_parser("doctor", help="Audit local GitWarp CLI, plugin, hook, and agent setup")
+    doctor.add_argument("--cwd")
+    doctor.set_defaults(func=cmd_doctor)
 
     finish = subparsers.add_parser("finish", help="Record final progress and optionally collapse a worktree")
     finish.add_argument("--cwd")

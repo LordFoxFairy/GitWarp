@@ -579,6 +579,200 @@ class GitWarpTests(unittest.TestCase):
             {item["branch"] for item in scan["worktrees"]},  # type: ignore[index]
         )
 
+    def test_adopt_binds_existing_worktree_and_repairs_dossier(self) -> None:
+        manual_path = self.repo / "manual-worktree"
+        run_git(self.repo, "worktree", "add", "-b", "feature/manual-adopt", str(manual_path), "HEAD")
+
+        adopt = run_gitwarp(
+            self.repo,
+            "adopt",
+            "--cwd",
+            str(self.repo),
+            "--path",
+            str(manual_path),
+            "--agent-id",
+            "claude-existing",
+            "--purpose",
+            "Continue existing work",
+        )
+        self.assertEqual(adopt["status"], "adopted")
+        self.assertEqual(adopt["branch"], "feature/manual-adopt")
+        self.assertEqual(adopt["agent_id"], "claude-existing")
+        self.assertEqual(adopt["outside_guarded_root"], True)
+        self.assertTrue(Path(str(adopt["task_md"])).exists())
+        self.assertTrue(Path(str(adopt["progress_md"])).exists())
+        self.assertTrue(Path(str(adopt["lessons_md"])).exists())
+
+        context = run_gitwarp(self.repo, "context", "--cwd", str(manual_path))
+        worktree = context["worktree"]  # type: ignore[index]
+        self.assertEqual(worktree["status"], "adopted")  # type: ignore[index]
+        self.assertEqual(worktree["purpose"], "Continue existing work")  # type: ignore[index]
+
+        main_refusal = run_gitwarp(
+            self.repo,
+            "adopt",
+            "--cwd",
+            str(self.repo),
+            "--path",
+            str(self.repo),
+            "--agent-id",
+            "bad-main",
+            "--purpose",
+            "Should fail",
+            expect_ok=False,
+        )
+        self.assertIn("main", str(main_refusal["error"]))
+
+        run_git(self.repo, "worktree", "add", "-b", "feature/manual-second", str(self.repo / "manual-second"), "HEAD")
+        duplicate_agent = run_gitwarp(
+            self.repo,
+            "adopt",
+            "--cwd",
+            str(self.repo),
+            "--path",
+            str(self.repo / "manual-second"),
+            "--agent-id",
+            "claude-existing",
+            "--purpose",
+            "Should fail duplicate agent",
+            expect_ok=False,
+        )
+        self.assertIn("agent", str(duplicate_agent["error"]))
+
+        updated_same_path = run_gitwarp(
+            self.repo,
+            "adopt",
+            "--cwd",
+            str(self.repo),
+            "--path",
+            str(manual_path),
+            "--agent-id",
+            "other-agent",
+            "--purpose",
+            "Update same worktree ownership",
+        )
+        self.assertEqual(updated_same_path["agent_id"], "other-agent")
+        self.assertEqual(updated_same_path["path"], str(manual_path.resolve()))
+
+        detached_path = self.repo / "manual-detached"
+        run_git(self.repo, "worktree", "add", "--detach", str(detached_path), "HEAD")
+        detached = run_gitwarp(
+            self.repo,
+            "adopt",
+            "--cwd",
+            str(self.repo),
+            "--path",
+            str(detached_path),
+            "--agent-id",
+            "detached-agent",
+            "--purpose",
+            "Should fail detached",
+            expect_ok=False,
+        )
+        self.assertIn("detached", str(detached["error"]))
+
+    def test_reconcile_reports_findings_without_mutating_ledger(self) -> None:
+        tracked = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-reconcile",
+            "--branch",
+            "feature/reconcile-tracked",
+            "--purpose",
+            "Track reconcile findings",
+        )
+        tracked_path = Path(str(tracked["path"]))
+        (tracked_path / "dirty.txt").write_text("dirty\n", encoding="utf-8")
+        run_gitwarp(
+            self.repo,
+            "handoff",
+            "--cwd",
+            str(tracked_path),
+            "--status",
+            "blocked",
+            "--progress",
+            "Waiting on input",
+        )
+        Path(str(tracked["lessons_md"])).unlink()
+
+        untracked_path = self.repo / "manual-untracked"
+        run_git(self.repo, "worktree", "add", "-b", "feature/manual-untracked", str(untracked_path), "HEAD")
+
+        merged_path = self.repo / "manual-merged"
+        run_git(self.repo, "worktree", "add", "-b", "feature/already-merged", str(merged_path), "HEAD")
+
+        ledger_path = self.repo / ".gitwarp" / "ledger.json"
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        ledger["entries"].append(
+            {
+                "path": str(self.repo / "missing-worktree"),
+                "branch": "feature/missing-worktree",
+                "agent_id": "missing-agent",
+                "purpose": "Missing worktree",
+                "status": "dispatch_failed",
+                "notes": [],
+                "created_at": "2000-01-01T00:00:00+00:00",
+                "updated_at": "2000-01-01T00:00:00+00:00",
+            }
+        )
+        ledger["entries"].append(
+            {
+                "path": str(merged_path.resolve()),
+                "branch": "feature/already-merged",
+                "agent_id": "merged-agent",
+                "purpose": "Already merged",
+                "status": "merged",
+                "notes": [],
+                "created_at": "2000-01-01T00:00:00+00:00",
+                "updated_at": "2000-01-01T00:00:00+00:00",
+            }
+        )
+        ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        before = ledger_path.read_bytes()
+
+        reconcile = run_gitwarp(self.repo, "reconcile", "--cwd", str(self.repo), "--stale", "0")
+        after = ledger_path.read_bytes()
+        self.assertEqual(before, after)
+        codes = {finding["code"] for finding in reconcile["findings"]}  # type: ignore[index]
+        self.assertIn("stale_ledger_entry", codes)
+        self.assertIn("untracked_worktree", codes)
+        self.assertIn("missing_dossier_file", codes)
+        self.assertIn("dirty_worktree", codes)
+        self.assertIn("attention_status", codes)
+        self.assertIn("stale_worktree", codes)
+        self.assertIn("merged_head", codes)
+        self.assertGreaterEqual(reconcile["summary"]["total"], 7)  # type: ignore[index]
+
+    def test_doctor_reports_environment_without_mutation(self) -> None:
+        run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-doctor",
+            "--branch",
+            "feature/doctor",
+            "--purpose",
+            "Doctor environment",
+        )
+        ledger_path = self.repo / ".gitwarp" / "ledger.json"
+        before = ledger_path.read_bytes()
+
+        doctor = run_gitwarp(self.repo, "doctor", "--cwd", str(self.repo))
+        after = ledger_path.read_bytes()
+        self.assertEqual(before, after)
+        findings = doctor["findings"]  # type: ignore[index]
+        codes = {finding["code"] for finding in findings}
+        severities = {finding["severity"] for finding in findings}
+        self.assertIn("git", codes)
+        self.assertIn("python3", codes)
+        self.assertIn("gitwarp_launcher", codes)
+        self.assertIn("gitwarp_ignored", codes)
+        self.assertIn("codex_plugin_metadata", codes)
+        self.assertIn("session_hook_context", codes)
+        self.assertLessEqual(severities, {"ok", "warning", "error"})
+        self.assertEqual(doctor["summary"]["total"], len(findings))  # type: ignore[index]
+
 
 class PluginStructureTests(unittest.TestCase):
     def test_codex_plugin_points_at_canonical_skill_and_hooks(self) -> None:
