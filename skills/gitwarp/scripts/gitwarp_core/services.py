@@ -9,7 +9,7 @@ from .foundation import GitWarpError, RepoContext, resolve_path
 from .ledger import default_ledger, discover_repo, normalize_ledger_schema
 from .reconcile import build_reconcile_payload
 from .reporting import board_row, statusline_banner
-from .worktrees import find_worktree_for_cwd, parse_worktrees
+from .worktrees import build_head_drift, find_worktree_for_cwd, parse_worktrees
 
 
 def safe_load_ledger_for_web(ctx: RepoContext) -> tuple[dict[str, Any], str | None]:
@@ -31,28 +31,32 @@ def sync_ledger_for_web(
     enriched: list[dict[str, Any]] = []
     for item in live_worktrees:
         meta = metadata_by_path.get(item["path"], {})
-        enriched.append(
-            {
-                "path": item["path"],
-                "head": item["head"],
-                "branch": item.get("branch"),
-                "detached": item.get("detached", False),
-                "is_main": item.get("is_main", False),
-                "agent_id": meta.get("agent_id"),
-                "purpose": meta.get("purpose"),
-                "status": meta.get("status"),
-                "notes": meta.get("notes", []),
-                "dossier_path": meta.get("dossier_path"),
-                "task_md": meta.get("task_md"),
-                "progress_md": meta.get("progress_md"),
-                "lessons_md": meta.get("lessons_md"),
-                "latest_progress": meta.get("latest_progress"),
-                "latest_lesson": meta.get("latest_lesson"),
-                "created_at": meta.get("created_at"),
-                "updated_at": meta.get("updated_at"),
-                "dispatch": meta.get("dispatch"),
-            }
-        )
+        last_seen_head = meta.get("last_seen_head")
+        enriched_item = {
+            "path": item["path"],
+            "head": item["head"],
+            "branch": item.get("branch"),
+            "detached": item.get("detached", False),
+            "is_main": item.get("is_main", False),
+            "agent_id": meta.get("agent_id"),
+            "purpose": meta.get("purpose"),
+            "status": meta.get("status"),
+            "notes": meta.get("notes", []),
+            "dossier_path": meta.get("dossier_path"),
+            "task_md": meta.get("task_md"),
+            "progress_md": meta.get("progress_md"),
+            "lessons_md": meta.get("lessons_md"),
+            "latest_progress": meta.get("latest_progress"),
+            "latest_lesson": meta.get("latest_lesson"),
+            "last_seen_head": last_seen_head,
+            "created_at": meta.get("created_at"),
+            "updated_at": meta.get("updated_at"),
+            "dispatch": meta.get("dispatch"),
+        }
+        head_drift = build_head_drift(last_seen_head, item.get("head"))
+        if head_drift is not None:
+            enriched_item["head_drift"] = head_drift
+        enriched.append(enriched_item)
     return ledger, enriched, ledger_error
 
 

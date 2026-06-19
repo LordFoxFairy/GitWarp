@@ -30,6 +30,18 @@ def build_reconcile_payload(ctx: RepoContext, *, stale_hours: float | None = Non
                     item=entry,
                 )
             )
+        if entry_path and entry_path in live_by_path:
+            last_seen_head = entry.get("last_seen_head")
+            current_head = live_by_path[entry_path].get("head")
+            if last_seen_head and current_head and last_seen_head != current_head:
+                findings.append(
+                    build_finding(
+                        "head_drift",
+                        "warning",
+                        "Worktree HEAD differs from the last GitWarp-recorded handoff point.",
+                        item=entry,
+                    )
+                )
         for key in ("task_md", "progress_md", "lessons_md"):
             value = entry.get(key)
             if value and not Path(value).exists():

@@ -121,6 +121,7 @@ def ledger_entry_for_target(ledger: dict[str, Any], target: dict[str, Any]) -> d
         "purpose": None,
         "status": None,
         "notes": [],
+        "last_seen_head": target.get("head"),
         "created_at": now_iso(),
     }
     ledger["entries"].append(entry)
@@ -179,6 +180,7 @@ def record_handoff(
         entry["status"] = status
         entry["updated_at"] = timestamp
         entry["latest_progress"] = progress
+        entry["last_seen_head"] = target.get("head")
         if lesson:
             entry["latest_lesson"] = lesson
         entry.setdefault("notes", [])

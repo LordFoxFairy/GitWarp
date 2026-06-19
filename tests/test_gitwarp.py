@@ -442,6 +442,52 @@ class GitWarpTests(unittest.TestCase):
         self.assertIn("Verified and pushed", progress_md.read_text(encoding="utf-8"))
         self.assertIn("Keep dossier after collapse", lessons_md.read_text(encoding="utf-8"))
 
+    def test_pause_and_resume_record_blocked_and_active_handoffs(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-pause",
+            "--branch",
+            "feature/pause-resume",
+            "--purpose",
+            "Handle blocked work",
+        )
+        worktree_path = Path(str(start["path"]))
+        progress_md = Path(str(start["progress_md"]))
+        lessons_md = Path(str(start["lessons_md"]))
+
+        pause = run_gitwarp(
+            self.repo,
+            "pause",
+            "--cwd",
+            str(worktree_path),
+            "--reason",
+            "Waiting for human credentials",
+            "--lesson",
+            "Do not retry deployment without credentials",
+        )
+        self.assertEqual(pause["status"], "blocked")
+        self.assertEqual(pause["latest_progress"], "Waiting for human credentials")
+        self.assertEqual(pause["latest_lesson"], "Do not retry deployment without credentials")
+
+        resume = run_gitwarp(
+            self.repo,
+            "resume",
+            "--cwd",
+            str(worktree_path),
+            "--progress",
+            "Credentials configured; continuing implementation",
+        )
+        self.assertEqual(resume["status"], "active")
+        self.assertEqual(resume["latest_progress"], "Credentials configured; continuing implementation")
+
+        context = run_gitwarp(self.repo, "context", "--cwd", str(worktree_path))
+        self.assertEqual(context["worktree"]["status"], "active")  # type: ignore[index]
+        self.assertIn("Waiting for human credentials", progress_md.read_text(encoding="utf-8"))
+        self.assertIn("Credentials configured", progress_md.read_text(encoding="utf-8"))
+        self.assertIn("Do not retry deployment without credentials", lessons_md.read_text(encoding="utf-8"))
+
     def test_board_filters_status_stale_and_verbose_snippets(self) -> None:
         testing = run_gitwarp(
             self.repo,
@@ -882,6 +928,97 @@ class GitWarpTests(unittest.TestCase):
         self.assertIn("stale_worktree", codes)
         self.assertIn("merged_head", codes)
         self.assertGreaterEqual(reconcile["summary"]["total"], 7)  # type: ignore[index]
+
+    def test_reconcile_and_enter_report_head_drift_without_mutation(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-drift",
+            "--branch",
+            "feature/head-drift",
+            "--purpose",
+            "Detect unmanaged commits",
+        )
+        worktree_path = Path(str(start["path"]))
+        recorded_head = str(start["head"])
+
+        (worktree_path / "drift.txt").write_text("manual commit\n", encoding="utf-8")
+        run_git(worktree_path, "add", "drift.txt")
+        run_git(worktree_path, "commit", "-m", "manual drift")
+        current_head = run_git(worktree_path, "rev-parse", "HEAD")
+        self.assertNotEqual(recorded_head, current_head)
+
+        ledger_path = self.repo / ".gitwarp" / "ledger.json"
+        before = ledger_path.read_bytes()
+        reconcile = run_gitwarp(self.repo, "reconcile", "--cwd", str(self.repo))
+        enter = run_gitwarp(self.repo, "enter", "--cwd", str(worktree_path))
+        after = ledger_path.read_bytes()
+
+        self.assertEqual(before, after)
+        drift_findings = findings_with_code(reconcile, "head_drift")
+        self.assertEqual(len(drift_findings), 1)
+        self.assertEqual(drift_findings[0]["branch"], "feature/head-drift")
+        drift = enter["worktree"]["head_drift"]  # type: ignore[index]
+        self.assertTrue(drift["drifted"])  # type: ignore[index]
+        self.assertEqual(drift["last_seen_head"], recorded_head)  # type: ignore[index]
+        self.assertEqual(drift["current_head"], current_head)  # type: ignore[index]
+
+    def test_head_drift_is_absent_for_healthy_worktree(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-no-drift",
+            "--branch",
+            "feature/no-head-drift",
+            "--purpose",
+            "Verify healthy drift output",
+        )
+        worktree_path = Path(str(start["path"]))
+
+        enter = run_gitwarp(self.repo, "enter", "--cwd", str(worktree_path))
+        board = run_gitwarp(self.repo, "board", "--cwd", str(self.repo), "--verbose")
+
+        self.assertNotIn("head_drift", enter["worktree"])  # type: ignore[operator]
+        row = next(item for item in board["worktrees"] if item["branch"] == "feature/no-head-drift")  # type: ignore[index]
+        self.assertNotIn("head_drift", row)
+
+    def test_annotate_does_not_clear_head_drift(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-annotate-drift",
+            "--branch",
+            "feature/annotate-head-drift",
+            "--purpose",
+            "Verify annotate does not acknowledge commits",
+        )
+        worktree_path = Path(str(start["path"]))
+        recorded_head = str(start["head"])
+
+        (worktree_path / "annotate-drift.txt").write_text("manual commit\n", encoding="utf-8")
+        run_git(worktree_path, "add", "annotate-drift.txt")
+        run_git(worktree_path, "commit", "-m", "manual annotate drift")
+        current_head = run_git(worktree_path, "rev-parse", "HEAD")
+
+        run_gitwarp(
+            self.repo,
+            "annotate",
+            "--cwd",
+            str(worktree_path),
+            "--note",
+            "Observed manual commit",
+        )
+        reconcile = run_gitwarp(self.repo, "reconcile", "--cwd", str(self.repo))
+        enter = run_gitwarp(self.repo, "enter", "--cwd", str(worktree_path))
+
+        drift_findings = findings_with_code(reconcile, "head_drift")
+        self.assertEqual(len(drift_findings), 1)
+        drift = enter["worktree"]["head_drift"]  # type: ignore[index]
+        self.assertEqual(drift["last_seen_head"], recorded_head)  # type: ignore[index]
+        self.assertEqual(drift["current_head"], current_head)  # type: ignore[index]
 
     def test_doctor_reports_environment_without_mutation(self) -> None:
         run_gitwarp(

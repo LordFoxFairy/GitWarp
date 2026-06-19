@@ -9,6 +9,8 @@ The project follows the common Agent Skills layout: `SKILL.md` contains the agen
 - Prevent branch collisions by refusing to allocate a branch already bound to a worktree.
 - Keep the main checkout stable; agents do not run `git switch` in the public repo.
 - Give every isolated workspace a task dossier for handoff and memory.
+- Detect unmanaged worktree commits with non-mutating `head_drift` audit findings.
+- Mark blocked work with `pause` and resume cleanly with `resume`.
 - Emit strict one-line JSON for automation and a raw `statusline` banner for prompts.
 - Support both standard skill discovery and Codex plugin installation.
 
@@ -85,6 +87,17 @@ gitwarp handoff --cwd "$PWD" \
   --lesson "Read dossier before editing nested paths"
 ```
 
+If work is blocked waiting for a human or external dependency:
+
+```bash
+gitwarp pause --cwd "$PWD" \
+  --reason "Waiting for credentials" \
+  --lesson "Do not retry deployment without credentials"
+
+gitwarp resume --cwd "$PWD" \
+  --progress "Credentials configured; continuing"
+```
+
 When the task is verified and pushed:
 
 ```bash
@@ -106,7 +119,7 @@ gitwarp reconcile --cwd "$PWD" --stale 4
 gitwarp doctor --cwd "$PWD"
 ```
 
-`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, and merged branches without mutating state. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries.
+`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries.
 
 ### Automated Agent
 

@@ -43,7 +43,10 @@ def board_row(item: dict[str, Any], *, verbose: bool = False) -> dict[str, Any]:
         "lessons_md": item.get("lessons_md"),
         "latest_progress": item.get("latest_progress"),
         "latest_lesson": item.get("latest_lesson"),
+        "last_seen_head": item.get("last_seen_head"),
     }
+    if item.get("head_drift") is not None:
+        row["head_drift"] = item["head_drift"]
     if verbose:
         row.update(
             {

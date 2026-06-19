@@ -156,6 +156,7 @@ def cmd_summon(args: argparse.Namespace) -> None:
         "purpose": args.purpose,
         "status": "active",
         "notes": [],
+        "last_seen_head": head,
         "created_at": now_iso(),
     }
 
@@ -196,6 +197,7 @@ def cmd_start(args: argparse.Namespace) -> None:
         "status": "active",
         "notes": [],
         "latest_progress": "Workspace created.",
+        "last_seen_head": head,
         "created_at": created_at,
         **dossier,
     }
@@ -227,6 +229,7 @@ def cmd_start(args: argparse.Namespace) -> None:
             "purpose": args.purpose,
             "status": "active",
             "branch_created": not existing_branch,
+            "last_seen_head": head,
             "latest_progress": "Workspace created.",
             **dossier,
         }
@@ -283,6 +286,7 @@ def cmd_dispatch(args: argparse.Namespace) -> None:
         "status": "dispatched",
         "notes": [],
         "latest_progress": "Dispatch command prepared.",
+        "last_seen_head": head,
         "created_at": created_at,
         "updated_at": created_at,
         "dispatch": dispatch_meta,
@@ -318,6 +322,7 @@ def cmd_dispatch(args: argparse.Namespace) -> None:
             "purpose": args.purpose,
             "status": "dispatched",
             "branch_created": not existing_branch,
+            "last_seen_head": head,
             "launch_command": launch_command,
             "launch_preview": launch_preview,
             **dossier,
@@ -377,6 +382,7 @@ def cmd_adopt(args: argparse.Namespace) -> None:
         entry["status"] = "adopted"
         entry["updated_at"] = now_iso()
         entry["latest_progress"] = "Worktree adopted."
+        entry["last_seen_head"] = target.get("head")
         paths = ensure_dossier_for_entry(ctx, entry, target)
         result["entry"] = dict(entry)
         result["paths"] = dict(paths)
@@ -501,6 +507,76 @@ def cmd_handoff(args: argparse.Namespace) -> None:
         ctx,
         target,
         status=args.status,
+        progress=args.progress,
+        lesson=args.lesson,
+    )
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "path": target["path"],
+            "branch": target.get("branch"),
+            "agent_id": entry.get("agent_id"),
+            "purpose": entry.get("purpose"),
+            "status": entry.get("status"),
+            "latest_progress": entry.get("latest_progress"),
+            "latest_lesson": entry.get("latest_lesson"),
+            **paths,
+        }
+    )
+
+
+def cmd_pause(args: argparse.Namespace) -> None:
+    anchor = args.cwd or args.path
+    cwd = resolve_path(anchor)
+    ctx = discover_repo(cwd)
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    target = select_live_target(
+        worktrees=worktrees,
+        cwd=cwd,
+        path_arg=args.path,
+        branch_arg=args.branch,
+    )
+    entry, paths = record_handoff(
+        ctx,
+        target,
+        status="blocked",
+        progress=args.reason,
+        lesson=args.lesson,
+    )
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "path": target["path"],
+            "branch": target.get("branch"),
+            "agent_id": entry.get("agent_id"),
+            "purpose": entry.get("purpose"),
+            "status": entry.get("status"),
+            "latest_progress": entry.get("latest_progress"),
+            "latest_lesson": entry.get("latest_lesson"),
+            **paths,
+        }
+    )
+
+
+def cmd_resume(args: argparse.Namespace) -> None:
+    anchor = args.cwd or args.path
+    cwd = resolve_path(anchor)
+    ctx = discover_repo(cwd)
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    target = select_live_target(
+        worktrees=worktrees,
+        cwd=cwd,
+        path_arg=args.path,
+        branch_arg=args.branch,
+    )
+    entry, paths = record_handoff(
+        ctx,
+        target,
+        status="active",
         progress=args.progress,
         lesson=args.lesson,
     )
@@ -743,6 +819,22 @@ def build_parser() -> argparse.ArgumentParser:
     handoff.add_argument("--progress", required=True)
     handoff.add_argument("--lesson")
     handoff.set_defaults(func=cmd_handoff)
+
+    pause = subparsers.add_parser("pause", help="Mark a worktree blocked and record why")
+    pause.add_argument("--cwd")
+    pause.add_argument("--path")
+    pause.add_argument("--branch")
+    pause.add_argument("--reason", required=True)
+    pause.add_argument("--lesson")
+    pause.set_defaults(func=cmd_pause)
+
+    resume = subparsers.add_parser("resume", help="Mark a paused worktree active again")
+    resume.add_argument("--cwd")
+    resume.add_argument("--path")
+    resume.add_argument("--branch")
+    resume.add_argument("--progress", required=True)
+    resume.add_argument("--lesson")
+    resume.set_defaults(func=cmd_resume)
 
     board = subparsers.add_parser("board", help="List active GitWarp worktrees for humans or automation")
     board.add_argument("--cwd")

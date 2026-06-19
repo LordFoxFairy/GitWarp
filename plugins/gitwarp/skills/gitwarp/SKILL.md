@@ -29,8 +29,10 @@ GitWarp is the worktree isolation protocol for coding agents. It wraps native `g
 | `start` | Create a dossier-backed worktree for manual coordination. |
 | `adopt` | Bind an existing non-main, non-detached worktree into the ledger. |
 | `handoff` | Append progress and optional lessons to the dossier and ledger. |
+| `pause` | Record a blocked handoff with a reason and optional lesson. |
+| `resume` | Record an active handoff after a blocker is cleared. |
 | `board` | List active worktrees; use `--format table` for humans. |
-| `reconcile` | Non-mutating audit for stale ledger rows, dirty worktrees, missing dossiers, and merged branches. |
+| `reconcile` | Non-mutating audit for stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift`. |
 | `doctor` | Check local GitWarp, plugin, hook, ignored runtime state, and agent launch readiness. |
 | `finish` | Record final progress and optionally collapse the worktree. |
 | `statusline` | Print only a raw banner such as `GITWARP[main-repo]`. |
@@ -68,6 +70,18 @@ gitwarp handoff --cwd "$PWD" --status implementing --progress "Short milestone"
 gitwarp statusline --cwd "$PWD"
 ```
 
+If blocked by missing input or an external dependency:
+
+```bash
+gitwarp pause --cwd "$PWD" --reason "Waiting for credentials"
+```
+
+After the blocker is cleared:
+
+```bash
+gitwarp resume --cwd "$PWD" --progress "Credentials configured; continuing"
+```
+
 When verified:
 
 ```bash
@@ -87,6 +101,8 @@ gitwarp reconcile --cwd /absolute/path/to/repo --stale 4
 gitwarp doctor --cwd /absolute/path/to/repo
 gitwarp agents --cwd /absolute/path/to/repo
 ```
+
+Treat `head_drift` from `reconcile` or `enter` as evidence that the live worktree HEAD changed after the last GitWarp-recorded handoff. Inspect the commit, then record an explicit `handoff`, `pause`, `resume`, or `finish` instead of relying on hidden auto-repair.
 
 Agent launch templates come from built-ins plus optional `.gitwarp/agents.json`. Template variables include `{repo}`, `{worktree}`, `{branch}`, `{agent_id}`, `{purpose}`, `{task_md}`, `{progress_md}`, `{lessons_md}`, and `{prompt}`.
 
