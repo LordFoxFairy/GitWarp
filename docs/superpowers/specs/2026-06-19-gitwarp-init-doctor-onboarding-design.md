@@ -129,6 +129,8 @@ Rules:
 }
 ```
 
+`ignore_target` is the selected ignore file for this init run. In default mode it is `.git/info/exclude`; in team mode it is `.gitignore`. If no write occurs because the selected target already contains a matching rule, `ignore_target` still reports that selected target and `updated.ignore_rule` is `false`. If no write occurs because a different ignore source already covers `.gitwarp`, default mode reports the selected `.git/info/exclude` target with `updated.ignore_rule:false`; team mode still writes `.gitignore` if `.gitignore` lacks the rule.
+
 ### Failure Cases
 
 - `.gitwarp` exists as a file: fail before mutation.
@@ -171,6 +173,8 @@ After preflight passes, writes happen in this order: create directories, write o
 | `agent_config` | Always emit exactly one finding: `ok` when valid or absent; `error` when `.gitwarp/agents.json` is malformed. |
 | `codex_plugin_metadata` | Existing Codex plugin check, warning if Codex/plugin metadata unavailable. |
 | `session_hook_context` | Source-checkout only. Static check only: hook file exists, executable, and contains `gitwarp enter --cwd`; do not execute it. Omit this finding in ordinary managed repositories that are not the GitWarp source/package checkout. |
+
+The source-checkout predicate is true when all of these exist under `repo_root`: `skills/gitwarp/SKILL.md`, `skills/gitwarp/scripts/gitwarp.py`, `.codex-plugin/plugin.json`, and `.agents/plugins/api_marketplace.json`.
 
 ### Recommended Next
 
@@ -225,6 +229,8 @@ Add tests in `tests/test_gitwarp.py`:
 - `test_doctor_reports_setup_guidance_without_mutation`
 - `test_doctor_reports_invalid_ledger_error`
 - `test_doctor_does_not_execute_repo_hook`
+
+Use table-driven invalid ledger cases for non-object root, missing `entries`, non-array `entries`, `version: "1"`, `version: 2`, `version: null`, and non-string `repo_root`. Include a `--write-gitignore` promotion case where `.git/info/exclude` already contains `/.gitwarp/` but `.gitignore` does not.
 
 Update `scripts/verify-install.sh` to call `gitwarp init` in the temporary repo before writing `.gitwarp/agents.json`, assert init JSON fields, assert doctor includes the new check codes, and update the smoke label to include `init`.
 
