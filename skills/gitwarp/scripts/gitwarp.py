@@ -2,20 +2,25 @@
 from __future__ import annotations
 
 import argparse
+import os
 import hashlib
 import json
 import re
 import shutil
 import subprocess
 import sys
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 LEDGER_DIRNAME = ".gitwarp"
 LEDGER_FILENAME = "ledger.json"
+LEDGER_LOCK_FILENAME = "ledger.lock"
+LOCK_TIMEOUT_SECONDS = 10.0
 WORKTREE_DIRNAME = "worktrees"
 DOSSIER_DIRNAME = "dossiers"
 TASK_FILENAME = "task.md"
@@ -41,6 +46,10 @@ class RepoContext:
     @property
     def ledger_path(self) -> Path:
         return self.ledger_dir / LEDGER_FILENAME
+
+    @property
+    def ledger_lock_path(self) -> Path:
+        return self.ledger_dir / LEDGER_LOCK_FILENAME
 
     @property
     def worktree_root(self) -> Path:
@@ -107,11 +116,55 @@ def load_ledger(ctx: RepoContext) -> dict[str, Any]:
     return data
 
 
+@contextmanager
+def ledger_write_lock(ctx: RepoContext, timeout: float = LOCK_TIMEOUT_SECONDS) -> Any:
+    ctx.ledger_dir.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            fd = os.open(str(ctx.ledger_lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps({"pid": os.getpid(), "created_at": now_iso()}, sort_keys=True))
+            break
+        except FileExistsError:
+            if time.monotonic() >= deadline:
+                raise GitWarpError(f"timed out waiting for ledger lock: {ctx.ledger_lock_path}")
+            time.sleep(0.025)
+    try:
+        yield
+    finally:
+        try:
+            ctx.ledger_lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def write_ledger(ctx: RepoContext, ledger: dict[str, Any]) -> None:
     ctx.ledger_dir.mkdir(parents=True, exist_ok=True)
     ledger["repo_root"] = str(ctx.repo_root)
     ledger["updated_at"] = now_iso()
-    ctx.ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temp_path = ctx.ledger_dir / f".{LEDGER_FILENAME}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+    with temp_path.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    temp_path.replace(ctx.ledger_path)
+
+
+def mutate_ledger(
+    ctx: RepoContext,
+    callback: Callable[[dict[str, Any]], Any],
+    *,
+    live_worktrees: list[dict[str, Any]] | None = None,
+) -> Any:
+    with ledger_write_lock(ctx):
+        ledger = load_ledger(ctx)
+        if live_worktrees is not None:
+            live_paths = {item["path"] for item in live_worktrees}
+            ledger["entries"] = [entry for entry in ledger["entries"] if entry.get("path") in live_paths]
+        result = callback(ledger)
+        write_ledger(ctx, ledger)
+        return result
 
 
 def parse_worktrees(ctx: RepoContext) -> list[dict[str, Any]]:
@@ -143,11 +196,13 @@ def sync_ledger(
     *,
     persist: bool = True,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    ledger = load_ledger(ctx)
-    live_paths = {item["path"] for item in live_worktrees}
-    ledger["entries"] = [entry for entry in ledger["entries"] if entry.get("path") in live_paths]
     if persist:
-        write_ledger(ctx, ledger)
+        def prune(locked_ledger: dict[str, Any]) -> None:
+            live_paths = {item["path"] for item in live_worktrees}
+            locked_ledger["entries"] = [entry for entry in locked_ledger["entries"] if entry.get("path") in live_paths]
+
+        mutate_ledger(ctx, prune)
+    ledger = load_ledger(ctx)
 
     metadata_by_path = {entry["path"]: entry for entry in ledger["entries"]}
     enriched: list[dict[str, Any]] = []
@@ -427,7 +482,6 @@ def ensure_dossier_for_entry(ctx: RepoContext, entry: dict[str, Any], target: di
 
 def record_handoff(
     ctx: RepoContext,
-    ledger: dict[str, Any],
     target: dict[str, Any],
     *,
     status: str,
@@ -437,26 +491,32 @@ def record_handoff(
     if target.get("is_main"):
         raise GitWarpError("refusing to hand off the main repository checkout")
 
-    entry = ledger_entry_for_target(ledger, target)
-    paths = ensure_dossier_for_entry(ctx, entry, target)
-    timestamp = now_iso()
-    append_markdown_event(
-        paths["progress_md"],
-        timestamp,
-        [f"- Status: {status}", f"- Note: {progress}"],
-    )
-    if lesson:
-        append_markdown_event(paths["lessons_md"], timestamp, [f"- {lesson}"])
+    result: dict[str, Any] = {}
 
-    entry["status"] = status
-    entry["updated_at"] = timestamp
-    entry["latest_progress"] = progress
-    if lesson:
-        entry["latest_lesson"] = lesson
-    entry.setdefault("notes", [])
-    entry["notes"].append({"note": progress, "created_at": timestamp, "kind": "progress"})
-    write_ledger(ctx, ledger)
-    return entry, paths
+    def update(ledger: dict[str, Any]) -> None:
+        entry = ledger_entry_for_target(ledger, target)
+        paths = ensure_dossier_for_entry(ctx, entry, target)
+        timestamp = now_iso()
+        append_markdown_event(
+            paths["progress_md"],
+            timestamp,
+            [f"- Status: {status}", f"- Note: {progress}"],
+        )
+        if lesson:
+            append_markdown_event(paths["lessons_md"], timestamp, [f"- {lesson}"])
+
+        entry["status"] = status
+        entry["updated_at"] = timestamp
+        entry["latest_progress"] = progress
+        if lesson:
+            entry["latest_lesson"] = lesson
+        entry.setdefault("notes", [])
+        entry["notes"].append({"note": progress, "created_at": timestamp, "kind": "progress"})
+        result["entry"] = dict(entry)
+        result["paths"] = dict(paths)
+
+    mutate_ledger(ctx, update)
+    return result["entry"], result["paths"]
 
 
 def parse_timestamp(value: str | None) -> datetime | None:
@@ -691,7 +751,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
 def cmd_summon(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     ensure_branch_available(worktrees, args.branch)
 
     target_dir, existing_branch, head = create_worktree(ctx, args.branch)
@@ -704,9 +764,12 @@ def cmd_summon(args: argparse.Namespace) -> None:
         "notes": [],
         "created_at": now_iso(),
     }
-    ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
-    ledger["entries"].append(entry)
-    write_ledger(ctx, ledger)
+
+    def update(ledger: dict[str, Any]) -> None:
+        ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
+        ledger["entries"].append(entry)
+
+    mutate_ledger(ctx, update)
 
     emit_json(
         {
@@ -725,7 +788,7 @@ def cmd_summon(args: argparse.Namespace) -> None:
 
 def cmd_start(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     ensure_branch_available(worktrees, args.branch)
 
     target_dir, existing_branch, head = create_worktree(ctx, args.branch)
@@ -751,9 +814,12 @@ def cmd_start(args: argparse.Namespace) -> None:
         status="active",
         created_at=created_at,
     )
-    ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
-    ledger["entries"].append(entry)
-    write_ledger(ctx, ledger)
+
+    def update(ledger: dict[str, Any]) -> None:
+        ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
+        ledger["entries"].append(entry)
+
+    mutate_ledger(ctx, update)
 
     emit_json(
         {
@@ -804,7 +870,7 @@ def cmd_annotate(args: argparse.Namespace) -> None:
     anchor = args.cwd or args.path
     cwd = resolve_path(anchor)
     ctx = discover_repo(cwd)
-    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     target = select_live_target(
         worktrees=worktrees,
         cwd=cwd,
@@ -815,26 +881,32 @@ def cmd_annotate(args: argparse.Namespace) -> None:
         raise GitWarpError("refusing to annotate the main repository checkout")
 
     target_path = target["path"]
-    entry = next((item for item in ledger["entries"] if item.get("path") == target_path), None)
-    if entry is None:
-        entry = {
-            "path": target_path,
-            "branch": target.get("branch"),
-            "agent_id": None,
-            "purpose": None,
-            "status": None,
-            "notes": [],
-            "created_at": now_iso(),
-        }
-        ledger["entries"].append(entry)
+    result: dict[str, Any] = {}
 
-    timestamp = now_iso()
-    if args.status:
-        entry["status"] = args.status
-    entry.setdefault("notes", [])
-    entry["notes"].append({"note": args.note, "created_at": timestamp})
-    entry["updated_at"] = timestamp
-    write_ledger(ctx, ledger)
+    def update(ledger: dict[str, Any]) -> None:
+        entry = next((item for item in ledger["entries"] if item.get("path") == target_path), None)
+        if entry is None:
+            entry = {
+                "path": target_path,
+                "branch": target.get("branch"),
+                "agent_id": None,
+                "purpose": None,
+                "status": None,
+                "notes": [],
+                "created_at": now_iso(),
+            }
+            ledger["entries"].append(entry)
+
+        timestamp = now_iso()
+        if args.status:
+            entry["status"] = args.status
+        entry.setdefault("notes", [])
+        entry["notes"].append({"note": args.note, "created_at": timestamp})
+        entry["updated_at"] = timestamp
+        result["entry"] = dict(entry)
+
+    mutate_ledger(ctx, update)
+    entry = result["entry"]
 
     emit_json(
         {
@@ -856,7 +928,7 @@ def cmd_handoff(args: argparse.Namespace) -> None:
     anchor = args.cwd or args.path
     cwd = resolve_path(anchor)
     ctx = discover_repo(cwd)
-    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     target = select_live_target(
         worktrees=worktrees,
         cwd=cwd,
@@ -865,7 +937,6 @@ def cmd_handoff(args: argparse.Namespace) -> None:
     )
     entry, paths = record_handoff(
         ctx,
-        ledger,
         target,
         status=args.status,
         progress=args.progress,
@@ -924,7 +995,6 @@ def cmd_finish(args: argparse.Namespace) -> None:
     )
     entry, paths = record_handoff(
         ctx,
-        ledger,
         target,
         status=args.status,
         progress=args.progress,
@@ -946,8 +1016,10 @@ def cmd_finish(args: argparse.Namespace) -> None:
         target_dir = Path(target_path)
         if target_dir.exists():
             shutil.rmtree(target_dir)
-        ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != target_path]
-        write_ledger(ctx, ledger)
+        def update(locked_ledger: dict[str, Any]) -> None:
+            locked_ledger["entries"] = [item for item in locked_ledger["entries"] if item.get("path") != target_path]
+
+        mutate_ledger(ctx, update)
         collapsed = True
     if args.purge_dossier and paths.get("dossier_path"):
         shutil.rmtree(paths["dossier_path"], ignore_errors=True)
@@ -989,8 +1061,10 @@ def cmd_collapse(args: argparse.Namespace) -> None:
     if target_dir.exists():
         shutil.rmtree(target_dir)
 
-    ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != target_path]
-    write_ledger(ctx, ledger)
+    def update(locked_ledger: dict[str, Any]) -> None:
+        locked_ledger["entries"] = [item for item in locked_ledger["entries"] if item.get("path") != target_path]
+
+    mutate_ledger(ctx, update)
     emit_json(
         {
             "ok": True,

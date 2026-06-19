@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -395,6 +396,61 @@ class GitWarpTests(unittest.TestCase):
         self.assertIn("Build board filtering", snippets["task"])  # type: ignore[index]
         self.assertIn("Parser done", snippets["progress"])  # type: ignore[index]
         self.assertIn("Use board before dispatch", snippets["lessons"])  # type: ignore[index]
+
+    def test_parallel_handoffs_do_not_lose_ledger_updates(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-parallel",
+            "--branch",
+            "feature/parallel-handoff",
+            "--purpose",
+            "Verify concurrent handoff safety",
+        )
+        worktree_path = Path(str(start["path"]))
+
+        expected_notes: list[str] = []
+        for round_index in range(10):
+            results: list[subprocess.CompletedProcess[str] | None] = [None] * 8
+            threads = []
+            for worker_index in range(8):
+                progress = f"parallel progress {round_index}-{worker_index}"
+                expected_notes.append(progress)
+
+                def run_handoff(index: int = worker_index, note: str = progress) -> None:
+                    results[index] = subprocess.run(
+                        [
+                            "python3",
+                            str(SCRIPT),
+                            "handoff",
+                            "--cwd",
+                            str(worktree_path),
+                            "--status",
+                            "testing",
+                            "--progress",
+                            note,
+                        ],
+                        cwd=str(self.repo),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+
+                thread = threading.Thread(target=run_handoff)
+                threads.append(thread)
+                thread.start()
+            for thread in threads:
+                thread.join()
+            for result in results:
+                self.assertIsNotNone(result)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)  # type: ignore[union-attr]
+
+        context = run_gitwarp(self.repo, "context", "--cwd", str(worktree_path))
+        notes = [item["note"] for item in context["worktree"]["notes"]]  # type: ignore[index]
+        for expected in expected_notes:
+            self.assertIn(expected, notes)
+        self.assertFalse((self.repo / ".gitwarp" / "ledger.lock").exists())
 
 
 class PluginStructureTests(unittest.TestCase):
