@@ -208,12 +208,19 @@ class WebApiTests(GitWarpTestCase):
 
         self.assertEqual(status, 200)
         self.assertIn("text/html", content_type)
-        self.assertIn("GitWarp Web Console", html)
+        self.assertIn("GitWarp Manager", html)
+        self.assertIn("Worktree Control", html)
+        self.assertIn("Start Worktree", html)
+        self.assertIn("Prepare Launch Command", html)
+        self.assertIn("Active Worktrees", html)
+        self.assertIn("Doctor / Reconcile", html)
+        self.assertIn("Finish + Collapse", html)
+        self.assertIn("data-dossier-kind", html)
         self.assertIn("/api/state", html)
         self.assertIn("data-gitwarp-token", html)
-        self.assertNotIn("innerHTML", html)
-        self.assertIn("textContent", html)
-        self.assertIn("appendCell", html)
+        self.assertIn("X-GitWarp-Token", html)
+        self.assertNotIn("__CSS__", html)
+        self.assertNotIn("__JS__", html)
 
     def test_web_dossier_endpoint_allows_only_dossier_root(self) -> None:
         start = run_gitwarp(

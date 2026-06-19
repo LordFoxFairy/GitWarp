@@ -1,7 +1,13 @@
 # GitWarp Web Console
 
-This directory is reserved for the future rich web console source. Keep framework source, package manager files, tests, and design assets here instead of under `skills/`.
+`web/console/` contains the React + TypeScript management UI for `gitwarp web`.
 
-The current console is a lightweight inline HTML implementation in `src/gitwarp/web.py`. When a React or similar frontend replaces it, keep editable source here and compile production assets into `src/gitwarp/assets/web-console/` for repository-root plugin distribution.
+Runtime assets are checked in under `web/console/dist/` so the Python CLI can serve the UI without requiring Node.js at startup. Editable source lives under `web/console/src/` and is built with Vite.
 
-Current backend web endpoints live in `src/gitwarp/web.py` and are covered by `tests/test_web_api.py`.
+Common commands:
+
+- `cd web/console && npm install`: install local UI tooling.
+- `cd web/console && npm run dev`: run the React UI in Vite for frontend iteration.
+- `cd web/console && npm run build`: type-check, bundle React, and regenerate `dist/index.html`, `dist/app.css`, and `dist/app.js`.
+
+Current backend web endpoints live in `src/gitwarp/webapp/` and are covered by `tests/test_web_api.py`.

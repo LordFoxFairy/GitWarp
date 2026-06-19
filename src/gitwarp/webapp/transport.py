@@ -33,6 +33,12 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_empty(self, status: int) -> None:
+        self.send_response(status)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def check_host(self) -> bool:
         host = self.headers.get("Host")
         if not host or normalize_host_header(host) not in self.server.state.allowed_hosts:
@@ -95,6 +101,9 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/":
             self.send_html(200, render_console_html(self.server.state.token))
+            return
+        if parsed.path == "/favicon.ico":
+            self.send_empty(204)
             return
         if parsed.path == "/api/session":
             self.send_json(200, {"ok": True, "token": self.server.state.token})

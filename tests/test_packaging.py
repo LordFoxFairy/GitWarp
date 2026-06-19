@@ -162,6 +162,12 @@ class PluginStructureTests(unittest.TestCase):
 
     def test_web_source_and_packaged_assets_have_clear_boundaries(self) -> None:
         self.assertTrue((REPO_ROOT / "web" / "README.md").exists())
+        self.assertTrue((REPO_ROOT / "web" / "console" / "package.json").exists())
+        self.assertTrue((REPO_ROOT / "web" / "console" / "src" / "app" / "App.tsx").exists())
+        self.assertTrue((REPO_ROOT / "web" / "console" / "dist" / "index.html").exists())
+        self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "assets" / "web_console" / "index.html").exists())
+        self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "assets" / "web_console" / "app.css").exists())
+        self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "assets" / "web_console" / "app.js").exists())
         self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "assets" / ".gitkeep").exists())
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "package.json").exists())
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "web").exists())
@@ -173,7 +179,7 @@ class PluginStructureTests(unittest.TestCase):
                 REPO_ROOT,
                 plugin_copy,
                 symlinks=True,
-                ignore=shutil.ignore_patterns(".git", ".gitwarp", "tmp", "__pycache__"),
+                ignore=shutil.ignore_patterns(".git", ".gitwarp", "tmp", "__pycache__", "node_modules", ".playwright-cli", ".vite"),
             )
 
             result = subprocess.run(
@@ -249,6 +255,27 @@ class PluginStructureTests(unittest.TestCase):
             "skills/gitwarp/references/install.md",
             "skills/gitwarp/scripts/gitwarp.py",
             "skills/gitwarp/scripts/install_cli.py",
+            "src/gitwarp/assets/web_console/index.html",
+            "src/gitwarp/assets/web_console/app.css",
+            "src/gitwarp/assets/web_console/app.js",
+            "web/console/index.html",
+            "web/console/package.json",
+            "web/console/package-lock.json",
+            "web/console/scripts/write-runtime.mjs",
+            "web/console/src/main.tsx",
+            "web/console/src/styles.css",
+            "web/console/src/app/App.tsx",
+            "web/console/src/app/gitwarp-api.ts",
+            "web/console/src/app/types.ts",
+            "web/console/src/app/components/ActionPanel.tsx",
+            "web/console/src/app/components/Header.tsx",
+            "web/console/src/app/components/InspectorPanel.tsx",
+            "web/console/src/app/components/OutputPanel.tsx",
+            "web/console/src/app/components/SummaryStrip.tsx",
+            "web/console/src/app/components/WorktreeBoard.tsx",
+            "web/console/dist/index.html",
+            "web/console/dist/app.css",
+            "web/console/dist/app.js",
             "LICENSE",
             "CHANGELOG.md",
         ]

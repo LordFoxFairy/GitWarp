@@ -5,7 +5,7 @@ from pathlib import Path
 from ..domain.errors import GitWarpError
 
 
-WEB_CONSOLE_HTML = """<!doctype html>
+FALLBACK_WEB_CONSOLE_HTML = """<!doctype html>
 <html lang="en" data-gitwarp-token="__TOKEN__">
 <head>
   <meta charset="utf-8">
@@ -68,9 +68,32 @@ WEB_CONSOLE_HTML = """<!doctype html>
 </html>
 """
 
+WEB_CONSOLE_HTML = FALLBACK_WEB_CONSOLE_HTML
+
+
+def web_console_dist_dir() -> Path | None:
+    package_root = Path(__file__).resolve().parents[1]
+    source_root = Path(__file__).resolve().parents[3]
+    candidates = [
+        source_root / "web" / "console" / "dist",
+        package_root / "assets" / "web_console",
+        Path.cwd().resolve() / "web" / "console" / "dist",
+    ]
+    for candidate in candidates:
+        if (candidate / "index.html").is_file() and (candidate / "app.css").is_file() and (candidate / "app.js").is_file():
+            return candidate
+    return None
+
 
 def render_console_html(token: str) -> str:
-    return WEB_CONSOLE_HTML.replace("__TOKEN__", token)
+    dist_dir = web_console_dist_dir()
+    if dist_dir is None:
+        return FALLBACK_WEB_CONSOLE_HTML.replace("__TOKEN__", token)
+
+    html = (dist_dir / "index.html").read_text(encoding="utf-8")
+    css = (dist_dir / "app.css").read_text(encoding="utf-8")
+    js = (dist_dir / "app.js").read_text(encoding="utf-8")
+    return html.replace("__TOKEN__", token).replace("__CSS__", css).replace("__JS__", js)
 
 
 def read_dossier_file(raw_path: str | None, dossier_root: Path) -> dict[str, str | bool]:
