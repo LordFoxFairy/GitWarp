@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from ..foundation import RepoContext
-from ..ledger import load_ledger, mutate_ledger, write_ledger
+from .ledger import load_ledger, mutate_ledger, write_ledger
+from .runtime import RepoContext
 
 
 class JsonLedgerRepository:

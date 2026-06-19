@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..dossiers import create_dossier_files, read_snippet
+from .dossiers import create_dossier_files, read_snippet
 
 
 class FilesystemDossierStore:

@@ -127,7 +127,7 @@ GitWarp refuses main and detached worktrees.
 
 Use `gitwarp` from `PATH` when installed. If it is unavailable, run the bundled wrapper with `python3 /absolute/path/to/skills/gitwarp/scripts/gitwarp.py`.
 
-The wrapper loads the installable Python package from the source checkout or plugin package. Do not add product modules under `skills/gitwarp/scripts/`; runtime changes belong in `src/gitwarp/` and must be mirrored into `plugins/gitwarp/src/gitwarp/` before plugin distribution.
+The wrapper loads the installable Python package from the source checkout or repository-root plugin package. Do not add product modules under `skills/gitwarp/scripts/`; runtime changes belong only in `src/gitwarp/`.
 
 ## Common Failures
 

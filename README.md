@@ -2,7 +2,7 @@
 
 GitWarp is an Agent Skill plus installable CLI package for running Codex, Claude Code, and other coding agents in isolated Git worktrees. It gives each task a physical sandbox, a branch ownership record, and a small dossier (`task.md`, `progress.md`, `lessons.md`) so agents can resume work without guessing what happened before.
 
-The project follows the common Agent Skills layout while keeping product code in a normal Python package. `src/gitwarp/` is the canonical runtime, `skills/gitwarp/` contains agent instructions plus tiny wrappers, and `plugins/gitwarp/` is the self-contained plugin distribution mirror.
+The project follows the common Agent Skills layout while keeping product code in a normal Python package. `src/gitwarp/` is the single canonical runtime, `skills/gitwarp/` contains agent instructions plus tiny wrappers, and the repository root is the plugin package.
 
 ## Why GitWarp
 
@@ -52,7 +52,7 @@ ln -s "$PWD/skills/gitwarp" "$HOME/.claude/skills/gitwarp"
 python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
 ```
 
-For copy-only installs, install the full plugin package or install the Python package first. Copying only `skills/gitwarp/` is not enough because the core implementation lives in `src/gitwarp/`.
+For copy-only installs, copy the repository root or install the Python package first. Copying only `skills/gitwarp/` is not enough because the core implementation lives in `src/gitwarp/`.
 
 ## Quick Start
 
@@ -181,7 +181,6 @@ Example `.gitwarp/agents.json`:
 - `src/gitwarp/assets/`: packaged static assets; future web builds go under `assets/web-console/`.
 - `skills/gitwarp/`: canonical Agent Skill instructions, wrapper script, installer, and references.
 - `.agents/skills/gitwarp` and `.claude/skills/gitwarp`: repo-local standard skill discovery links.
-- `plugins/gitwarp/`: marketplace-ready Codex plugin package mirror, including its own `src/gitwarp/` copy.
 - `.codex-plugin/` and `.claude-plugin/`: plugin metadata shells.
 - `.agents/plugins/api_marketplace.json`: local Codex marketplace entry named `gitwarp-dev`.
 - `hooks/`: session hook assets for compatible hosts.
@@ -191,11 +190,11 @@ Example `.gitwarp/agents.json`:
 ## Development
 
 ```bash
-python3 -m py_compile src/gitwarp/*.py plugins/gitwarp/src/gitwarp/*.py skills/gitwarp/scripts/*.py plugins/gitwarp/skills/gitwarp/scripts/*.py
+python3 -m py_compile src/gitwarp/*.py src/gitwarp/domain/*.py src/gitwarp/application/*.py src/gitwarp/infrastructure/*.py src/gitwarp/webapp/*.py skills/gitwarp/scripts/*.py
 python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp
-python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/gitwarp
+python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py .
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 scripts/verify-install.sh
 ```
 
-Keep `src/gitwarp/` and `plugins/gitwarp/src/gitwarp/` synchronized when changing runtime behavior. Keep `skills/gitwarp/` and `plugins/gitwarp/skills/gitwarp/` synchronized when changing skill behavior. Keep the standard discovery links pointing at the canonical skill folder.
+Keep runtime behavior in `src/gitwarp/` only. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.

@@ -211,6 +211,9 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("GitWarp Web Console", html)
         self.assertIn("/api/state", html)
         self.assertIn("data-gitwarp-token", html)
+        self.assertNotIn("innerHTML", html)
+        self.assertIn("textContent", html)
+        self.assertIn("appendCell", html)
 
     def test_web_dossier_endpoint_allows_only_dossier_root(self) -> None:
         start = run_gitwarp(

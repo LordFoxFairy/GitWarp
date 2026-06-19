@@ -63,11 +63,9 @@ class PluginStructureTests(unittest.TestCase):
 
         self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
 
-    def test_plugin_src_package_matches_root_package(self) -> None:
-        self.assert_directory_mirror(
-            REPO_ROOT / "src" / "gitwarp",
-            REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp",
-        )
+    def test_runtime_source_exists_only_in_root_src(self) -> None:
+        self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "cli.py").is_file())
+        self.assertFalse((REPO_ROOT / "plugins" / "gitwarp" / "src").exists())
 
     def test_runtime_package_has_ddd_boundaries(self) -> None:
         expected_modules = {
@@ -76,10 +74,20 @@ class PluginStructureTests(unittest.TestCase):
             "domain/model.py",
             "domain/policies.py",
             "application/__init__.py",
+            "application/diagnostics.py",
             "application/dto.py",
+            "application/reconcile.py",
             "application/services.py",
+            "adapters/__init__.py",
+            "adapters/cli.py",
+            "adapters/presenters.py",
             "infrastructure/__init__.py",
+            "infrastructure/agents.py",
+            "infrastructure/dossiers.py",
             "infrastructure/git_cli.py",
+            "infrastructure/ledger.py",
+            "infrastructure/runtime.py",
+            "infrastructure/worktrees.py",
             "infrastructure/json_ledger.py",
             "infrastructure/filesystem_dossiers.py",
             "webapp/__init__.py",
@@ -94,35 +102,44 @@ class PluginStructureTests(unittest.TestCase):
         for relative_path in sorted(expected_modules):
             with self.subTest(path=relative_path):
                 self.assertTrue((REPO_ROOT / "src" / "gitwarp" / relative_path).is_file())
-                self.assertTrue((REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp" / relative_path).is_file())
+
+    def test_root_runtime_modules_are_compatibility_shims(self) -> None:
+        shim_modules = {
+            "agents.py",
+            "cli.py",
+            "diagnostics.py",
+            "dossiers.py",
+            "foundation.py",
+            "ledger.py",
+            "reconcile.py",
+            "reporting.py",
+            "services.py",
+            "web.py",
+            "worktrees.py",
+        }
+        for relative_path in sorted(shim_modules):
+            with self.subTest(path=relative_path):
+                line_count = len((REPO_ROOT / "src" / "gitwarp" / relative_path).read_text(encoding="utf-8").splitlines())
+                self.assertLessEqual(line_count, 80)
 
     def test_skill_wrappers_do_not_ship_product_core(self) -> None:
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp_core").exists())
-        self.assertFalse(
-            (
-                REPO_ROOT
-                / "plugins"
-                / "gitwarp"
-                / "skills"
-                / "gitwarp"
-                / "scripts"
-                / "gitwarp_core"
-            ).exists()
-        )
         self.assert_script_tree_allowlist(REPO_ROOT / "skills" / "gitwarp" / "scripts")
-        self.assert_script_tree_allowlist(REPO_ROOT / "plugins" / "gitwarp" / "skills" / "gitwarp" / "scripts")
 
     def test_web_source_and_packaged_assets_have_clear_boundaries(self) -> None:
         self.assertTrue((REPO_ROOT / "web" / "README.md").exists())
         self.assertTrue((REPO_ROOT / "src" / "gitwarp" / "assets" / ".gitkeep").exists())
-        self.assertTrue((REPO_ROOT / "plugins" / "gitwarp" / "src" / "gitwarp" / "assets" / ".gitkeep").exists())
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "package.json").exists())
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "web").exists())
 
-    def test_plugin_wrapper_runs_from_installed_plugin_copy(self) -> None:
+    def test_root_plugin_copy_runs_skill_wrapper_from_adjacent_src(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             plugin_copy = Path(tempdir) / "gitwarp"
-            shutil.copytree(REPO_ROOT / "plugins" / "gitwarp", plugin_copy)
+            shutil.copytree(
+                REPO_ROOT,
+                plugin_copy,
+                ignore=shutil.ignore_patterns(".git", ".gitwarp", "tmp", "__pycache__"),
+            )
 
             result = subprocess.run(
                 ["python3", str(plugin_copy / "skills" / "gitwarp" / "scripts" / "gitwarp.py"), "--version"],
@@ -146,7 +163,7 @@ class PluginStructureTests(unittest.TestCase):
         self.assertEqual(plugin["skills"], "./skills/")
         self.assertNotIn("hooks", plugin)
         self.assertEqual(marketplace["name"], "gitwarp-dev")
-        self.assertEqual(marketplace["plugins"][0]["source"]["path"], "./plugins/gitwarp")
+        self.assertEqual(marketplace["plugins"][0]["source"]["path"], ".")
         self.assertIn("CODEX", marketplace["plugins"][0]["policy"]["products"])
         self.assertIn("SessionStart", hooks["hooks"])
         self.assertIn("gitwarp enter --cwd", session_hook)
@@ -157,7 +174,7 @@ class PluginStructureTests(unittest.TestCase):
         self.assertEqual(codex_skill_link.resolve(), (REPO_ROOT / "skills" / "gitwarp").resolve())
         self.assertEqual(claude_skill_link.resolve(), (REPO_ROOT / "skills" / "gitwarp").resolve())
 
-    def test_marketplace_plugin_package_matches_root_sources(self) -> None:
+    def test_marketplace_uses_root_package_sources(self) -> None:
         relative_paths = [
             ".codex-plugin/plugin.json",
             ".claude-plugin/plugin.json",
@@ -176,7 +193,5 @@ class PluginStructureTests(unittest.TestCase):
 
         for relative_path in relative_paths:
             with self.subTest(path=relative_path):
-                self.assertEqual(
-                    (REPO_ROOT / relative_path).read_text(encoding="utf-8"),
-                    (REPO_ROOT / "plugins" / "gitwarp" / relative_path).read_text(encoding="utf-8"),
-                )
+                self.assertTrue((REPO_ROOT / relative_path).is_file())
+        self.assertFalse((REPO_ROOT / "plugins" / "gitwarp").exists())

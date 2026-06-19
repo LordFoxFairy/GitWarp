@@ -81,13 +81,11 @@
 ## Chunk 5: Mirror, Docs, and Verification
 
 **Files:**
-- Modify: `plugins/gitwarp/src/gitwarp/`
 - Modify: `README.md`
 - Modify: `skills/gitwarp/SKILL.md`
 - Modify: `skills/gitwarp/references/install.md`
-- Modify: `plugins/gitwarp/skills/gitwarp/...`
 
-- [ ] Mirror root runtime package into plugin package.
+- [ ] Ensure runtime code exists only in root `src/gitwarp` and no `plugins/gitwarp/src` copy exists.
 - [ ] Update docs with DDD source layout and web security/runtime behavior.
 - [ ] Run py_compile, skill validation, plugin validation, full unittest, install smoke, and `git diff --check`.
 - [ ] Record GitWarp handoff.

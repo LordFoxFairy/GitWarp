@@ -8,7 +8,7 @@
       "name": "gitwarp",
       "source": {
         "source": "local",
-        "path": "./plugins/gitwarp"
+        "path": "."
       },
       "policy": {
         "installation": "AVAILABLE",

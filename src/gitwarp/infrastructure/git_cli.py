@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..foundation import run_git
+from .runtime import run_git
 
 
 class GitCli:

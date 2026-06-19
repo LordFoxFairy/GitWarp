@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
 
-from .foundation import (
+from .runtime import (
     GitWarpError,
     LEDGER_FILENAME,
     LOCK_TIMEOUT_SECONDS,

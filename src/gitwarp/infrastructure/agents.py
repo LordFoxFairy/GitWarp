@@ -6,7 +6,7 @@ import shutil
 import string
 from typing import Any
 
-from .foundation import GitWarpError, RepoContext, sanitize_name
+from .runtime import GitWarpError, RepoContext, sanitize_name
 
 
 ALLOWED_AGENT_TEMPLATE_FIELDS = {

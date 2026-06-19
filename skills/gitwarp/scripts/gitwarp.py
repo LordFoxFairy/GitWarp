@@ -9,7 +9,6 @@ def candidate_package_roots() -> list[Path]:
     here = Path(__file__).resolve()
     return [
         here.parents[3] / "src",
-        here.parents[3] / "plugins" / "gitwarp" / "src",
         here.parents[5] / "src" if len(here.parents) > 5 else here.parents[3] / "src",
     ]
 

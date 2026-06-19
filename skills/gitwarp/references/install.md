@@ -17,7 +17,7 @@
 
 ## Recommended repo strategy
 
-For authoring, keep the canonical runtime in `src/gitwarp/`, keep the canonical skill in `skills/gitwarp/`, and mirror both into `plugins/gitwarp/` before installing the plugin. Repo-local standard discovery paths are symlinks:
+For authoring, keep the canonical runtime in `src/gitwarp/` and the canonical skill in `skills/gitwarp/`. The repository root is the plugin package; do not maintain a second runtime mirror. Repo-local standard discovery paths are symlinks:
 
 - `.agents/skills/gitwarp -> ../../skills/gitwarp`
 - `.claude/skills/gitwarp -> ../../skills/gitwarp`
@@ -53,7 +53,7 @@ ln -s /absolute/path/to/GitWarp/skills/gitwarp "$HOME/.agents/skills/gitwarp"
 ln -s /absolute/path/to/GitWarp/skills/gitwarp "$HOME/.claude/skills/gitwarp"
 ```
 
-Do not copy only `skills/gitwarp/` unless the `gitwarp` Python package is already installed. The wrapper in `skills/gitwarp/scripts/gitwarp.py` loads product code from the adjacent source checkout or from the complete plugin package at `plugins/gitwarp/src/gitwarp/`.
+Do not copy only `skills/gitwarp/` unless the `gitwarp` Python package is already installed. The wrapper in `skills/gitwarp/scripts/gitwarp.py` loads product code from the adjacent repository-root `src/gitwarp/` package.
 
 ## CLI command
 

@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .domain.errors import GitWarpError
-from .domain.policies import path_contains
+from ..domain.errors import GitWarpError
+from ..domain.policies import path_contains
 
 
 LEDGER_DIRNAME = ".gitwarp"

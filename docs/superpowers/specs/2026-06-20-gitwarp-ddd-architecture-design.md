@@ -81,7 +81,7 @@ The inline UI must use DOM text assignment instead of `innerHTML` for ledger-con
 ## Testing Strategy
 
 - Characterization tests must continue covering existing command behavior before each extraction.
-- Packaging tests must ensure root `src/gitwarp` and plugin `plugins/gitwarp/src/gitwarp` stay mirrored.
+- Packaging tests must ensure runtime code exists only in root `src/gitwarp`; the repository root is the plugin package.
 - Web tests should be split by responsibility: contracts, security, resources, and end-to-end API workflows.
 - Final verification must include py_compile, skill validation, plugin validation, full unittest discovery, install smoke, and `git diff --check`.
 
@@ -93,7 +93,7 @@ The inline UI must use DOM text assignment instead of `innerHTML` for ledger-con
 4. Extract web contracts, security, resources, controllers, transport, and server from `web.py`; keep root `web.py` as a re-export.
 5. Refactor CLI command handlers to delegate duplicated workflows to application services.
 6. Split web tests by new module boundary and add an XSS regression test.
-7. Mirror all runtime package changes into the plugin package.
+7. Keep plugin metadata at the repository root and forbid plugin runtime source copies.
 
 ## Acceptance Criteria
 
@@ -102,4 +102,4 @@ The inline UI must use DOM text assignment instead of `innerHTML` for ledger-con
 - Web security, contracts, resources, controllers, transport, and server lifecycle are separate modules.
 - Inline console no longer injects ledger-controlled strings via template `innerHTML`.
 - All existing tests pass, plus new boundary and XSS tests.
-- Plugin mirror is byte-for-byte aligned with root runtime package.
+- Runtime code exists only in root `src/gitwarp`; there is no `plugins/gitwarp/src` mirror.

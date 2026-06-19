@@ -4,7 +4,7 @@ from typing import Any
 
 from ..domain.errors import GitWarpError
 from ..foundation import RepoContext
-from ..services import (
+from ..application.services import (
     build_collapse_payload,
     build_dispatch_payload,
     build_finish_payload,
@@ -16,6 +16,18 @@ from ..services import (
 from .security import decode_confirmation, encode_confirmation
 
 
+class ConfirmationRequired(PermissionError):
+    pass
+
+
+class BadConfirmation(PermissionError):
+    pass
+
+
+class StaleConfirmation(RuntimeError):
+    pass
+
+
 def require_confirmation(
     *,
     secret: bytes,
@@ -25,17 +37,22 @@ def require_confirmation(
 ) -> None:
     token = payload.get("confirmation")
     if not isinstance(token, str) or not token:
-        raise PermissionError("destructive action requires confirmation")
-    challenge = decode_confirmation(secret, token)
-    current = inspect_destructive_target(
-        ctx,
-        action=action,
-        cwd=payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
-        path=payload.get("path") if isinstance(payload.get("path"), str) else None,
-        branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
-    )
+        raise ConfirmationRequired("destructive action requires confirmation")
+    try:
+        challenge = decode_confirmation(secret, token)
+        current = inspect_destructive_target(
+            ctx,
+            action=action,
+            cwd=payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
+            path=payload.get("path") if isinstance(payload.get("path"), str) else None,
+            branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+        )
+    except TimeoutError:
+        raise
+    except GitWarpError as exc:
+        raise BadConfirmation(str(exc)) from exc
     if challenge != current:
-        raise RuntimeError("confirmation no longer matches target state")
+        raise StaleConfirmation("confirmation no longer matches target state")
 
 
 def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, confirmation_secret: bytes) -> dict[str, Any]:

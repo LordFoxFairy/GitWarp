@@ -7,15 +7,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from . import __version__
-from .agents import (
+from .. import __version__
+from ..infrastructure.agents import (
     build_agent_id,
     load_agent_registry,
     render_agent_prompt,
     render_command,
     shell_preview,
 )
-from .diagnostics import (
+from ..application.diagnostics import (
     agent_config_check,
     append_gitwarp_ignore_rule,
     build_doctor_payload,
@@ -34,14 +34,14 @@ from .diagnostics import (
     standard_skill_links_check,
     summarize_findings,
 )
-from .dossiers import (
+from ..infrastructure.dossiers import (
     create_dossier_files,
     dossier_paths,
     ensure_dossier_for_entry,
     record_handoff,
 )
-from .foundation import GitWarpError, RepoContext, emit_json, now_iso, path_contains, resolve_path, run_git
-from .ledger import (
+from ..infrastructure.runtime import GitWarpError, RepoContext, emit_json, now_iso, path_contains, resolve_path, run_git
+from ..infrastructure.ledger import (
     default_ledger,
     discover_repo,
     load_raw_ledger,
@@ -49,8 +49,8 @@ from .ledger import (
     normalize_ledger_schema,
     write_ledger,
 )
-from .reconcile import build_reconcile_payload
-from .reporting import (
+from ..application.reconcile import build_reconcile_payload
+from .presenters import (
     board_row,
     build_enter_payload,
     filter_board_rows,
@@ -58,7 +58,14 @@ from .reporting import (
     print_board_table,
     statusline_banner,
 )
-from .worktrees import (
+from ..application.services import (
+    build_collapse_payload,
+    build_dispatch_payload,
+    build_finish_payload,
+    build_handoff_payload,
+    build_start_payload,
+)
+from ..infrastructure.worktrees import (
     branch_merged_into_main,
     create_worktree,
     ensure_branch_available,
@@ -184,150 +191,21 @@ def cmd_summon(args: argparse.Namespace) -> None:
 
 def cmd_start(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    ensure_branch_available(worktrees, args.branch)
-
-    target_dir, existing_branch, head = create_worktree(ctx, args.branch)
-    created_at = now_iso()
-    dossier = dossier_paths(ctx, args.branch, target_dir)
-    entry = {
-        "path": str(target_dir),
-        "branch": args.branch,
-        "agent_id": args.agent_id,
-        "purpose": args.purpose,
-        "status": "active",
-        "notes": [],
-        "latest_progress": "Workspace created.",
-        "last_seen_head": head,
-        "created_at": created_at,
-        **dossier,
-    }
-    create_dossier_files(
-        dossier,
-        agent_id=args.agent_id,
-        branch=args.branch,
-        worktree_path=str(target_dir),
-        purpose=args.purpose,
-        status="active",
-        created_at=created_at,
-    )
-
-    def update(ledger: dict[str, Any]) -> None:
-        ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
-        ledger["entries"].append(entry)
-
-    mutate_ledger(ctx, update)
-
-    emit_json(
-        {
-            "ok": True,
-            "repo_root": str(ctx.repo_root),
-            "ledger_path": str(ctx.ledger_path),
-            "path": str(target_dir),
-            "branch": args.branch,
-            "head": head,
-            "agent_id": args.agent_id,
-            "purpose": args.purpose,
-            "status": "active",
-            "branch_created": not existing_branch,
-            "last_seen_head": head,
-            "latest_progress": "Workspace created.",
-            **dossier,
-        }
-    )
+    emit_json(build_start_payload(ctx, agent_id=args.agent_id, branch=args.branch, purpose=args.purpose))
 
 
 def cmd_dispatch(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    registry = load_agent_registry(ctx)
-    agent_name = args.agent or registry["default_agent"]
-    agents_by_name = registry["agents_by_name"]
-    if agent_name not in agents_by_name:
-        raise GitWarpError(f"unknown agent '{agent_name}'; available agents: {', '.join(sorted(agents_by_name))}")
     if args.command_mode == "execute":
         raise GitWarpError("dispatch command-mode execute is not supported yet")
-
-    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    ensure_branch_available(worktrees, args.branch)
-
-    agent = agents_by_name[agent_name]
-    agent_id = args.agent_id or build_agent_id(agent_name, args.branch)
-    target_dir, existing_branch, head = create_worktree(ctx, args.branch)
-    created_at = now_iso()
-    dossier = dossier_paths(ctx, args.branch, target_dir)
-    prompt = render_agent_prompt(args.purpose)
-    values = {
-        "repo": str(ctx.repo_root),
-        "worktree": str(target_dir),
-        "branch": args.branch,
-        "agent_id": agent_id,
-        "purpose": args.purpose,
-        "task_md": dossier["task_md"],
-        "progress_md": dossier["progress_md"],
-        "lessons_md": dossier["lessons_md"],
-        "prompt": prompt,
-    }
-    launch_command = render_command(agent["command"], values)
-    launch_preview = shell_preview(launch_command)
-    dispatch_meta = {
-        "agent_name": agent_name,
-        "command_mode": "print",
-        "launch_command": launch_command,
-        "launch_preview": launch_preview,
-        "last_exit_code": None,
-        "last_prepared_at": created_at,
-        "last_started_at": None,
-        "last_finished_at": None,
-    }
-    entry = {
-        "path": str(target_dir),
-        "branch": args.branch,
-        "agent_id": agent_id,
-        "purpose": args.purpose,
-        "status": "dispatched",
-        "notes": [],
-        "latest_progress": "Dispatch command prepared.",
-        "last_seen_head": head,
-        "created_at": created_at,
-        "updated_at": created_at,
-        "dispatch": dispatch_meta,
-        **dossier,
-    }
-    create_dossier_files(
-        dossier,
-        agent_id=agent_id,
-        branch=args.branch,
-        worktree_path=str(target_dir),
-        purpose=args.purpose,
-        status="dispatched",
-        created_at=created_at,
-    )
-
-    def update(ledger: dict[str, Any]) -> None:
-        ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
-        ledger["entries"].append(entry)
-
-    mutate_ledger(ctx, update)
-
     emit_json(
-        {
-            "ok": True,
-            "mode": "print",
-            "repo_root": str(ctx.repo_root),
-            "ledger_path": str(ctx.ledger_path),
-            "agent": agent_name,
-            "agent_id": agent_id,
-            "path": str(target_dir),
-            "branch": args.branch,
-            "head": head,
-            "purpose": args.purpose,
-            "status": "dispatched",
-            "branch_created": not existing_branch,
-            "last_seen_head": head,
-            "launch_command": launch_command,
-            "launch_preview": launch_preview,
-            **dossier,
-        }
+        build_dispatch_payload(
+            ctx,
+            agent=args.agent,
+            agent_id=args.agent_id,
+            branch=args.branch,
+            purpose=args.purpose,
+        )
     )
 
 
@@ -497,34 +375,16 @@ def cmd_handoff(args: argparse.Namespace) -> None:
     anchor = args.cwd or args.path
     cwd = resolve_path(anchor)
     ctx = discover_repo(cwd)
-    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    target = select_live_target(
-        worktrees=worktrees,
-        cwd=cwd,
-        path_arg=args.path,
-        branch_arg=args.branch,
-    )
-    entry, paths = record_handoff(
-        ctx,
-        target,
-        status=args.status,
-        progress=args.progress,
-        lesson=args.lesson,
-    )
     emit_json(
-        {
-            "ok": True,
-            "repo_root": str(ctx.repo_root),
-            "ledger_path": str(ctx.ledger_path),
-            "path": target["path"],
-            "branch": target.get("branch"),
-            "agent_id": entry.get("agent_id"),
-            "purpose": entry.get("purpose"),
-            "status": entry.get("status"),
-            "latest_progress": entry.get("latest_progress"),
-            "latest_lesson": entry.get("latest_lesson"),
-            **paths,
-        }
+        build_handoff_payload(
+            ctx,
+            cwd=str(cwd),
+            path=args.path,
+            branch=args.branch,
+            status=args.status,
+            progress=args.progress,
+            lesson=args.lesson,
+        )
     )
 
 
@@ -532,34 +392,16 @@ def cmd_pause(args: argparse.Namespace) -> None:
     anchor = args.cwd or args.path
     cwd = resolve_path(anchor)
     ctx = discover_repo(cwd)
-    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    target = select_live_target(
-        worktrees=worktrees,
-        cwd=cwd,
-        path_arg=args.path,
-        branch_arg=args.branch,
-    )
-    entry, paths = record_handoff(
-        ctx,
-        target,
-        status="blocked",
-        progress=args.reason,
-        lesson=args.lesson,
-    )
     emit_json(
-        {
-            "ok": True,
-            "repo_root": str(ctx.repo_root),
-            "ledger_path": str(ctx.ledger_path),
-            "path": target["path"],
-            "branch": target.get("branch"),
-            "agent_id": entry.get("agent_id"),
-            "purpose": entry.get("purpose"),
-            "status": entry.get("status"),
-            "latest_progress": entry.get("latest_progress"),
-            "latest_lesson": entry.get("latest_lesson"),
-            **paths,
-        }
+        build_handoff_payload(
+            ctx,
+            cwd=str(cwd),
+            path=args.path,
+            branch=args.branch,
+            status="blocked",
+            progress=args.reason,
+            lesson=args.lesson,
+        )
     )
 
 
@@ -567,34 +409,16 @@ def cmd_resume(args: argparse.Namespace) -> None:
     anchor = args.cwd or args.path
     cwd = resolve_path(anchor)
     ctx = discover_repo(cwd)
-    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    target = select_live_target(
-        worktrees=worktrees,
-        cwd=cwd,
-        path_arg=args.path,
-        branch_arg=args.branch,
-    )
-    entry, paths = record_handoff(
-        ctx,
-        target,
-        status="active",
-        progress=args.progress,
-        lesson=args.lesson,
-    )
     emit_json(
-        {
-            "ok": True,
-            "repo_root": str(ctx.repo_root),
-            "ledger_path": str(ctx.ledger_path),
-            "path": target["path"],
-            "branch": target.get("branch"),
-            "agent_id": entry.get("agent_id"),
-            "purpose": entry.get("purpose"),
-            "status": entry.get("status"),
-            "latest_progress": entry.get("latest_progress"),
-            "latest_lesson": entry.get("latest_lesson"),
-            **paths,
-        }
+        build_handoff_payload(
+            ctx,
+            cwd=str(cwd),
+            path=args.path,
+            branch=args.branch,
+            status="active",
+            progress=args.progress,
+            lesson=args.lesson,
+        )
     )
 
 
@@ -635,95 +459,25 @@ def cmd_finish(args: argparse.Namespace) -> None:
     anchor = args.cwd or args.path
     cwd = resolve_path(anchor)
     ctx = discover_repo(cwd)
-    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    target = select_live_target(
-        worktrees=worktrees,
-        cwd=cwd,
-        path_arg=args.path,
-        branch_arg=args.branch,
-    )
-    entry, paths = record_handoff(
+    payload = build_finish_payload(
         ctx,
-        target,
+        cwd=str(cwd),
+        path=args.path,
+        branch=args.branch,
         status=args.status,
         progress=args.progress,
         lesson=args.lesson,
+        collapse=args.collapse,
     )
-
-    collapsed = False
-    removed_branch = None
-    if args.collapse:
-        target_path, removed_branch = select_collapse_target(
-            worktrees=worktrees,
-            ledger=ledger,
-            path_arg=target["path"],
-            branch_arg=None,
-            repo_root=ctx.repo_root,
-        )
-        run_git(ctx.repo_root, "worktree", "remove", "--force", target_path)
-        run_git(ctx.repo_root, "worktree", "prune", "--expire", "now")
-        target_dir = Path(target_path)
-        if target_dir.exists():
-            shutil.rmtree(target_dir)
-
-        def update(locked_ledger: dict[str, Any]) -> None:
-            locked_ledger["entries"] = [item for item in locked_ledger["entries"] if item.get("path") != target_path]
-
-        mutate_ledger(ctx, update)
-        collapsed = True
-    if args.purge_dossier and paths.get("dossier_path"):
-        shutil.rmtree(paths["dossier_path"], ignore_errors=True)
-
-    emit_json(
-        {
-            "ok": True,
-            "repo_root": str(ctx.repo_root),
-            "ledger_path": str(ctx.ledger_path),
-            "path": target["path"],
-            "branch": target.get("branch"),
-            "removed_branch": removed_branch,
-            "agent_id": entry.get("agent_id"),
-            "purpose": entry.get("purpose"),
-            "status": entry.get("status"),
-            "latest_progress": entry.get("latest_progress"),
-            "latest_lesson": entry.get("latest_lesson"),
-            "collapsed": collapsed,
-            "purged_dossier": bool(args.purge_dossier),
-            **paths,
-        }
-    )
+    if args.purge_dossier and payload.get("dossier_path"):
+        shutil.rmtree(payload["dossier_path"], ignore_errors=True)
+    payload["purged_dossier"] = bool(args.purge_dossier)
+    emit_json(payload)
 
 
 def cmd_collapse(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
-    target_path, branch = select_collapse_target(
-        worktrees=worktrees,
-        ledger=ledger,
-        path_arg=args.path,
-        branch_arg=args.branch,
-        repo_root=ctx.repo_root,
-    )
-
-    run_git(ctx.repo_root, "worktree", "remove", "--force", target_path)
-    run_git(ctx.repo_root, "worktree", "prune", "--expire", "now")
-    target_dir = Path(target_path)
-    if target_dir.exists():
-        shutil.rmtree(target_dir)
-
-    def update(locked_ledger: dict[str, Any]) -> None:
-        locked_ledger["entries"] = [item for item in locked_ledger["entries"] if item.get("path") != target_path]
-
-    mutate_ledger(ctx, update)
-    emit_json(
-        {
-            "ok": True,
-            "repo_root": str(ctx.repo_root),
-            "ledger_path": str(ctx.ledger_path),
-            "removed_path": target_path,
-            "removed_branch": branch,
-        }
-    )
+    emit_json(build_collapse_payload(ctx, path=args.path, branch=args.branch))
 
 
 def cmd_statusline(args: argparse.Namespace) -> None:
@@ -739,7 +493,7 @@ def cmd_statusline(args: argparse.Namespace) -> None:
 
 
 def cmd_web(args: argparse.Namespace) -> None:
-    from .web import run_web_console
+    from ..web import run_web_console
 
     run_web_console(args)
 
