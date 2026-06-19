@@ -59,6 +59,11 @@ class GitWarpTests(unittest.TestCase):
         self.assertEqual(Path(str(scan["repo_root"])).resolve(), self.repo.resolve())
         self.assertEqual(len(scan["worktrees"]), 1)
 
+        main_context = run_gitwarp(self.repo, "context", "--cwd", str(self.repo))
+        self.assertTrue(main_context["worktree"]["is_main"])  # type: ignore[index]
+        self.assertEqual(main_context["worktree"]["branch"], "main")  # type: ignore[index]
+        self.assertIsNone(main_context["worktree"]["agent_id"])  # type: ignore[index]
+
         summon = run_gitwarp(
             self.repo,
             "summon",
@@ -72,6 +77,8 @@ class GitWarpTests(unittest.TestCase):
         worktree_path = Path(str(summon["path"]))
         self.assertTrue(worktree_path.exists())
         self.assertEqual(summon["branch_created"], True)
+        nested_path = worktree_path / "src"
+        nested_path.mkdir()
 
         scan_after = run_gitwarp(self.repo, "scan")
         live = {item["path"]: item for item in scan_after["worktrees"]}  # type: ignore[index]
@@ -80,13 +87,38 @@ class GitWarpTests(unittest.TestCase):
         self.assertEqual(live[str(worktree_path)]["purpose"], "Implement prompt banner")
 
         statusline = subprocess.run(
-            ["python3", str(SCRIPT), "statusline", "--cwd", str(worktree_path)],
+            ["python3", str(SCRIPT), "statusline", "--cwd", str(nested_path)],
             cwd=str(self.repo),
             capture_output=True,
             text=True,
             check=True,
         )
         self.assertEqual(statusline.stdout.strip(), "GITWARP[codex-alpha@feature/statusline]")
+
+        annotate = run_gitwarp(
+            self.repo,
+            "annotate",
+            "--cwd",
+            str(nested_path),
+            "--status",
+            "testing",
+            "--note",
+            "Implemented prompt banner lookup",
+        )
+        self.assertEqual(annotate["branch"], "feature/statusline")
+        self.assertEqual(annotate["status"], "testing")
+        self.assertEqual(annotate["notes_count"], 1)
+
+        context = run_gitwarp(self.repo, "context", "--cwd", str(nested_path))
+        current = context["worktree"]  # type: ignore[index]
+        self.assertEqual(context["cwd"], str(nested_path))
+        self.assertFalse(current["is_main"])  # type: ignore[index]
+        self.assertEqual(current["path"], str(worktree_path))  # type: ignore[index]
+        self.assertEqual(current["branch"], "feature/statusline")  # type: ignore[index]
+        self.assertEqual(current["agent_id"], "codex-alpha")  # type: ignore[index]
+        self.assertEqual(current["purpose"], "Implement prompt banner")  # type: ignore[index]
+        self.assertEqual(current["status"], "testing")  # type: ignore[index]
+        self.assertEqual(current["notes"][-1]["note"], "Implemented prompt banner lookup")  # type: ignore[index]
 
         collapse = run_gitwarp(self.repo, "collapse", "--branch", "feature/statusline")
         self.assertEqual(collapse["removed_branch"], "feature/statusline")
@@ -142,10 +174,12 @@ class PluginStructureTests(unittest.TestCase):
         relative_paths = [
             ".codex-plugin/plugin.json",
             ".claude-plugin/plugin.json",
+            ".claude-plugin/marketplace.json",
             "hooks/hooks-codex.json",
             "hooks/run-hook.cmd",
             "hooks/session-start-codex",
             "skills/gitwarp/SKILL.md",
+            "skills/gitwarp/agents/openai.yaml",
             "skills/gitwarp/references/install.md",
             "skills/gitwarp/scripts/gitwarp.py",
             "skills/gitwarp/scripts/install_cli.py",

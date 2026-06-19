@@ -96,11 +96,45 @@ print(payload["path"])
 PY
 )"
 
-worktree_banner="$(gitwarp statusline --cwd "$worktree_path")"
+nested_path="$worktree_path/src"
+mkdir -p "$nested_path"
+
+worktree_banner="$(gitwarp statusline --cwd "$nested_path")"
 if [[ "$worktree_banner" != "GITWARP[verify-agent@feature/verify-install]" ]]; then
   echo "unexpected worktree banner: $worktree_banner" >&2
   exit 1
 fi
+
+annotate_output="$(
+  gitwarp annotate --cwd "$nested_path" \
+    --status verified \
+    --note "Verified install smoke flow"
+)"
+ANNOTATE_OUTPUT="$annotate_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["ANNOTATE_OUTPUT"])
+assert payload["ok"] is True
+assert payload["status"] == "verified"
+assert payload["notes_count"] == 1
+PY
+
+context_output="$(gitwarp context --cwd "$nested_path")"
+CONTEXT_OUTPUT="$context_output" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["CONTEXT_OUTPUT"])
+worktree = payload["worktree"]
+assert payload["ok"] is True
+assert payload["cwd"].endswith("/src")
+assert worktree["branch"] == "feature/verify-install"
+assert worktree["agent_id"] == "verify-agent"
+assert worktree["purpose"] == "Verify GitWarp install"
+assert worktree["status"] == "verified"
+assert worktree["notes"][-1]["note"] == "Verified install smoke flow"
+PY
 
 collapse_output="$(gitwarp collapse --cwd "$tmpdir" --branch feature/verify-install)"
 COLLAPSE_OUTPUT="$collapse_output" python3 - <<'PY'
@@ -129,7 +163,7 @@ print(
             "ok": True,
             "plugin": os.environ["PLUGIN_ID"],
             "cli": os.environ["CLI_PATH"],
-            "smoke": "scan-summon-statusline-collapse",
+            "smoke": "scan-summon-context-annotate-statusline-collapse",
         },
         separators=(",", ":"),
         sort_keys=True,

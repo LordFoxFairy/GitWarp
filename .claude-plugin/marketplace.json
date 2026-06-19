@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "gitwarp",
-      "description": "Worktree isolation and CLI logistics for concurrent coding agents.",
+      "description": "Worktree isolation, context, and task records for concurrent coding agents.",
       "version": "0.1.0",
       "source": "./",
       "author": {

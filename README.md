@@ -1,6 +1,6 @@
 # GitWarp
 
-GitWarp is a Codex/Claude skill-plugin for coordinating concurrent coding agents with isolated `git worktree` sandboxes. It follows the Agent Skills pattern: the reusable behavior lives in `skills/gitwarp/SKILL.md`, deterministic operations live in `scripts/`, and plugin shells expose the skill to supported agents.
+GitWarp is a Codex/Claude skill-plugin for coordinating concurrent coding agents with isolated `git worktree` sandboxes and task records. It follows the Agent Skills pattern: the reusable behavior lives in `skills/gitwarp/SKILL.md`, deterministic operations live in `scripts/`, and plugin shells expose the skill to supported agents.
 
 The bundled CLI is implemented in Python with only the standard library plus the system `git` command. Treat Python as an implementation detail; after installation, agents should call `gitwarp`.
 
@@ -44,11 +44,17 @@ gitwarp summon --cwd /absolute/path/to/repo \
   --agent-id codex-alpha \
   --branch feature/my-task \
   --purpose "Implement isolated task"
+gitwarp context --cwd "$PWD"
+gitwarp annotate --cwd "$PWD" \
+  --status testing \
+  --note "Implemented first passing test"
 gitwarp statusline --cwd "$PWD"
 gitwarp collapse --cwd /absolute/path/to/repo --branch feature/my-task
 ```
 
-`scan`, `summon`, and `collapse` emit strict one-line JSON. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`.
+`scan`, `summon`, `context`, `annotate`, and `collapse` emit strict one-line JSON. `statusline` emits a raw banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]`.
+
+Use `context` when an agent needs to understand where it is and what the workspace is for. Use `annotate` after meaningful milestones so later agents can see status and notes in `.gitwarp/ledger.json` through `scan` or `context`.
 
 ## Development Checks
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "GitWarp"
-  short_description: "Git worktree isolation for concurrent agents"
-  default_prompt: "Use GitWarp before parallel agent work to allocate an isolated workspace."
+  short_description: "Git worktree isolation and task records for agents"
+  default_prompt: "Use GitWarp before parallel agent work to allocate an isolated workspace and record context."

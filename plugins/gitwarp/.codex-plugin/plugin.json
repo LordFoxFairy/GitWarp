@@ -1,7 +1,7 @@
 {
   "name": "gitwarp",
   "version": "0.1.0",
-  "description": "Worktree isolation and CLI logistics for concurrent coding agents.",
+  "description": "Worktree isolation, context, and task records for concurrent coding agents.",
   "author": {
     "name": "thefoxfairy"
   },
@@ -17,8 +17,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "GitWarp",
-    "shortDescription": "Git worktree isolation for concurrent agents",
-    "longDescription": "Use GitWarp to scan, summon, label, and collapse isolated git worktree sandboxes while preventing branch collisions across automated coding agents.",
+    "shortDescription": "Git worktree isolation and task records for agents",
+    "longDescription": "Use GitWarp to scan, summon, inspect, annotate, and collapse isolated git worktree sandboxes while preventing branch collisions across automated coding agents.",
     "developerName": "thefoxfairy",
     "category": "Coding",
     "capabilities": [
@@ -27,7 +27,7 @@
     ],
     "defaultPrompt": [
       "Set up an isolated workspace for this agent task.",
-      "Scan active GitWarp worktrees before starting parallel work."
+      "Scan active GitWarp worktrees and inspect context before starting parallel work."
     ]
   }
 }

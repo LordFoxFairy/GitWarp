@@ -1,17 +1,17 @@
 ---
 name: gitwarp
-description: Use when concurrent Claude Code or Codex agents need isolated git worktrees, when branch collisions or index contamination must be avoided, or when an agent must scan, summon, collapse, or label temporary workspaces with persistent metadata.
+description: Use when concurrent Claude Code or Codex agents need isolated git worktrees, branch collision prevention, workspace context, or persistent records of which agent owns a sandbox and what it has done.
 ---
 
 # GitWarp
 
 ## Overview
 
-GitWarp provides a deterministic helper around native `git worktree` so agents can claim, track, and destroy isolated sandboxes without reusing a branch or contaminating the main checkout index. It stores runtime state in the target repository under `.gitwarp/ledger.json`.
+GitWarp provides a deterministic helper around native `git worktree` so agents can claim, track, annotate, inspect, and destroy isolated sandboxes without reusing a branch or contaminating the main checkout index. It stores runtime state in the target repository under `.gitwarp/ledger.json`.
 
 ## Core Rule
 
-When a task requires isolated concurrent writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main repository. Use GitWarp to scan, summon, label, and collapse the workspace so branch ownership stays machine-readable.
+When a task requires isolated concurrent writes, do not run `git switch`, `git checkout`, or direct `git worktree add` in the main repository. Use GitWarp to scan, summon, inspect, annotate, and collapse the workspace so branch ownership and task history stay machine-readable.
 
 ## When To Use
 
@@ -20,13 +20,14 @@ Use this skill when any of the following are true:
 1. Two or more agents will write to the same repository concurrently.
 2. You need a dedicated workspace for a feature branch and must not check it out in the main repo.
 3. You need a machine-readable inventory of active worktrees plus ownership metadata such as agent id and task purpose.
-4. You need a prompt statusline banner that tells a model whether it is in the main repo or an isolated sandbox.
+4. An agent is unsure which worktree it is in or what work has already been recorded there.
+5. You need a prompt statusline banner that tells a model whether it is in the main repo or an isolated sandbox.
 
 Do not use this skill for single-agent edits in the main checkout when no branch isolation is needed.
 
 ## Command Contract
 
-1. `scan`, `summon`, and `collapse` emit deterministic single-line JSON.
+1. `scan`, `summon`, `context`, `annotate`, and `collapse` emit deterministic single-line JSON.
 2. `statusline` emits a raw unquoted prompt banner only.
 3. All `--cwd`, returned workspace paths, ledger paths, and worktree roots must be treated as absolute paths.
 4. If any JSON command returns nonzero or `"ok": false`, stop the workflow, report the `error` field, and do not keep editing from an assumed workspace.
@@ -75,7 +76,7 @@ After installation, use:
 gitwarp --help
 ```
 
-### 2. Scan before allocating or editing
+### 2. Scan and inspect context before allocating or editing
 
 Run:
 
@@ -89,15 +90,23 @@ Or with the installed CLI:
 gitwarp scan --cwd /absolute/path/to/repo
 ```
 
-This returns the repo root, ledger path, and live worktrees enriched with any tracked `agent_id` and `purpose`.
+This returns the repo root, ledger path, and live worktrees enriched with tracked `agent_id`, `purpose`, `status`, and `notes`.
 
-If the current process might already be inside a sandbox, also run:
+If the current process might already be inside a sandbox, inspect the full context:
+
+```bash
+gitwarp context --cwd "$PWD"
+```
+
+This returns the matching worktree, branch, `agent_id`, `purpose`, `status`, and accumulated `notes`.
+
+For shell prompts, use the raw banner:
 
 ```bash
 gitwarp statusline --cwd "$PWD"
 ```
 
-Continue in place only when the banner matches the intended agent and branch.
+Continue in place only when the context or banner matches the intended agent and branch.
 
 ### 3. Summon an isolated workspace
 
@@ -118,7 +127,19 @@ Rules:
 3. Assume the workspace path is absolute and stable for the lifetime of the task.
 4. Do not edit in the public root after a sandbox has been summoned for the task.
 
-### 4. Collapse when the task is done
+### 4. Record progress
+
+After meaningful milestones, write a short note:
+
+```bash
+gitwarp annotate --cwd "$PWD" \
+  --status testing \
+  --note "Implemented regression test and minimal fix"
+```
+
+Use terse status values such as `active`, `implementing`, `testing`, `blocked`, `ready`, or `pushed`. Notes are append-only records for future agents; do not use them as a substitute for commits or PR descriptions.
+
+### 5. Collapse when the task is done
 
 Run:
 
@@ -130,7 +151,7 @@ python3 /absolute/path/to/skills/gitwarp/scripts/gitwarp.py collapse \
 
 Use this only after verification and push, or when the user explicitly wants the sandbox destroyed.
 
-### 5. Surface context in prompts
+### 6. Surface context in prompts
 
 Run:
 
@@ -146,6 +167,7 @@ This prints a raw string such as `GITWARP[main-repo]` or `GITWARP[codex-reviewer
 - Missing Git repository: run from a real repository or pass `--cwd /absolute/path/to/repo`.
 - Invalid ledger: stop and report the ledger path; do not rewrite it manually unless the user asks for repair.
 - Collapse target missing: run `scan`, verify the branch/path, then retry with the exact live path or branch.
+- Annotation refused on main repo: summon or enter an isolated workspace first.
 
 ## Expectations
 

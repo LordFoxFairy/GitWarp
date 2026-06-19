@@ -148,10 +148,25 @@ def sync_ledger(ctx: RepoContext, live_worktrees: list[dict[str, Any]]) -> tuple
                 "is_main": item.get("is_main", False),
                 "agent_id": meta.get("agent_id"),
                 "purpose": meta.get("purpose"),
+                "status": meta.get("status"),
+                "notes": meta.get("notes", []),
                 "created_at": meta.get("created_at"),
+                "updated_at": meta.get("updated_at"),
             }
         )
     return ledger, enriched
+
+
+def path_contains(parent: str, child: Path) -> bool:
+    parent_path = Path(parent).resolve()
+    return child == parent_path or parent_path in child.parents
+
+
+def find_worktree_for_cwd(cwd: Path, worktrees: list[dict[str, Any]]) -> dict[str, Any] | None:
+    matches = [item for item in worktrees if path_contains(str(item["path"]), cwd)]
+    if not matches:
+        return None
+    return max(matches, key=lambda item: len(str(item["path"])))
 
 
 def sanitize_name(value: str) -> str:
@@ -212,6 +227,29 @@ def select_collapse_target(
     return target_path, branch
 
 
+def select_live_target(
+    worktrees: list[dict[str, Any]],
+    cwd: Path,
+    path_arg: str | None,
+    branch_arg: str | None,
+) -> dict[str, Any]:
+    if path_arg:
+        target_path = str(Path(path_arg).expanduser().resolve())
+        for item in worktrees:
+            if item["path"] == target_path:
+                return item
+        raise GitWarpError(f"no live worktree found at path '{target_path}'")
+    if branch_arg:
+        matches = [item for item in worktrees if item.get("branch") == branch_arg]
+        if not matches:
+            raise GitWarpError(f"no live worktree found for branch '{branch_arg}'")
+        return matches[0]
+    target = find_worktree_for_cwd(cwd, worktrees)
+    if target is None:
+        raise GitWarpError(f"current directory is not inside a live worktree: {cwd}")
+    return target
+
+
 def cmd_scan(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
@@ -250,6 +288,8 @@ def cmd_summon(args: argparse.Namespace) -> None:
         "branch": args.branch,
         "agent_id": args.agent_id,
         "purpose": args.purpose,
+        "status": "active",
+        "notes": [],
         "created_at": now_iso(),
     }
     ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
@@ -267,6 +307,77 @@ def cmd_summon(args: argparse.Namespace) -> None:
             "agent_id": args.agent_id,
             "purpose": args.purpose,
             "branch_created": not existing_branch,
+        }
+    )
+
+
+def cmd_context(args: argparse.Namespace) -> None:
+    cwd = resolve_path(args.cwd)
+    ctx = discover_repo(cwd)
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    target = find_worktree_for_cwd(cwd, worktrees)
+    if target is None:
+        raise GitWarpError(f"current directory is not inside a live worktree: {cwd}")
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "checkout_root": str(ctx.checkout_root),
+            "cwd": str(cwd),
+            "ledger_path": str(ctx.ledger_path),
+            "worktree": target,
+        }
+    )
+
+
+def cmd_annotate(args: argparse.Namespace) -> None:
+    anchor = args.cwd or args.path
+    cwd = resolve_path(anchor)
+    ctx = discover_repo(cwd)
+    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    target = select_live_target(
+        worktrees=worktrees,
+        cwd=cwd,
+        path_arg=args.path,
+        branch_arg=args.branch,
+    )
+    if target.get("is_main"):
+        raise GitWarpError("refusing to annotate the main repository checkout")
+
+    target_path = target["path"]
+    entry = next((item for item in ledger["entries"] if item.get("path") == target_path), None)
+    if entry is None:
+        entry = {
+            "path": target_path,
+            "branch": target.get("branch"),
+            "agent_id": None,
+            "purpose": None,
+            "status": None,
+            "notes": [],
+            "created_at": now_iso(),
+        }
+        ledger["entries"].append(entry)
+
+    timestamp = now_iso()
+    if args.status:
+        entry["status"] = args.status
+    entry.setdefault("notes", [])
+    entry["notes"].append({"note": args.note, "created_at": timestamp})
+    entry["updated_at"] = timestamp
+    write_ledger(ctx, ledger)
+
+    emit_json(
+        {
+            "ok": True,
+            "repo_root": str(ctx.repo_root),
+            "ledger_path": str(ctx.ledger_path),
+            "path": target_path,
+            "branch": target.get("branch"),
+            "agent_id": entry.get("agent_id"),
+            "purpose": entry.get("purpose"),
+            "status": entry.get("status"),
+            "notes_count": len(entry["notes"]),
+            "latest_note": entry["notes"][-1],
         }
     )
 
@@ -341,6 +452,18 @@ def build_parser() -> argparse.ArgumentParser:
     summon.add_argument("--branch", required=True)
     summon.add_argument("--purpose", required=True)
     summon.set_defaults(func=cmd_summon)
+
+    context = subparsers.add_parser("context", help="Print JSON context for the current worktree")
+    context.add_argument("--cwd")
+    context.set_defaults(func=cmd_context)
+
+    annotate = subparsers.add_parser("annotate", help="Append a progress note to a tracked worktree")
+    annotate.add_argument("--cwd")
+    annotate.add_argument("--path")
+    annotate.add_argument("--branch")
+    annotate.add_argument("--status")
+    annotate.add_argument("--note", required=True)
+    annotate.set_defaults(func=cmd_annotate)
 
     collapse = subparsers.add_parser("collapse", help="Force-remove a tracked isolated worktree")
     collapse.add_argument("--cwd")
