@@ -79,13 +79,13 @@
 - [x] Keep low-level command docs concise and available.
 - [x] Update install smoke script to use `start -> context -> handoff -> board -> finish --collapse`.
 - [x] Run `bash -n scripts/verify-install.sh`.
-- [ ] Run skill validator, plugin validator, unittest discovery, install script, smoke script, and fresh Codex plugin availability check.
+- [x] Run skill validator, plugin validator, unittest discovery, install script, smoke script, and fresh Codex plugin availability check.
 
 ### Task 6: Commit and integrate
 
 **Files:**
 - All modified implementation, test, docs, and mirrored plugin files.
 
-- [ ] Commit the feature branch with `feat: add gitwarp dossier workflows`.
-- [ ] Merge back into `main` with a non-destructive fast-forward or normal merge after verification.
-- [ ] Collapse the implementation worktree only after the merged state is verified.
+- [x] Commit the feature branch with `feat: add gitwarp dossier workflows`.
+- [x] Merge back into `main` with a non-destructive fast-forward or normal merge after verification.
+- [x] Collapse the implementation worktree only after the merged state is verified.
