@@ -28,6 +28,33 @@ class StaleConfirmation(RuntimeError):
     pass
 
 
+def optional_instruction_list(payload: dict[str, Any]) -> list[str] | None:
+    value = payload.get("instructions")
+    if value is None:
+        return None
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise GitWarpError("instructions must be a list of strings")
+    return value
+
+
+def optional_instruction_profile(payload: dict[str, Any]) -> str | None:
+    value = payload.get("instruction_profile")
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise GitWarpError("instruction_profile must be a string")
+    return value
+
+
+def optional_instruction_mode(payload: dict[str, Any]) -> str:
+    value = payload.get("instruction_mode")
+    if value is None or value == "":
+        return "copy"
+    if not isinstance(value, str) or value not in {"copy", "symlink"}:
+        raise GitWarpError("instruction_mode must be copy or symlink")
+    return value
+
+
 def require_confirmation(
     *,
     secret: bytes,
@@ -65,9 +92,20 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
             agent_id=payload.get("agent_id") if isinstance(payload.get("agent_id"), str) else None,
             branch=str(payload["branch"]),
             purpose=str(payload["purpose"]),
+            instructions=optional_instruction_list(payload),
+            instruction_profile=optional_instruction_profile(payload),
+            instruction_mode=optional_instruction_mode(payload),
         )
     if path == "/api/start":
-        return build_start_payload(ctx, agent_id=str(payload["agent_id"]), branch=str(payload["branch"]), purpose=str(payload["purpose"]))
+        return build_start_payload(
+            ctx,
+            agent_id=str(payload["agent_id"]),
+            branch=str(payload["branch"]),
+            purpose=str(payload["purpose"]),
+            instructions=optional_instruction_list(payload),
+            instruction_profile=optional_instruction_profile(payload),
+            instruction_mode=optional_instruction_mode(payload),
+        )
     if path == "/api/handoff":
         return build_handoff_payload(
             ctx,

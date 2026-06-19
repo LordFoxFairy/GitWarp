@@ -24,6 +24,16 @@ export interface DispatchMetadata {
   launch_preview?: string;
 }
 
+export interface MountedInstruction {
+  source: string;
+  target: string;
+  path: string;
+  mode: "copy" | "symlink" | string;
+  status: "copied" | "linked" | "existing" | string;
+  sha256?: string;
+  bytes?: number;
+}
+
 export interface WorktreeRow {
   path: string;
   branch: string;
@@ -37,6 +47,9 @@ export interface WorktreeRow {
   progress_md?: string;
   lessons_md?: string;
   dispatch?: DispatchMetadata;
+  instructions?: MountedInstruction[];
+  instruction_profile?: string;
+  instruction_mode?: "copy" | "symlink" | string;
 }
 
 export interface WebState {

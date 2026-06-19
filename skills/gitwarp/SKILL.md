@@ -17,7 +17,8 @@ GitWarp is the worktree isolation protocol for coding agents. It wraps native `g
 4. Use only absolute paths returned by GitWarp. The default sandbox root is `<repo>/.gitwarp/worktrees/`.
 5. Read `task.md`, `progress.md`, and `lessons.md` before editing inside a sandbox.
 6. Record milestones with `gitwarp handoff` so later agents can recover context.
-7. Never edit `.gitwarp/ledger.json` or `.gitwarp/agents.json` by hand while GitWarp commands may be running.
+7. Mount local instruction files explicitly with `--instruction` or `--instruction-profile`; do not assume global `AGENTS.md` or `CLAUDE.md` files are present in every worktree.
+8. Never edit `.gitwarp/ledger.json` or `.gitwarp/agents.json` by hand while GitWarp commands may be running.
 
 ## Command Contract
 
@@ -39,6 +40,8 @@ GitWarp is the worktree isolation protocol for coding agents. It wraps native `g
 
 All automation commands emit deterministic single-line JSON except `statusline`, `enter --format prompt`, and `board --format table`. If any JSON command returns nonzero or `"ok": false`, stop and report the `error` field.
 
+`gitwarp web --cwd <repo>` starts the local management UI for human operators. Use it to view the board, inspect dossiers, create or dispatch worktrees, mount instruction files or profiles, record handoffs, and finish/collapse worktrees with confirmation.
+
 ## Standard Workflow
 
 From any repository path:
@@ -59,6 +62,19 @@ gitwarp dispatch --cwd /absolute/path/to/repo \
   --branch feature/my-task \
   --purpose "Implement isolated task"
 ```
+
+If a worker needs repository-specific rule files, pass them explicitly:
+
+```bash
+gitwarp dispatch --cwd /absolute/path/to/repo \
+  --agent claude \
+  --branch feature/my-task \
+  --purpose "Implement isolated task" \
+  --instruction AGENTS.md \
+  --instruction CLAUDE.md=docs/claude-code.md
+```
+
+Repeatable instruction stacks can be defined in `.gitwarp/instruction_profiles.json` and selected with `--instruction-profile <name>`. Instructions are copied by default; `--instruction-mode symlink` is explicit opt-in.
 
 Run the returned `launch_command` yourself. `dispatch --command-mode execute` is intentionally unsupported and fails before creating anything.
 

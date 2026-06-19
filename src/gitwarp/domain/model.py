@@ -85,6 +85,9 @@ class WorkspaceRecord:
     created_at: str | None = None
     updated_at: str | None = None
     dispatch: dict[str, Any] | None = None
+    instructions: list[dict[str, Any]] | None = None
+    instruction_profile: str | None = None
+    instruction_mode: str | None = None
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> "WorkspaceRecord":
@@ -105,6 +108,9 @@ class WorkspaceRecord:
             created_at=value.get("created_at") if isinstance(value.get("created_at"), str) else None,
             updated_at=value.get("updated_at") if isinstance(value.get("updated_at"), str) else None,
             dispatch=value.get("dispatch") if isinstance(value.get("dispatch"), dict) else None,
+            instructions=value.get("instructions") if isinstance(value.get("instructions"), list) else None,
+            instruction_profile=value.get("instruction_profile") if isinstance(value.get("instruction_profile"), str) else None,
+            instruction_mode=value.get("instruction_mode") if isinstance(value.get("instruction_mode"), str) else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -125,6 +131,12 @@ class WorkspaceRecord:
             payload.update(self.dossier.to_dict())
         if self.dispatch is not None:
             payload["dispatch"] = self.dispatch
+        if self.instructions is not None:
+            payload["instructions"] = self.instructions
+        if self.instruction_profile is not None:
+            payload["instruction_profile"] = self.instruction_profile
+        if self.instruction_mode is not None:
+            payload["instruction_mode"] = self.instruction_mode
         return payload
 
 

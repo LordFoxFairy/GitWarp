@@ -23,7 +23,17 @@ def cmd_summon(args: argparse.Namespace) -> None:
 
 def cmd_start(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    emit_json(build_start_payload(ctx, agent_id=args.agent_id, branch=args.branch, purpose=args.purpose))
+    emit_json(
+        build_start_payload(
+            ctx,
+            agent_id=args.agent_id,
+            branch=args.branch,
+            purpose=args.purpose,
+            instructions=args.instruction,
+            instruction_profile=args.instruction_profile,
+            instruction_mode=args.instruction_mode,
+        )
+    )
 
 
 def cmd_dispatch(args: argparse.Namespace) -> None:
@@ -37,6 +47,9 @@ def cmd_dispatch(args: argparse.Namespace) -> None:
             agent_id=args.agent_id,
             branch=args.branch,
             purpose=args.purpose,
+            instructions=args.instruction,
+            instruction_profile=args.instruction_profile,
+            instruction_mode=args.instruction_mode,
         )
     )
 

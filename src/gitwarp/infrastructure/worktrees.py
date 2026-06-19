@@ -75,6 +75,9 @@ def sync_ledger(
             "last_seen_head": last_seen_head,
             "created_at": meta.get("created_at"),
             "updated_at": meta.get("updated_at"),
+            "instructions": meta.get("instructions"),
+            "instruction_profile": meta.get("instruction_profile"),
+            "instruction_mode": meta.get("instruction_mode"),
         }
         head_drift = build_head_drift(last_seen_head, item.get("head"))
         if head_drift is not None:

@@ -40,6 +40,9 @@ def board_row(item: dict[str, Any], *, verbose: bool = False) -> dict[str, Any]:
         "latest_progress": item.get("latest_progress"),
         "latest_lesson": item.get("latest_lesson"),
         "last_seen_head": item.get("last_seen_head"),
+        "instructions": item.get("instructions"),
+        "instruction_profile": item.get("instruction_profile"),
+        "instruction_mode": item.get("instruction_mode"),
     }
     if item.get("head_drift") is not None:
         row["head_drift"] = item["head_drift"]

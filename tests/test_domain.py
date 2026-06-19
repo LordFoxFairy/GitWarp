@@ -50,6 +50,9 @@ class DomainModelTests(unittest.TestCase):
                 "latest_progress": "Dispatch command prepared.",
                 "last_seen_head": "abc123",
                 "dispatch": {"agent_name": "codex"},
+                "instructions": [{"target": "AGENTS.md", "source": "/repo/AGENTS.md", "mode": "copy"}],
+                "instruction_profile": "codex",
+                "instruction_mode": "copy",
             }
         )
 
@@ -57,6 +60,9 @@ class DomainModelTests(unittest.TestCase):
         self.assertEqual(payload["agent_id"], "codex-task")
         self.assertEqual(payload["dossier_path"], "/repo/.gitwarp/dossiers/task")
         self.assertEqual(payload["dispatch"], {"agent_name": "codex"})
+        self.assertEqual(payload["instructions"][0]["target"], "AGENTS.md")
+        self.assertEqual(payload["instruction_profile"], "codex")
+        self.assertEqual(payload["instruction_mode"], "copy")
 
     def test_dispatch_plan_serializes_to_ledger_metadata(self) -> None:
         model = importlib.import_module("gitwarp.domain.model")

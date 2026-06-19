@@ -36,6 +36,8 @@ def create_dossier_files(
     purpose: str | None,
     status: str | None,
     created_at: str,
+    instructions: list[dict[str, Any]] | None = None,
+    instruction_profile: str | None = None,
 ) -> None:
     dossier_path = Path(paths["dossier_path"])
     dossier_path.mkdir(parents=True, exist_ok=True)
@@ -44,6 +46,12 @@ def create_dossier_files(
     lessons = Path(paths["lessons_md"])
 
     if not task.exists():
+        instruction_lines: list[str] = []
+        if instructions:
+            instruction_lines.extend(["", "## Mounted Instructions", ""])
+            if instruction_profile:
+                instruction_lines.extend([f"- Profile: {instruction_profile}"])
+            instruction_lines.extend(f"- `{item['target']}` from `{item['source']}` ({item['mode']})" for item in instructions)
         task.write_text(
             "\n".join(
                 [
@@ -63,6 +71,7 @@ def create_dossier_files(
                     "## Success Criteria",
                     "",
                     "- [ ] Define concrete verification before finishing",
+                    *instruction_lines,
                     "",
                 ]
             ),
@@ -148,6 +157,8 @@ def ensure_dossier_for_entry(ctx: RepoContext, entry: dict[str, Any], target: di
         purpose=entry.get("purpose"),
         status=entry.get("status") or "active",
         created_at=entry.get("created_at") or now_iso(),
+        instructions=entry.get("instructions") if isinstance(entry.get("instructions"), list) else None,
+        instruction_profile=entry.get("instruction_profile") if isinstance(entry.get("instruction_profile"), str) else None,
     )
     return concrete_paths
 

@@ -1,14 +1,30 @@
 import type { FormEvent } from "react";
-import type { DispatchInput } from "../gitwarp-api";
+import type { DispatchInput, StartWorktreeInput } from "../gitwarp-api";
 
 interface ActionPanelProps {
   readonly: boolean;
-  onStart: (input: { agent_id: string; branch: string; purpose: string }) => void;
+  onStart: (input: StartWorktreeInput) => void;
   onDispatch: (input: DispatchInput) => void;
 }
 
 function value(form: HTMLFormElement, name: string): string {
   return new FormData(form).get(name)?.toString().trim() ?? "";
+}
+
+function instructionOptions(form: HTMLFormElement): Pick<StartWorktreeInput, "instructions" | "instruction_profile" | "instruction_mode"> {
+  const rawInstructions = value(form, "instructions");
+  const profile = value(form, "instruction_profile");
+  const mode = value(form, "instruction_mode") === "symlink" ? "symlink" : "copy";
+  const instructions = rawInstructions
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return {
+    ...(instructions.length > 0 ? { instructions } : {}),
+    ...(profile ? { instruction_profile: profile } : {}),
+    instruction_mode: mode,
+  };
 }
 
 export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps) {
@@ -19,6 +35,7 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
       agent_id: value(form, "agent_id"),
       branch: value(form, "branch"),
       purpose: value(form, "purpose"),
+      ...instructionOptions(form),
     });
     form.reset();
   };
@@ -31,6 +48,7 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
       agent,
       branch: value(form, "branch"),
       purpose: value(form, "purpose"),
+      ...instructionOptions(form),
     });
     form.reset();
   };
@@ -54,6 +72,7 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
           Purpose
           <textarea name="purpose" rows={3} placeholder="Short task description" required disabled={readonly} />
         </label>
+        <InstructionFields readonly={readonly} />
         <button className="button primary full" type="submit" disabled={readonly}>
           Start Worktree
         </button>
@@ -81,10 +100,34 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
           Purpose
           <textarea name="purpose" rows={3} placeholder="Create workspace and launch command" required disabled={readonly} />
         </label>
+        <InstructionFields readonly={readonly} />
         <button className="button secondary full" type="submit" disabled={readonly}>
           Prepare Launch Command
         </button>
       </form>
     </aside>
+  );
+}
+
+function InstructionFields({ readonly }: { readonly: boolean }) {
+  return (
+    <fieldset className="instruction-fields">
+      <legend>Instruction Mounts</legend>
+      <label>
+        Files
+        <textarea name="instructions" rows={3} placeholder={"AGENTS.md\nCLAUDE.md=docs/claude-code.md"} disabled={readonly} />
+      </label>
+      <label>
+        Profile
+        <input name="instruction_profile" placeholder="claude-code" disabled={readonly} />
+      </label>
+      <label>
+        Mode
+        <select name="instruction_mode" defaultValue="copy" disabled={readonly}>
+          <option value="copy">copy snapshot</option>
+          <option value="symlink">symlink live file</option>
+        </select>
+      </label>
+    </fieldset>
   );
 }

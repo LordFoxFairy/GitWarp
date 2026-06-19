@@ -147,6 +147,14 @@ def format_enter_prompt(payload: dict[str, Any]) -> str:
                     f"Latest lesson: {worktree.get('latest_lesson') or 'none'}",
                 ]
             )
+            instructions = worktree.get("instructions")
+            if isinstance(instructions, list) and instructions:
+                lines.append("Instructions:")
+                for item in instructions:
+                    if isinstance(item, dict):
+                        lines.append(
+                            f"- {item.get('target') or 'unknown'} ({item.get('mode') or 'copy'}; {item.get('status') or 'mounted'})"
+                        )
     recommendations = payload.get("recommended_next") or []
     if recommendations:
         lines.append("Next:")

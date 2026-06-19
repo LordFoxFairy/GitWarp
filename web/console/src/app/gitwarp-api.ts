@@ -9,12 +9,18 @@ export interface StartWorktreeInput {
   agent_id: string;
   branch: string;
   purpose: string;
+  instructions?: string[];
+  instruction_profile?: string;
+  instruction_mode?: "copy" | "symlink";
 }
 
 export interface DispatchInput {
   agent: "codex" | "claude";
   branch: string;
   purpose: string;
+  instructions?: string[];
+  instruction_profile?: string;
+  instruction_mode?: "copy" | "symlink";
 }
 
 export interface HandoffInput {
