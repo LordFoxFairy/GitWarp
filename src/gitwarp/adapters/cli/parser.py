@@ -10,6 +10,7 @@ from .read import (
     cmd_context,
     cmd_doctor,
     cmd_enter,
+    cmd_matrix,
     cmd_reconcile,
     cmd_scan,
     cmd_statusline,
@@ -58,6 +59,11 @@ def build_parser() -> argparse.ArgumentParser:
     branches.add_argument("--cwd")
     branches.add_argument("--base", help="Branch used as the merge target for deletion safety; defaults to origin HEAD or main")
     branches.set_defaults(func=cmd_branches)
+
+    matrix = subparsers.add_parser("matrix", help="Explain Git refs, worktrees, ledger rows, and dossiers in one read-only control-plane view")
+    matrix.add_argument("--cwd")
+    matrix.add_argument("--base", help="Branch used as the merge target for cleanup classification; defaults to origin HEAD or main")
+    matrix.set_defaults(func=cmd_matrix)
 
     create = subparsers.add_parser("create", help="Create an isolated worktree and dossier")
     create.add_argument("--cwd")

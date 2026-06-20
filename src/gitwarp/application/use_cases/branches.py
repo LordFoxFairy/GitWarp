@@ -76,7 +76,12 @@ def build_branch_row(
     is_default = name == default_branch
     has_worktree = live is not None
     in_ledger = bool(ledger_entries)
-    branch_role = resolve_branch_role(is_default=is_default, live=live, ledger_entry=ledger_entry)
+    branch_role = resolve_branch_role(
+        is_default=is_default,
+        is_merge_base=name == merge_base,
+        live=live,
+        ledger_entry=ledger_entry,
+    )
     base_branch = resolve_base_branch(
         merge_base=merge_base,
         branch_role=branch_role,
@@ -108,10 +113,11 @@ def build_branch_row(
 def resolve_branch_role(
     *,
     is_default: bool,
+    is_merge_base: bool,
     live: dict[str, Any] | None,
     ledger_entry: dict[str, Any],
 ) -> str:
-    if is_default:
+    if is_default or is_merge_base:
         return BASE_ROLE
     if live is not None and isinstance(live.get("branch_role"), str):
         return str(live["branch_role"])
