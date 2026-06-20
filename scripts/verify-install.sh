@@ -277,8 +277,15 @@ payload = json.loads(os.environ["REMOVE_OUTPUT"])
 assert payload["ok"] is True
 assert payload["removed_path"] == os.environ["REMOVE_PATH"]
 assert payload["removed_branch"] == "feature/verify-remove"
+assert payload["purged_dossier"] is True
+assert payload["dossier_path"]
 assert not Path(os.environ["REMOVE_PATH"]).exists()
+assert not Path(payload["dossier_path"]).exists()
 PY
+if ! git -C "$tmpdir" branch --list feature/verify-remove | grep -q "feature/verify-remove"; then
+  echo "remove unexpectedly deleted feature/verify-remove branch" >&2
+  exit 1
+fi
 
 set +e
 execute_output="$(
@@ -510,9 +517,9 @@ PY
 
 finish_output="$(
   gitwarp finish --cwd "$nested_path" \
-    --status pushed \
-    --progress "Verified and pushed" \
-    --lesson "Dossier preserved after collapse" \
+    --status completed \
+    --progress "Verified locally; ready for user review" \
+    --lesson "Collapse deletes the sandbox dossier" \
     --collapse
 )"
 FINISH_OUTPUT="$finish_output" python3 - <<'PY'
@@ -522,14 +529,20 @@ from pathlib import Path
 
 payload = json.loads(os.environ["FINISH_OUTPUT"])
 assert payload["ok"] is True
-assert payload["status"] == "pushed"
+assert payload["status"] == "completed"
 assert payload["collapsed"] is True
-assert Path(payload["progress_md"]).exists()
-assert Path(payload["lessons_md"]).exists()
+assert payload["purged_dossier"] is True
+assert not Path(payload["dossier_path"]).exists()
+assert not Path(payload["progress_md"]).exists()
+assert not Path(payload["lessons_md"]).exists()
 PY
 
 if [[ -e "$worktree_path" ]]; then
   echo "worktree path still exists after collapse: $worktree_path" >&2
+  exit 1
+fi
+if ! git -C "$tmpdir" branch --list feature/verify-install | grep -q "feature/verify-install"; then
+  echo "finish --collapse unexpectedly deleted feature/verify-install branch" >&2
   exit 1
 fi
 

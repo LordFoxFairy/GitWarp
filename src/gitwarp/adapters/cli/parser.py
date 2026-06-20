@@ -70,7 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     switch.add_argument("--format", choices=["json", "shell"], default="json")
     switch.set_defaults(func=cmd_switch)
 
-    remove = subparsers.add_parser("remove", help="Force-remove an isolated worktree when it is no longer needed")
+    remove = subparsers.add_parser("remove", help="Destroy an isolated sandbox and its dossier without merging or deleting the branch")
     remove.add_argument("--cwd")
     remove.add_argument("--path")
     remove.add_argument("--branch")
@@ -172,18 +172,22 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--cwd")
     doctor.set_defaults(func=cmd_doctor)
 
-    finish = subparsers.add_parser("finish", help="Record final progress and optionally collapse a worktree")
+    finish = subparsers.add_parser("finish", help="Record final progress; collapse only when explicitly destroying the sandbox")
     finish.add_argument("--cwd")
     finish.add_argument("--path")
     finish.add_argument("--branch")
     finish.add_argument("--status", required=True)
     finish.add_argument("--progress", required=True)
     finish.add_argument("--lesson")
-    finish.add_argument("--collapse", action="store_true")
-    finish.add_argument("--purge-dossier", action="store_true")
+    finish.add_argument("--collapse", action="store_true", help="Destroy the worktree, ledger row, and matching dossier after recording progress")
+    finish.add_argument(
+        "--purge-dossier",
+        action="store_true",
+        help="Also delete the matching dossier when not collapsing; collapse already deletes it",
+    )
     finish.set_defaults(func=cmd_finish)
 
-    collapse = subparsers.add_parser("collapse", help="Force-remove a tracked isolated worktree")
+    collapse = subparsers.add_parser("collapse", help="Destroy a tracked isolated worktree and dossier without merging or deleting the branch")
     collapse.add_argument("--cwd")
     collapse.add_argument("--path")
     collapse.add_argument("--branch")

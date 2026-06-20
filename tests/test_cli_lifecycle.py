@@ -23,6 +23,8 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertEqual(create["status"], "active")
         self.assertEqual(create["shell_command"], f"cd {shlex.quote(str(worktree_path))}")
         self.assertTrue(Path(str(create["task_md"])).exists())
+        dossier_path = Path(str(create["dossier_path"]))
+        self.assertTrue(dossier_path.exists())
 
         switch_json = run_gitwarp(self.repo, "switch", "--branch", "feature/primary-commands")
         self.assertEqual(switch_json["path"], str(worktree_path))
@@ -48,7 +50,11 @@ class CliLifecycleTests(GitWarpTestCase):
         remove = run_gitwarp(self.repo, "remove", "--branch", "feature/primary-commands")
         self.assertEqual(remove["removed_path"], str(worktree_path))
         self.assertEqual(remove["removed_branch"], "feature/primary-commands")
+        self.assertEqual(remove["dossier_path"], str(dossier_path))
+        self.assertTrue(remove["purged_dossier"])
         self.assertFalse(worktree_path.exists())
+        self.assertFalse(dossier_path.exists())
+        self.assertIn("feature/primary-commands", run_git(self.repo, "branch", "--list", "feature/primary-commands"))
 
         current_create = run_gitwarp(
             self.repo,
@@ -59,12 +65,16 @@ class CliLifecycleTests(GitWarpTestCase):
             "Remove current sandbox",
         )
         current_path = Path(str(current_create["path"]))
+        current_dossier_path = Path(str(current_create["dossier_path"]))
         nested_current_path = current_path / "packages" / "agent"
         nested_current_path.mkdir(parents=True)
         current_remove = run_gitwarp(nested_current_path, "remove")
         self.assertEqual(current_remove["removed_path"], str(current_path))
         self.assertEqual(current_remove["removed_branch"], "feature/remove-current")
+        self.assertEqual(current_remove["dossier_path"], str(current_dossier_path))
+        self.assertTrue(current_remove["purged_dossier"])
         self.assertFalse(current_path.exists())
+        self.assertFalse(current_dossier_path.exists())
 
         dirty_create = run_gitwarp(
             self.repo,
@@ -75,6 +85,7 @@ class CliLifecycleTests(GitWarpTestCase):
             "Refuse unsafe remove",
         )
         dirty_path = Path(str(dirty_create["path"]))
+        dirty_dossier_path = Path(str(dirty_create["dossier_path"]))
         (dirty_path / "untracked.txt").write_text("dirty\n", encoding="utf-8")
 
         refused = run_gitwarp(self.repo, "remove", "--branch", "feature/remove-dirty", expect_ok=False)
@@ -84,7 +95,10 @@ class CliLifecycleTests(GitWarpTestCase):
         forced = run_gitwarp(self.repo, "remove", "--branch", "feature/remove-dirty", "--force")
         self.assertEqual(forced["removed_path"], str(dirty_path))
         self.assertEqual(forced["removed_branch"], "feature/remove-dirty")
+        self.assertEqual(forced["dossier_path"], str(dirty_dossier_path))
+        self.assertTrue(forced["purged_dossier"])
         self.assertFalse(dirty_path.exists())
+        self.assertFalse(dirty_dossier_path.exists())
 
     def test_scan_summon_statusline_and_collapse(self) -> None:
         scan = run_gitwarp(self.repo, "scan")
@@ -255,7 +269,7 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertIn("lessons.md", prompt)
         self.assertIn("Parser done", prompt)
 
-    def test_handoff_board_and_finish_preserve_dossier(self) -> None:
+    def test_handoff_board_and_finish_collapse_purges_dossier_without_deleting_branch(self) -> None:
         start = run_gitwarp(
             self.repo,
             "start",
@@ -267,6 +281,7 @@ class CliLifecycleTests(GitWarpTestCase):
             "Build dossier flow",
         )
         worktree_path = Path(str(start["path"]))
+        dossier_path = Path(str(start["dossier_path"]))
         progress_md = Path(str(start["progress_md"]))
         lessons_md = Path(str(start["lessons_md"]))
 
@@ -319,18 +334,54 @@ class CliLifecycleTests(GitWarpTestCase):
             "--progress",
             "Verified and pushed",
             "--lesson",
-            "Keep dossier after collapse",
+            "Dossier is lifecycle-scoped to active sandbox",
             "--collapse",
         )
         self.assertEqual(finish["status"], "pushed")
         self.assertEqual(finish["collapsed"], True)
+        self.assertTrue(finish["purged_dossier"])
+        self.assertEqual(finish["dossier_path"], str(dossier_path))
         self.assertFalse(worktree_path.exists())
-        self.assertTrue(progress_md.exists())
-        self.assertTrue(lessons_md.exists())
-        self.assertIn("Verified and pushed", progress_md.read_text(encoding="utf-8"))
-        self.assertIn("Keep dossier after collapse", lessons_md.read_text(encoding="utf-8"))
+        self.assertFalse(dossier_path.exists())
+        self.assertFalse(progress_md.exists())
+        self.assertFalse(lessons_md.exists())
+        self.assertIn("feature/dossier-flow", run_git(self.repo, "branch", "--list", "feature/dossier-flow"))
 
-    def test_finish_purge_dossier_is_scoped_to_dossier_root(self) -> None:
+    def test_finish_without_collapse_leaves_worktree_dossier_and_ledger_intact(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-review-stop",
+            "--branch",
+            "feature/review-stop",
+            "--purpose",
+            "Stop for human review",
+        )
+        worktree_path = Path(str(start["path"]))
+        dossier_path = Path(str(start["dossier_path"]))
+
+        finish = run_gitwarp(
+            self.repo,
+            "finish",
+            "--cwd",
+            str(worktree_path),
+            "--status",
+            "completed",
+            "--progress",
+            "Verified locally; awaiting user confirmation",
+        )
+
+        self.assertEqual(finish["status"], "completed")
+        self.assertFalse(finish["collapsed"])
+        self.assertFalse(finish["purged_dossier"])
+        self.assertTrue(worktree_path.exists())
+        self.assertTrue(dossier_path.exists())
+        ledger = json.loads((self.repo / ".gitwarp" / "ledger.json").read_text(encoding="utf-8"))
+        self.assertTrue(any(entry.get("path") == str(worktree_path) for entry in ledger["entries"]))
+        self.assertIn("feature/review-stop", run_git(self.repo, "branch", "--list", "feature/review-stop"))
+
+    def test_finish_collapse_dossier_purge_is_scoped_to_dossier_root(self) -> None:
         start = run_gitwarp(
             self.repo,
             "start",
@@ -352,9 +403,8 @@ class CliLifecycleTests(GitWarpTestCase):
             "--status",
             "pushed",
             "--progress",
-            "Verified and ready to purge",
+            "Verified and ready to collapse",
             "--collapse",
-            "--purge-dossier",
         )
 
         self.assertTrue(finish["purged_dossier"])
@@ -392,10 +442,11 @@ class CliLifecycleTests(GitWarpTestCase):
             "pushed",
             "--progress",
             "Should not purge outside dossier root",
-            "--purge-dossier",
+            "--collapse",
             expect_ok=False,
         )
 
         self.assertIn("outside GitWarp dossier root", str(refused["error"]))
+        self.assertTrue(malicious_path.exists())
         self.assertTrue((self.repo / "README.md").exists())
         self.assertEqual((self.repo / "README.md").read_text(encoding="utf-8"), readme_before)

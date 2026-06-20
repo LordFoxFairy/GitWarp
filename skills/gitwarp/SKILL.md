@@ -19,7 +19,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 | --- | --- |
 | `gitwarp create` | Create a dossier-backed isolated worktree. |
 | `gitwarp switch` | Locate an existing worktree and print its absolute path or `cd` command. |
-| `gitwarp remove` | Remove a sandbox when it is no longer needed; add `--force` only for dirty targets. |
+| `gitwarp remove` | Destroy a sandbox and its dossier when explicitly requested; add `--force` only for dirty targets. |
 | `gitwarp handoff` | Record progress and optional lessons during work. |
 | `gitwarp statusline` | Print a raw prompt banner such as `GITWARP[main-repo]`. |
 | `gitwarp enter` | Return hook/session context and dossier snippets; not the main workflow command. |
@@ -72,7 +72,14 @@ gitwarp pause --reason "Waiting for credentials"
 gitwarp resume --progress "Credentials configured; continuing"
 ```
 
-When verified and pushed:
+When verified, record the outcome and leave the sandbox for user review unless cleanup was explicitly requested:
+
+```bash
+gitwarp finish --status pushed \
+  --progress "Verified and pushed"
+```
+
+When the user explicitly wants the sandbox destroyed:
 
 ```bash
 gitwarp finish --status pushed \
@@ -81,6 +88,8 @@ gitwarp finish --status pushed \
 ```
 
 Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch <branch>`. If the target has uncommitted or untracked files, `remove` refuses to proceed until you rerun with `--force`.
+
+`remove`, `collapse`, and `finish --collapse` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They do not merge, push, or delete the Git branch. If the user assigns an existing worktree, finish the requested work there and stop after verification unless the user explicitly asks for push, merge, remove, or collapse.
 
 ## Instructions
 

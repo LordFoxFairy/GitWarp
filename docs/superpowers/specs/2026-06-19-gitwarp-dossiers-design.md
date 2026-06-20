@@ -191,7 +191,7 @@ Rules:
 
 - Default should not destroy work unless `--collapse` is provided.
 - With `--collapse`, call the same forceful removal path as `collapse`.
-- Dossier should remain under `.gitwarp/dossiers/` after collapse for audit unless `--purge-dossier` is explicitly provided.
+- Superseded lifecycle rule: dossiers are active-sandbox state. `remove`, `collapse`, and `finish --collapse` now delete the matching dossier together with the worktree and ledger row while preserving the Git branch.
 
 ## Data Flow
 

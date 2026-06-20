@@ -199,8 +199,8 @@ export function App({ token }: AppProps) {
         onRunStart={(input) => runCommand("Create sandbox", () => api.start(input))}
         onRunDispatch={(input) => runCommand("Prepare agent launch", () => api.dispatch(input))}
         onRunHandoff={(input) => runCommand("Record handoff", () => api.handoff(input))}
-        onRunFinish={(worktree, progress) =>
-          runCommand("Finish and collapse", () => api.finishAndCollapse(worktree.path, progress)).then((result) => {
+        onRunFinish={(worktree, status, progress) =>
+          runCommand("Finish and collapse", () => api.finishAndCollapse(worktree.path, status, progress)).then((result) => {
             setSelectedWorktreePath(null);
             return result;
           })
@@ -227,7 +227,7 @@ interface RepositorySectionProps {
   onRunStart: (input: StartWorktreeInput) => Promise<CommandResult>;
   onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
   onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
-  onRunFinish: (worktree: WorktreeRow, progress: string) => Promise<CommandResult>;
+  onRunFinish: (worktree: WorktreeRow, status: string, progress: string) => Promise<CommandResult>;
   onViewMetadata: () => void;
 }
 

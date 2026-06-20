@@ -61,11 +61,11 @@ export class GitWarpApi {
     return this.post("/api/handoff", input);
   }
 
-  async finishAndCollapse(cwd: string, progress: string): Promise<CommandResult> {
+  async finishAndCollapse(cwd: string, status: string, progress: string): Promise<CommandResult> {
     const challenge = await this.post("/api/confirmation", { action: "finish-collapse", cwd });
     return this.post("/api/finish", {
       cwd,
-      status: "pushed",
+      status,
       progress,
       collapse: true,
       confirmation: challenge.confirmation,

@@ -133,7 +133,14 @@ gitwarp pause --reason "Waiting for credentials" \
 gitwarp resume --progress "Credentials configured; continuing"
 ```
 
-When the task is verified and pushed:
+When the task is verified, record the outcome and leave the sandbox for human review:
+
+```bash
+gitwarp finish --status pushed \
+  --progress "Verified and pushed"
+```
+
+Only collapse when the user explicitly wants the sandbox destroyed:
 
 ```bash
 gitwarp finish --status pushed \
@@ -141,7 +148,7 @@ gitwarp finish --status pushed \
   --collapse
 ```
 
-Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch feature/my-task`. `remove` refuses dirty or untracked targets unless `--force` is provided; prefer `gitwarp finish --collapse` when work was verified and should leave a final progress record.
+`remove` and `collapse` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They never merge, push, or delete the Git branch. Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch feature/my-task`. `remove` refuses dirty or untracked targets unless `--force` is provided.
 
 ## Usage Modes
 
@@ -171,6 +178,7 @@ gitwarp handoff --status implementing --progress "Short milestone"
 
 `statusline` prints an unquoted banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]` for shell prompts and downstream model context.
 Session hooks should not print full `enter` output by default; they should inject the banner and remind the agent that `enter` is available when full context is needed.
+If the user explicitly assigns an existing worktree, complete the work in that worktree and stop there after verification. Do not push, merge, remove, or collapse unless the user asked for that action.
 
 ### Existing Worktree
 
@@ -194,6 +202,8 @@ GitWarp stores runtime state under `.gitwarp/` in the target repository. Run `gi
 - Dossiers: `.gitwarp/dossiers/<branch-slug>-<id>/`
 
 By default, `init` writes `/.gitwarp/` to `.git/info/exclude`, which keeps runtime files local to one checkout. Use `gitwarp init --write-gitignore` when the team wants the ignore rule committed to `.gitignore`.
+
+Dossiers are lifecycle files for active sandboxes, not long-term archives. `handoff` keeps them current while a worktree exists. `remove`, `collapse`, and `finish --collapse` delete the matching dossier directory together with the worktree and ledger row while leaving the branch untouched.
 
 `dispatch` is intentionally print-only in this release. `--command-mode execute` fails before creating anything so humans can review agent launch commands and host-specific flags.
 

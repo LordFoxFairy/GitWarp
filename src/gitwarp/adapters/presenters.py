@@ -67,7 +67,8 @@ def enter_recommendations(ctx: RepoContext | None, cwd: Path, target: dict[str, 
     return [
         "Read task.md, progress.md, and lessons.md before editing.",
         'Record milestones with gitwarp handoff --status <status> --progress "<summary>".',
-        'Finish with gitwarp finish --status pushed --progress "verified and pushed" [--collapse].',
+        "Leave this worktree intact after verification unless the user explicitly asks for push, merge, remove, or collapse.",
+        'Use gitwarp finish --status <status> --progress "<summary>" --collapse only when this sandbox should be destroyed.',
     ]
 
 

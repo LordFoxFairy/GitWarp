@@ -691,6 +691,7 @@ class WebApiTests(GitWarpTestCase):
             "Finish through Web API",
         )
         worktree_path = Path(str(start["path"]))
+        dossier_path = Path(str(start["dossier_path"]))
         _, ready = self.start_web_server(
             self.repo,
             "web",
@@ -769,7 +770,11 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(fresh_status, 200)
         self.assertEqual(finish_status, 200)
         self.assertTrue(finish["collapsed"])
+        self.assertTrue(finish["purged_dossier"])
+        self.assertEqual(finish["dossier_path"], str(dossier_path))
         self.assertFalse(worktree_path.exists())
+        self.assertFalse(dossier_path.exists())
+        self.assertIn("feature/web-finish-collapse", run_git(self.repo, "branch", "--list", "feature/web-finish-collapse"))
 
     def test_web_collapse_confirmation_rejects_dirty_summary_changes(self) -> None:
         start = run_gitwarp(
@@ -783,6 +788,7 @@ class WebApiTests(GitWarpTestCase):
             "Collapse through Web API",
         )
         worktree_path = Path(str(start["path"]))
+        dossier_path = Path(str(start["dossier_path"]))
         _, ready = self.start_web_server(
             self.repo,
             "web",
@@ -832,4 +838,8 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(fresh_status, 200)
         self.assertEqual(collapse_status, 200)
         self.assertEqual(collapse["removed_path"], str(worktree_path))
+        self.assertEqual(collapse["dossier_path"], str(dossier_path))
+        self.assertTrue(collapse["purged_dossier"])
         self.assertFalse(worktree_path.exists())
+        self.assertFalse(dossier_path.exists())
+        self.assertIn("feature/web-collapse-confirmation", run_git(self.repo, "branch", "--list", "feature/web-collapse-confirmation"))

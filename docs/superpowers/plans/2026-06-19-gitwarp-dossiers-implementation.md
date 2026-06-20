@@ -48,8 +48,8 @@
 - [x] After `start`, run `handoff --status testing --progress "Parser done" --lesson "Use context before edits"`.
 - [x] Assert `progress.md`, `lessons.md`, and ledger status are updated.
 - [x] Assert `board --format json` includes branch, agent, status, purpose, latest progress, latest lesson, and dossier paths.
-- [x] Run `finish --status pushed --progress "Verified and pushed" --lesson "Keep dossier after collapse" --collapse`.
-- [x] Assert the worktree path is removed but the dossier files still exist.
+- [x] Historical implementation used `finish --status pushed --progress "Verified and pushed" --lesson "Keep dossier after collapse" --collapse`.
+- [x] Superseded lifecycle rule: `remove`, `collapse`, and `finish --collapse` now remove the matching dossier directory with the worktree and ledger row while preserving the Git branch.
 - [x] Run unittest and confirm failure because `handoff`, `board`, and `finish` are missing.
 
 ### Task 4: Implement workflow commands
@@ -62,7 +62,7 @@
 - [x] Add latest-entry extraction helpers for board summaries.
 - [x] Add `cmd_handoff` that refuses main repo, repairs missing dossier files when safe, appends Markdown, and updates ledger.
 - [x] Add `cmd_board` with default JSON output and `--format table` human output.
-- [x] Add `cmd_finish` that calls handoff behavior and only collapses when `--collapse` is passed; preserve dossier by default.
+- [x] Add `cmd_finish` that calls handoff behavior and only collapses when `--collapse` is passed; collapse now purges the matching active-sandbox dossier.
 - [x] Run tests and confirm Chunk 2 passes.
 
 ## Chunk 3: Documentation, Smoke Checks, And Packaging

@@ -17,7 +17,7 @@ interface MetadataPanelProps {
   onRunStart: (input: StartWorktreeInput) => Promise<CommandResult>;
   onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
   onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
-  onRunFinish: (worktree: WorktreeRow, progress: string) => Promise<CommandResult>;
+  onRunFinish: (worktree: WorktreeRow, status: string, progress: string) => Promise<CommandResult>;
 }
 
 export function MetadataPanel({

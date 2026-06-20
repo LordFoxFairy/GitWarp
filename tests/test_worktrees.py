@@ -186,6 +186,7 @@ class WorktreeTests(GitWarpTestCase):
         prompt_arg = command[-2]  # type: ignore[index]
         self.assertIn("gitwarp enter", prompt_arg)
         self.assertIn("gitwarp handoff", prompt_arg)
+        self.assertIn("Do not push, merge, remove, or collapse unless explicitly asked.", prompt_arg)
         self.assertIn("Implement dispatch print", prompt_arg)
         self.assertIn(str(worktree_path), dispatch["launch_preview"])
 

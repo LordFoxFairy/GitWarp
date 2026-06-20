@@ -28,7 +28,17 @@ def resolve_purgeable_dossier_path(ctx: RepoContext, raw_path: str) -> Path:
         raise GitWarpError(f"refusing to purge dossier outside GitWarp dossier root: {dossier_path}") from exc
     if dossier_path == dossier_root:
         raise GitWarpError("refusing to purge the dossier root")
+    if dossier_path.exists() and not dossier_path.is_dir():
+        raise GitWarpError(f"refusing to purge non-directory dossier path: {dossier_path}")
     return dossier_path
+
+
+def resolve_target_dossier_path(ctx: RepoContext, ledger: dict[str, Any], target_path: str) -> Path | None:
+    entry = next((item for item in ledger["entries"] if item.get("path") == target_path), {})
+    raw_path = entry.get("dossier_path")
+    if not isinstance(raw_path, str) or not raw_path:
+        return None
+    return resolve_purgeable_dossier_path(ctx, raw_path)
 
 
 def inspect_destructive_target(
@@ -61,7 +71,7 @@ def inspect_destructive_target(
     }
 
 
-def collapse_worktree(ctx: RepoContext, *, path: str | None, branch: str | None) -> tuple[str, str | None]:
+def collapse_worktree(ctx: RepoContext, *, path: str | None, branch: str | None) -> tuple[str, str | None, str | None, bool]:
     ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     target_path, removed_branch = select_collapse_target(
         worktrees=worktrees,
@@ -70,17 +80,20 @@ def collapse_worktree(ctx: RepoContext, *, path: str | None, branch: str | None)
         branch_arg=branch,
         repo_root=ctx.repo_root,
     )
+    dossier_path = resolve_target_dossier_path(ctx, ledger, target_path)
     run_git(ctx.repo_root, "worktree", "remove", "--force", target_path)
     run_git(ctx.repo_root, "worktree", "prune", "--expire", "now")
     target_dir = Path(target_path)
     if target_dir.exists():
         shutil.rmtree(target_dir)
+    if dossier_path is not None:
+        shutil.rmtree(dossier_path, ignore_errors=True)
 
     def update(locked_ledger: dict[str, Any]) -> None:
         locked_ledger["entries"] = [item for item in locked_ledger["entries"] if item.get("path") != target_path]
 
     mutate_ledger(ctx, update)
-    return target_path, removed_branch
+    return target_path, removed_branch, str(dossier_path) if dossier_path is not None else None, dossier_path is not None
 
 
 def build_finish_payload(
@@ -102,11 +115,13 @@ def build_finish_payload(
 
     collapsed = False
     removed_branch = None
+    purged_dossier = False
     if collapse:
-        _, removed_branch = collapse_worktree(ctx, path=target["path"], branch=None)
+        _, removed_branch, _, purged_dossier = collapse_worktree(ctx, path=target["path"], branch=None)
         collapsed = True
     if purge_dossier and paths.get("dossier_path"):
         shutil.rmtree(resolve_purgeable_dossier_path(ctx, paths["dossier_path"]), ignore_errors=True)
+        purged_dossier = True
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),
@@ -120,17 +135,19 @@ def build_finish_payload(
         "latest_progress": entry.get("latest_progress"),
         "latest_lesson": entry.get("latest_lesson"),
         "collapsed": collapsed,
-        "purged_dossier": bool(purge_dossier),
+        "purged_dossier": purged_dossier,
         **paths,
     }
 
 
 def build_collapse_payload(ctx: RepoContext, *, path: str | None, branch: str | None) -> dict[str, Any]:
-    target_path, removed_branch = collapse_worktree(ctx, path=path, branch=branch)
+    target_path, removed_branch, dossier_path, purged_dossier = collapse_worktree(ctx, path=path, branch=branch)
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),
         "ledger_path": str(ctx.ledger_path),
         "removed_path": target_path,
         "removed_branch": removed_branch,
+        "dossier_path": dossier_path,
+        "purged_dossier": purged_dossier,
     }

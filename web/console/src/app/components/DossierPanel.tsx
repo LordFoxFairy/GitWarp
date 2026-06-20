@@ -12,7 +12,7 @@ interface DossierPanelProps {
   dossierContent: string;
   onDossierKindChange: (kind: DossierKind) => void;
   onHandoff: (input: HandoffInput) => Promise<CommandResult>;
-  onFinish: (worktree: WorktreeRow, progress: string) => Promise<CommandResult>;
+  onFinish: (worktree: WorktreeRow, status: string, progress: string) => Promise<CommandResult>;
 }
 
 function value(form: HTMLFormElement, name: string): string {
@@ -29,11 +29,11 @@ export function DossierPanel({
   onHandoff,
   onFinish,
 }: DossierPanelProps) {
-  const finish = (progress: string) => {
+  const finish = (status: string, progress: string) => {
     if (!selected) {
       return Promise.resolve({ ok: false });
     }
-    return onFinish(selected, progress);
+    return onFinish(selected, status, progress);
   };
 
   return (
@@ -89,17 +89,19 @@ function WorktreeActions({
   busy: boolean;
   worktree: WorktreeRow;
   onHandoff: (input: HandoffInput) => Promise<CommandResult>;
-  onFinish: (progress: string) => Promise<CommandResult>;
+  onFinish: (status: string, progress: string) => Promise<CommandResult>;
 }) {
   const [showFinish, setShowFinish] = useState(false);
-  const [finalProgress, setFinalProgress] = useState("Verified and ready to collapse");
+  const [finalStatus, setFinalStatus] = useState("completed");
+  const [finalProgress, setFinalProgress] = useState("Verified; ready for user review");
   const [confirmation, setConfirmation] = useState("");
   const expectedConfirmation = worktree.branch || worktree.path;
-  const finishAllowed = confirmation === expectedConfirmation && finalProgress.trim().length > 0;
+  const finishAllowed = confirmation === expectedConfirmation && finalStatus.trim().length > 0 && finalProgress.trim().length > 0;
 
   useEffect(() => {
     setShowFinish(false);
-    setFinalProgress("Verified and ready to collapse");
+    setFinalStatus("completed");
+    setFinalProgress("Verified; ready for user review");
     setConfirmation("");
   }, [worktree.path]);
 
@@ -129,7 +131,7 @@ function WorktreeActions({
       return;
     }
     try {
-      await onFinish(finalProgress.trim());
+      await onFinish(finalStatus.trim(), finalProgress.trim());
       setShowFinish(false);
     } catch {
       // Keep destructive confirmation visible when the command fails.
@@ -165,9 +167,19 @@ function WorktreeActions({
           <div>
             <strong>Collapse this sandbox permanently</strong>
             <p className="form-hint">
-              GitWarp will record final progress, force-remove the worktree, prune Git worktree metadata, and remove the ledger row.
+              GitWarp will record final progress, force-remove the worktree, prune Git worktree metadata, delete the matching dossier directory, and remove the ledger row. It will not push, merge, or delete the branch.
             </p>
           </div>
+          <label>
+            Final status
+            <TextInput
+              value={finalStatus}
+              onChange={(event) => setFinalStatus(event.currentTarget.value)}
+              disabled={readonly || busy}
+              required
+              block
+            />
+          </label>
           <label>
             Final progress
             <TextInput

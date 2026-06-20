@@ -87,7 +87,8 @@ def render_agent_prompt(purpose: str) -> str:
             "Do not run git checkout/git switch in the main repository.",
             "Do not switch branches inside the isolated worktree.",
             "Record milestones with gitwarp handoff.",
-            "Stop after implementation and verification; do not merge main unless explicitly asked.",
+            "Stop after implementation and verification in this worktree.",
+            "Do not push, merge, remove, or collapse unless explicitly asked.",
             "",
             f"Task: {purpose}",
         ]
