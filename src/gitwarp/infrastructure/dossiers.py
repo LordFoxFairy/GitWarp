@@ -197,6 +197,10 @@ def record_handoff(
 
     def update(ledger: dict[str, Any]) -> None:
         entry = ledger_entry_for_target(ledger, target)
+        if isinstance(target.get("branch_role"), str):
+            entry["branch_role"] = target["branch_role"]
+        if "base_branch" in target:
+            entry["base_branch"] = target.get("base_branch")
         paths = ensure_dossier_for_entry(ctx, entry, target)
         timestamp = now_iso()
         append_markdown_event(

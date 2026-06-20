@@ -104,6 +104,50 @@ class WorktreeTests(GitWarpTestCase):
         self.assertFalse(dossier_path.exists())
         self.assertTrue(base_path.exists())
 
+    def test_finish_collapse_merged_backfills_legacy_role_metadata(self) -> None:
+        task = run_gitwarp(
+            self.repo,
+            "create",
+            "--branch",
+            "agent/legacy-role-output",
+            "--purpose",
+            "Legacy role output",
+        )
+        task_path = Path(str(task["path"]))
+        dossier_path = Path(str(task["dossier_path"]))
+
+        ledger_path = self.repo / ".gitwarp" / "ledger.json"
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        for entry in ledger["entries"]:
+            if entry.get("branch") == "agent/legacy-role-output":
+                entry.pop("branch_role", None)
+                entry.pop("base_branch", None)
+        ledger_path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+        (task_path / "legacy.txt").write_text("done\n", encoding="utf-8")
+        run_git(task_path, "add", "legacy.txt")
+        run_git(task_path, "commit", "-m", "legacy task")
+        run_git(self.repo, "merge", "--no-ff", "agent/legacy-role-output", "-m", "merge legacy task")
+
+        finish = run_gitwarp(
+            self.repo,
+            "finish",
+            "--cwd",
+            str(task_path),
+            "--status",
+            "merged",
+            "--progress",
+            "Merged legacy task",
+            "--collapse-merged",
+        )
+
+        self.assertEqual(finish["branch_role"], "task")
+        self.assertEqual(finish["base_branch"], "main")
+        self.assertTrue(finish["collapsed"])
+        self.assertTrue(finish["purged_dossier"])
+        self.assertFalse(task_path.exists())
+        self.assertFalse(dossier_path.exists())
+
     def test_sync_prunes_dead_worktree_entries_and_orphan_dossiers(self) -> None:
         task = run_gitwarp(
             self.repo,
