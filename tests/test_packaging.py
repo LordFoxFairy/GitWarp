@@ -332,6 +332,7 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("setSelectedWorktreePath(String(result.path))", app)
         self.assertIn("repository-content-grid", code_panel)
         self.assertIn("repo-about", code_panel)
+        self.assertIn("Parent Base", code_panel)
         self.assertIn("View metadata", code_panel)
         self.assertIn("FileViewer", code_panel)
         self.assertIn("Repository file viewer", code_panel)
@@ -342,20 +343,23 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn('className="line-number"', code_panel)
         self.assertIn("repository-tab-stack", app)
         self.assertIn("finishAndCollapse(worktree.path, status, progress)", app)
+        self.assertIn("finishMergedTask(worktree.path, status, progress)", app)
         self.assertIn('hidden={activeTab !== "code"}', app)
         self.assertIn('hidden={activeTab !== "metadata"}', app)
         self.assertIn('hidden={activeTab !== "health"}', app)
-        self.assertIn("delete the matching dossier directory", dossier_panel)
-        self.assertIn("It will not push, merge, or delete the branch.", dossier_panel)
+        self.assertIn("matching dossier", dossier_panel)
+        self.assertIn("Finish Merged Task", dossier_panel)
+        self.assertIn("already merged into the parent base", dossier_panel)
         self.assertIn("Final status", dossier_panel)
+        self.assertIn("Parent base", action_panel)
         self.assertIn("async (event", action_panel)
         self.assertIn("await onStart", action_panel)
         self.assertIn("await onDispatch", action_panel)
         self.assertIn('aria-current={tab.id === activeTab ? "page" : undefined}', tabs)
-        self.assertLess(
-            picker.index("worktrees.find((worktree) => worktree.is_main)"),
-            picker.index("worktrees.find((worktree) => !worktree.is_main)"),
-        )
+        self.assertIn("Base branch", picker)
+        self.assertIn("Task worktree", picker)
+        self.assertIn("Base checkout only", picker)
+        self.assertIn("taskWorktreesForBase", picker)
 
     def test_release_gate_runs_required_checks(self) -> None:
         gate = (REPO_ROOT / "scripts" / "check-release.sh").read_text(encoding="utf-8")

@@ -21,6 +21,8 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertEqual(create["branch"], "feature/primary-commands")
         self.assertEqual(create["agent_id"], "agent-feature-primary-commands")
         self.assertEqual(create["status"], "active")
+        self.assertEqual(create["branch_role"], "task")
+        self.assertEqual(create["base_branch"], "main")
         self.assertEqual(create["shell_command"], f"cd {shlex.quote(str(worktree_path))}")
         self.assertTrue(Path(str(create["task_md"])).exists())
         dossier_path = Path(str(create["dossier_path"]))
@@ -30,6 +32,8 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertEqual(switch_json["path"], str(worktree_path))
         self.assertEqual(switch_json["branch"], "feature/primary-commands")
         self.assertEqual(switch_json["agent_id"], "agent-feature-primary-commands")
+        self.assertEqual(switch_json["branch_role"], "task")
+        self.assertEqual(switch_json["base_branch"], "main")
         self.assertEqual(switch_json["shell_command"], f"cd {shlex.quote(str(worktree_path))}")
         self.assertEqual(switch_json["statusline"], "GITWARP[agent-feature-primary-commands@feature/primary-commands]")
 
@@ -45,6 +49,7 @@ class CliLifecycleTests(GitWarpTestCase):
 
         switch_main = run_gitwarp(self.repo, "switch", "--main")
         self.assertEqual(switch_main["path"], str(self.repo.resolve()))
+        self.assertEqual(switch_main["branch_role"], "base")
         self.assertEqual(switch_main["statusline"], "GITWARP[main-repo]")
 
         remove = run_gitwarp(self.repo, "remove", "--branch", "feature/primary-commands")

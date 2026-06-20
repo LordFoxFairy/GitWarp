@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...domain.branch_roles import BASE_ROLE, TASK_ROLE, require_branch_role
 from ...domain.model import WorkspaceRecord
+from ...infrastructure.agents import build_agent_id
 from ...infrastructure.dossiers import ensure_dossier_for_entry
 from ...infrastructure.ledger import mutate_ledger
 from ...infrastructure.runtime import GitWarpError, RepoContext, now_iso, resolve_path
@@ -14,9 +16,12 @@ def build_adopt_payload(
     *,
     cwd: str,
     path: str | None,
-    agent_id: str,
-    purpose: str,
+    agent_id: str | None,
+    purpose: str | None,
+    branch_role: str = TASK_ROLE,
+    base_branch: str | None = None,
 ) -> dict[str, Any]:
+    resolved_role = require_branch_role(branch_role)
     resolved_cwd = resolve_path(cwd or path)
     _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     target = select_live_target(
@@ -32,6 +37,11 @@ def build_adopt_payload(
 
     target_path = target["path"]
     target_branch = target.get("branch")
+    resolved_agent_id = None if resolved_role == BASE_ROLE else agent_id or build_agent_id("agent", str(target_branch))
+    resolved_purpose = purpose or (
+        f"Base branch workspace for {target_branch}" if resolved_role == BASE_ROLE else "Adopted task worktree"
+    )
+    resolved_base_branch = None if resolved_role == BASE_ROLE else base_branch or "main"
     outside_guarded_root = not guarded_worktree_root_contains(ctx, target_path)
     result: dict[str, Any] = {}
 
@@ -44,11 +54,15 @@ def build_adopt_payload(
         if same_branch is not None:
             raise GitWarpError(f"branch '{target_branch}' is already tracked at {same_branch.get('path')}")
         same_agent = next(
-            (item for item in ledger["entries"] if item.get("agent_id") == agent_id and item.get("path") != target_path),
+            (
+                item
+                for item in ledger["entries"]
+                if resolved_agent_id is not None and item.get("agent_id") == resolved_agent_id and item.get("path") != target_path
+            ),
             None,
         )
         if same_agent is not None:
-            raise GitWarpError(f"agent '{agent_id}' is already assigned to {same_agent.get('path')}")
+            raise GitWarpError(f"agent '{resolved_agent_id}' is already assigned to {same_agent.get('path')}")
 
         entry = same_path
         if entry is None:
@@ -56,13 +70,15 @@ def build_adopt_payload(
             ledger["entries"].append(entry)
         entry["path"] = target_path
         entry["branch"] = target_branch
-        entry["agent_id"] = agent_id
-        entry["purpose"] = purpose
-        entry["status"] = "adopted"
+        entry["agent_id"] = resolved_agent_id
+        entry["purpose"] = resolved_purpose
+        entry["status"] = "base" if resolved_role == BASE_ROLE else "adopted"
+        entry["branch_role"] = resolved_role
+        entry["base_branch"] = resolved_base_branch
         entry["updated_at"] = now_iso()
-        entry["latest_progress"] = "Worktree adopted."
+        entry["latest_progress"] = "Base workspace adopted." if resolved_role == BASE_ROLE else "Worktree adopted."
         entry["last_seen_head"] = target.get("head")
-        paths = ensure_dossier_for_entry(ctx, entry, target)
+        paths = ensure_dossier_for_entry(ctx, entry, target) if resolved_role == TASK_ROLE else {}
         result["entry"] = dict(entry)
         result["paths"] = dict(paths)
 
@@ -79,6 +95,8 @@ def build_adopt_payload(
         "agent_id": entry.get("agent_id"),
         "purpose": entry.get("purpose"),
         "status": entry.get("status"),
+        "branch_role": entry.get("branch_role"),
+        "base_branch": entry.get("base_branch"),
         "outside_guarded_root": outside_guarded_root,
         **paths,
     }

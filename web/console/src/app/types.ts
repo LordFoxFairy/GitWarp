@@ -39,6 +39,8 @@ export interface WorktreeRow {
   branch: string;
   commit?: string;
   is_main?: boolean;
+  branch_role?: "base" | "task" | string;
+  base_branch?: string | null;
   agent_id?: string;
   status?: string;
   purpose?: string;

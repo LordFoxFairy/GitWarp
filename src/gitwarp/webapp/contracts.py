@@ -41,6 +41,7 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "agent": FieldSpec("string"),
         "agent_id": FieldSpec("string"),
         "branch": FieldSpec("string", required=True),
+        "base_branch": FieldSpec("string"),
         "purpose": FieldSpec("string", required=True),
         "instructions": FieldSpec("string_list"),
         "instruction_profile": FieldSpec("string"),
@@ -49,6 +50,7 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
     "/api/start": {
         "agent_id": FieldSpec("string", required=True),
         "branch": FieldSpec("string", required=True),
+        "base_branch": FieldSpec("string"),
         "purpose": FieldSpec("string", required=True),
         "instructions": FieldSpec("string_list"),
         "instruction_profile": FieldSpec("string"),
@@ -76,6 +78,7 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "progress": FieldSpec("string", required=True),
         "lesson": FieldSpec("string"),
         "collapse": FieldSpec("boolean"),
+        "collapse_merged": FieldSpec("boolean"),
         "confirmation": FieldSpec("string"),
     },
     "/api/collapse": {

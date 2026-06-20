@@ -36,6 +36,8 @@ def create_dossier_files(
     purpose: str | None,
     status: str | None,
     created_at: str,
+    branch_role: str | None = None,
+    base_branch: str | None = None,
     instructions: list[dict[str, Any]] | None = None,
     instruction_profile: str | None = None,
 ) -> None:
@@ -59,6 +61,8 @@ def create_dossier_files(
                     "",
                     f"- Agent: {agent_id or 'unassigned'}",
                     f"- Branch: {branch or 'detached'}",
+                    f"- Role: {branch_role or 'task'}",
+                    f"- Parent Base: {base_branch or 'none'}",
                     f"- Worktree: {worktree_path}",
                     f"- Purpose: {purpose or 'unspecified'}",
                     f"- Status: {status or 'active'}",
@@ -170,6 +174,8 @@ def ensure_dossier_for_entry(ctx: RepoContext, entry: dict[str, Any], target: di
         purpose=entry.get("purpose"),
         status=entry.get("status") or "active",
         created_at=entry.get("created_at") or now_iso(),
+        branch_role=entry.get("branch_role") if isinstance(entry.get("branch_role"), str) else None,
+        base_branch=entry.get("base_branch") if isinstance(entry.get("base_branch"), str) else None,
         instructions=entry.get("instructions") if isinstance(entry.get("instructions"), list) else None,
         instruction_profile=entry.get("instruction_profile") if isinstance(entry.get("instruction_profile"), str) else None,
     )

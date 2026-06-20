@@ -70,21 +70,34 @@ class DoctorTests(GitWarpTestCase):
         self.assertFalse(second["updated"]["ledger"])  # type: ignore[index]
         self.assertFalse(second["updated"]["ignore_rule"])  # type: ignore[index]
 
-    def test_init_preserves_existing_ledger_entries(self) -> None:
+    def test_init_prunes_missing_existing_ledger_entries(self) -> None:
         ledger_dir = self.repo / ".gitwarp"
         ledger_dir.mkdir()
         ledger_path = ledger_dir / "ledger.json"
+        dossier_path = ledger_dir / "dossiers" / "feature-preserve-dead"
+        dossier_path.mkdir(parents=True)
+        (dossier_path / "task.md").write_text("dead task\n", encoding="utf-8")
         entry = {
             "path": str(self.repo / "missing-worktree"),
             "branch": "feature/preserve",
             "agent_id": "codex-preserve",
             "purpose": "Preserve ledger",
             "status": "active",
+            "dossier_path": str(dossier_path),
             "notes": [{"note": "keep me", "created_at": "2000-01-01T00:00:00+00:00"}],
             "created_at": "2000-01-01T00:00:00+00:00",
         }
         ledger_path.write_text(
-            json.dumps({"entries": [entry], "custom": {"keep": True}}, sort_keys=True) + "\n",
+            json.dumps(
+                {
+                    "version": 1,
+                    "repo_root": str(self.repo.resolve()),
+                    "entries": [entry],
+                    "custom": {"keep": True},
+                },
+                sort_keys=True,
+            )
+            + "\n",
             encoding="utf-8",
         )
 
@@ -92,8 +105,9 @@ class DoctorTests(GitWarpTestCase):
         ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
         self.assertEqual(ledger["version"], 1)
         self.assertEqual(ledger["repo_root"], str(self.repo.resolve()))
-        self.assertEqual(ledger["entries"], [entry])
+        self.assertEqual(ledger["entries"], [])
         self.assertEqual(ledger["custom"], {"keep": True})
+        self.assertFalse(dossier_path.exists())
         self.assertTrue(init["updated"]["ledger"])  # type: ignore[index]
 
     def test_init_refuses_invalid_existing_state(self) -> None:

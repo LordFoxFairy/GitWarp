@@ -7,7 +7,7 @@ from typing import Any
 from ...infrastructure.dossiers import record_handoff
 from ...infrastructure.ledger import mutate_ledger
 from ...infrastructure.runtime import GitWarpError, RepoContext, resolve_path, run_git
-from ...infrastructure.worktrees import parse_worktrees, select_collapse_target, select_live_target, sync_ledger
+from ...infrastructure.worktrees import branch_merged_into_base, parse_worktrees, select_collapse_target, select_live_target, sync_ledger
 
 
 def worktree_status_summary(path: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -106,17 +106,31 @@ def build_finish_payload(
     progress: str,
     lesson: str | None,
     collapse: bool,
+    collapse_merged: bool = False,
     purge_dossier: bool = False,
 ) -> dict[str, Any]:
     resolved_cwd = resolve_path(cwd or path)
     _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     target = select_live_target(worktrees=worktrees, cwd=resolved_cwd, path_arg=path, branch_arg=branch)
+    if collapse_merged:
+        if target.get("branch_role") != "task":
+            raise GitWarpError("finish --collapse-merged only applies to task worktrees")
+        dirty_summary, _ = worktree_status_summary(target["path"])
+        if dirty_summary["count"]:
+            raise GitWarpError(
+                "finish --collapse-merged requires a clean task worktree; "
+                f"dirty_count={dirty_summary['count']}"
+            )
+        if not branch_merged_into_base(ctx, target.get("branch"), target.get("base_branch")):
+            raise GitWarpError(
+                "finish --collapse-merged requires the task branch HEAD to be merged into its base_branch"
+            )
     entry, paths = record_handoff(ctx, target, status=status, progress=progress, lesson=lesson)
 
     collapsed = False
     removed_branch = None
     purged_dossier = False
-    if collapse:
+    if collapse or collapse_merged:
         _, removed_branch, _, purged_dossier = collapse_worktree(ctx, path=target["path"], branch=None)
         collapsed = True
     if purge_dossier and paths.get("dossier_path"):
@@ -132,6 +146,8 @@ def build_finish_payload(
         "agent_id": entry.get("agent_id"),
         "purpose": entry.get("purpose"),
         "status": entry.get("status"),
+        "branch_role": entry.get("branch_role"),
+        "base_branch": entry.get("base_branch"),
         "latest_progress": entry.get("latest_progress"),
         "latest_lesson": entry.get("latest_lesson"),
         "collapsed": collapsed,

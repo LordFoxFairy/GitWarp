@@ -8,6 +8,7 @@ interface ApiErrorPayload {
 export interface StartWorktreeInput {
   agent_id: string;
   branch: string;
+  base_branch?: string;
   purpose: string;
   instructions?: string[];
   instruction_profile?: string;
@@ -17,6 +18,7 @@ export interface StartWorktreeInput {
 export interface DispatchInput {
   agent: "codex" | "claude";
   branch: string;
+  base_branch?: string;
   purpose: string;
   instructions?: string[];
   instruction_profile?: string;
@@ -69,6 +71,15 @@ export class GitWarpApi {
       progress,
       collapse: true,
       confirmation: challenge.confirmation,
+    });
+  }
+
+  finishMergedTask(cwd: string, status: string, progress: string): Promise<CommandResult> {
+    return this.post("/api/finish", {
+      cwd,
+      status,
+      progress,
+      collapse_merged: true,
     });
   }
 

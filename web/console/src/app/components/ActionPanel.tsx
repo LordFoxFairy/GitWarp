@@ -7,6 +7,7 @@ import type { CommandResult } from "../types";
 interface ActionPanelProps {
   readonly: boolean;
   busy: boolean;
+  baseBranch?: string;
   onStart: (input: StartWorktreeInput) => Promise<CommandResult>;
   onDispatch: (input: DispatchInput) => Promise<CommandResult>;
 }
@@ -33,7 +34,7 @@ function instructionOptions(form: HTMLFormElement): Pick<StartWorktreeInput, "in
   };
 }
 
-export function ActionPanel({ readonly, busy, onStart, onDispatch }: ActionPanelProps) {
+export function ActionPanel({ readonly, busy, baseBranch, onStart, onDispatch }: ActionPanelProps) {
   const [mode, setMode] = useState<ActionMode>(null);
 
   const submitStart = async (event: FormEvent<HTMLFormElement>) => {
@@ -43,6 +44,7 @@ export function ActionPanel({ readonly, busy, onStart, onDispatch }: ActionPanel
       await onStart({
         agent_id: value(form, "agent_id"),
         branch: value(form, "branch"),
+        ...(baseBranch ? { base_branch: baseBranch } : {}),
         purpose: value(form, "purpose"),
         ...instructionOptions(form),
       });
@@ -61,6 +63,7 @@ export function ActionPanel({ readonly, busy, onStart, onDispatch }: ActionPanel
       await onDispatch({
         agent,
         branch: value(form, "branch"),
+        ...(baseBranch ? { base_branch: baseBranch } : {}),
         purpose: value(form, "purpose"),
         ...instructionOptions(form),
       });
@@ -97,8 +100,8 @@ export function ActionPanel({ readonly, busy, onStart, onDispatch }: ActionPanel
             </Button>
           </div>
 
-          {mode === "create" ? <CreateSandboxForm busy={busy} onSubmit={submitStart} onCancel={() => setMode(null)} /> : null}
-          {mode === "launch" ? <PrepareLaunchForm busy={busy} onSubmit={submitDispatch} onCancel={() => setMode(null)} /> : null}
+          {mode === "create" ? <CreateSandboxForm busy={busy} baseBranch={baseBranch} onSubmit={submitStart} onCancel={() => setMode(null)} /> : null}
+          {mode === "launch" ? <PrepareLaunchForm busy={busy} baseBranch={baseBranch} onSubmit={submitDispatch} onCancel={() => setMode(null)} /> : null}
         </>
       )}
     </section>
@@ -107,10 +110,12 @@ export function ActionPanel({ readonly, busy, onStart, onDispatch }: ActionPanel
 
 function CreateSandboxForm({
   busy,
+  baseBranch,
   onSubmit,
   onCancel,
 }: {
   busy: boolean;
+  baseBranch?: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
@@ -124,6 +129,7 @@ function CreateSandboxForm({
         Branch
         <TextInput name="branch" placeholder="feature/my-task" required disabled={busy} block />
       </label>
+      <p className="form-hint">Parent base: {baseBranch || "main"}</p>
       <label>
         Purpose
         <Textarea name="purpose" rows={3} placeholder="Short task description" required disabled={busy} block resize="vertical" />
@@ -143,10 +149,12 @@ function CreateSandboxForm({
 
 function PrepareLaunchForm({
   busy,
+  baseBranch,
   onSubmit,
   onCancel,
 }: {
   busy: boolean;
+  baseBranch?: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
@@ -163,6 +171,7 @@ function PrepareLaunchForm({
         Branch
         <TextInput name="branch" placeholder="feature/parallel-task" required disabled={busy} block />
       </label>
+      <p className="form-hint">Parent base: {baseBranch || "main"}</p>
       <label>
         Purpose
         <Textarea name="purpose" rows={3} placeholder="Create workspace and launch command" required disabled={busy} block resize="vertical" />

@@ -258,8 +258,10 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("copy snapshot", html)
         self.assertIn("symlink live file", html)
         self.assertIn("Worktrees", html)
+        self.assertIn("Base branch", html)
+        self.assertIn("Task worktree", html)
         self.assertIn("Doctor / Reconcile", html)
-        self.assertIn("Finish + Collapse", html)
+        self.assertIn("Finish Merged Task", html)
         self.assertIn("createRoot", html)
         self.assertIn("React", html)
         self.assertIn("data-dossier-kind", html)
@@ -540,10 +542,14 @@ class WebApiTests(GitWarpTestCase):
         self.assertTrue((self.repo / ".gitwarp" / "ledger.json").exists())
         self.assertTrue(Path(str(dispatch_payload["path"])).exists())
         self.assertIn("launch_command", dispatch_payload)
+        self.assertEqual(dispatch_payload["branch_role"], "task")
+        self.assertEqual(dispatch_payload["base_branch"], "main")
         self.assertEqual(dispatch_payload["instructions"][0]["target"], "AGENTS.md")  # type: ignore[index]
         self.assertEqual(dispatch_payload["instruction_mode"], "copy")
         self.assertTrue(Path(str(start_payload["path"])).exists())
         self.assertEqual(start_payload["status"], "active")
+        self.assertEqual(start_payload["branch_role"], "task")
+        self.assertEqual(start_payload["base_branch"], "main")
         self.assertEqual(start_payload["instructions"][0]["target"], "AGENTS.md")  # type: ignore[index]
         self.assertEqual(handoff_status, 200)
         self.assertEqual(handoff_payload["status"], "testing")
@@ -551,7 +557,11 @@ class WebApiTests(GitWarpTestCase):
         state_row = next(item for item in state["worktrees"] if item["branch"] == "feature/web-mutation-dispatch")  # type: ignore[index]
         board_row = next(item for item in board["worktrees"] if item["branch"] == "feature/web-mutation-dispatch")  # type: ignore[index]
         self.assertEqual(state_row["status"], "testing")
+        self.assertEqual(state_row["branch_role"], "task")
+        self.assertEqual(state_row["base_branch"], "main")
         self.assertEqual(state_row["instructions"][0]["target"], "AGENTS.md")  # type: ignore[index]
+        self.assertEqual(board_row["branch_role"], "task")
+        self.assertEqual(board_row["base_branch"], "main")
         self.assertEqual(board_row["latest_progress"], "Web handoff recorded")
 
     def test_web_instruction_payload_validation_is_strict(self) -> None:

@@ -79,8 +79,8 @@ export function App({ token }: AppProps) {
       setDossierContent("Select a worktree to inspect task.md, progress.md, and lessons.md.");
       return;
     }
-    if (selected.is_main || typeof path !== "string") {
-      setDossierContent("The main checkout has no GitWarp dossier. Select an isolated sandbox to inspect task.md, progress.md, and lessons.md.");
+    if (selected.is_main || selected.branch_role === "base" || typeof path !== "string") {
+      setDossierContent("Base checkouts do not have task dossiers. Select a task worktree to inspect task.md, progress.md, and lessons.md.");
       return;
     }
     let cancelled = false;
@@ -200,7 +200,11 @@ export function App({ token }: AppProps) {
         onRunDispatch={(input) => runCommand("Prepare agent launch", () => api.dispatch(input))}
         onRunHandoff={(input) => runCommand("Record handoff", () => api.handoff(input))}
         onRunFinish={(worktree, status, progress) =>
-          runCommand("Finish and collapse", () => api.finishAndCollapse(worktree.path, status, progress)).then((result) => {
+          runCommand("Finish task", () =>
+            worktree.branch_role === "task"
+              ? api.finishMergedTask(worktree.path, status, progress)
+              : api.finishAndCollapse(worktree.path, status, progress),
+          ).then((result) => {
             setSelectedWorktreePath(null);
             return result;
           })

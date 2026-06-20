@@ -6,9 +6,10 @@ from typing import Any
 
 from ..application.diagnostics import build_finding, summarize_findings
 from ..application.views import age_seconds
+from ..domain.branch_roles import enrich_role_metadata
 from ..infrastructure.ledger import load_raw_ledger
 from ..infrastructure.runtime import RepoContext
-from ..infrastructure.worktrees import branch_merged_into_main, parse_worktrees, worktree_dirty
+from ..infrastructure.worktrees import branch_merged_into_base, parse_worktrees, worktree_dirty
 
 
 def build_reconcile_payload(ctx: RepoContext, *, stale_hours: float | None = None) -> dict[str, Any]:
@@ -78,13 +79,16 @@ def build_reconcile_payload(ctx: RepoContext, *, stale_hours: float | None = Non
     for item in live_worktrees:
         if item.get("is_main"):
             continue
+        meta = ledger_by_path.get(item["path"], {})
+        branch_role, base_branch = enrich_role_metadata(item, meta)
+        finding_item = {**item, **meta, "branch_role": branch_role, "base_branch": base_branch}
         if item["path"] not in ledger_by_path:
             findings.append(
                 build_finding(
                     "untracked_worktree",
                     "warning",
                     "Live non-main worktree is missing from the GitWarp ledger.",
-                    item=item,
+                    item=finding_item,
                 )
             )
         if worktree_dirty(item["path"]):
@@ -93,16 +97,16 @@ def build_reconcile_payload(ctx: RepoContext, *, stale_hours: float | None = Non
                     "dirty_worktree",
                     "warning",
                     "Live worktree has uncommitted or untracked changes.",
-                    item=ledger_by_path.get(item["path"], item),
+                    item=finding_item,
                 )
             )
-        if branch_merged_into_main(ctx, item.get("branch")):
+        if branch_role == "task" and branch_merged_into_base(ctx, item.get("branch"), base_branch):
             findings.append(
                 build_finding(
                     "merged_head",
                     "warning",
-                    "Worktree branch HEAD is already merged into main.",
-                    item=ledger_by_path.get(item["path"], item),
+                    "Task branch HEAD is already merged into its base branch.",
+                    item=finding_item,
                 )
             )
 

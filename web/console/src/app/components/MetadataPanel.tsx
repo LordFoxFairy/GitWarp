@@ -3,7 +3,7 @@ import type { DispatchInput, HandoffInput, StartWorktreeInput } from "../gitwarp
 import type { CommandResult, DossierKind, WebState, WorktreeRow } from "../types";
 import { ActionPanel } from "./ActionPanel";
 import { DossierPanel } from "./DossierPanel";
-import { WorktreePicker, defaultWorktree } from "./WorktreePicker";
+import { WorktreePicker, baseForSelection, defaultWorktree } from "./WorktreePicker";
 
 interface MetadataPanelProps {
   state: WebState | null;
@@ -36,6 +36,7 @@ export function MetadataPanel({
 }: MetadataPanelProps) {
   const worktrees = state?.worktrees ?? [];
   const selectedWorktree = selected && worktrees.some((worktree) => worktree.path === selected.path) ? selected : defaultWorktree(worktrees);
+  const selectedBase = baseForSelection(worktrees, selectedWorktree);
 
   return (
     <section className="tab-panel workspace-console" aria-label="Agent metadata console">
@@ -57,7 +58,7 @@ export function MetadataPanel({
 
         <aside className="workspace-side" aria-label="Agent management">
           <SelectedWorktreeSummary worktree={selectedWorktree} />
-          <ActionPanel readonly={readonly} busy={busy} onStart={onRunStart} onDispatch={onRunDispatch} />
+          <ActionPanel readonly={readonly} busy={busy} baseBranch={selectedBase?.branch} onStart={onRunStart} onDispatch={onRunDispatch} />
         </aside>
       </div>
     </section>
@@ -84,6 +85,14 @@ function SelectedWorktreeSummary({ worktree }: { worktree: WorktreeRow | null })
         <Label variant={worktree.is_main ? "secondary" : "accent"}>{worktree.is_main ? "main" : worktree.status || "active"}</Label>
       </div>
       <dl className="workspace-meta compact">
+        <div>
+          <dt>Role</dt>
+          <dd>{worktree.branch_role || (worktree.is_main ? "base" : "task")}</dd>
+        </div>
+        <div>
+          <dt>Parent Base</dt>
+          <dd>{worktree.base_branch || (worktree.is_main || worktree.branch_role === "base" ? "none" : "main")}</dd>
+        </div>
         <div>
           <dt>Agent</dt>
           <dd>{worktree.agent_id || "unassigned"}</dd>

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
 
+from ..domain.branch_roles import enrich_role_metadata
 from ..domain import policies
 from .ledger import load_ledger, mutate_ledger
 from .runtime import GitWarpError, RepoContext, run_git, sanitize_name
@@ -46,6 +48,9 @@ def sync_ledger(
 
         def prune(locked_ledger: dict[str, Any]) -> None:
             live_paths = {item["path"] for item in live_worktrees}
+            stale_entries = [entry for entry in locked_ledger["entries"] if entry.get("path") not in live_paths]
+            for entry in stale_entries:
+                purge_orphan_dossier(ctx, entry)
             locked_ledger["entries"] = [entry for entry in locked_ledger["entries"] if entry.get("path") in live_paths]
 
         mutate_ledger(ctx, prune)
@@ -56,12 +61,15 @@ def sync_ledger(
     for item in live_worktrees:
         meta = metadata_by_path.get(item["path"], {})
         last_seen_head = meta.get("last_seen_head")
+        branch_role, base_branch = enrich_role_metadata(item, meta)
         enriched_item = {
             "path": item["path"],
             "head": item["head"],
             "branch": item.get("branch"),
             "detached": item.get("detached", False),
             "is_main": item.get("is_main", False),
+            "branch_role": branch_role,
+            "base_branch": base_branch,
             "agent_id": meta.get("agent_id"),
             "purpose": meta.get("purpose"),
             "status": meta.get("status"),
@@ -86,6 +94,22 @@ def sync_ledger(
     return ledger, enriched
 
 
+def purge_orphan_dossier(ctx: RepoContext, entry: dict[str, Any]) -> None:
+    raw_path = entry.get("dossier_path")
+    if not isinstance(raw_path, str) or not raw_path:
+        return
+    dossier_path = Path(raw_path).expanduser().resolve()
+    dossier_root = ctx.dossier_root.resolve()
+    try:
+        dossier_path.relative_to(dossier_root)
+    except ValueError:
+        return
+    if dossier_path == dossier_root:
+        return
+    if dossier_path.is_dir():
+        shutil.rmtree(dossier_path, ignore_errors=True)
+
+
 def find_worktree_for_cwd(cwd: Path, worktrees: list[dict[str, Any]]) -> dict[str, Any] | None:
     return policies.find_worktree_for_cwd(cwd, worktrees)
 
@@ -105,7 +129,7 @@ def branch_exists(ctx: RepoContext, branch: str) -> bool:
     return result.returncode == 0
 
 
-def create_worktree(ctx: RepoContext, branch: str) -> tuple[Path, bool, str]:
+def create_worktree(ctx: RepoContext, branch: str, *, start_point: str = "HEAD") -> tuple[Path, bool, str]:
     target_dir = (ctx.worktree_root / sanitize_name(branch)).resolve()
     if target_dir.exists():
         raise GitWarpError(f"target path already exists: {target_dir}")
@@ -115,7 +139,7 @@ def create_worktree(ctx: RepoContext, branch: str) -> tuple[Path, bool, str]:
     if existing_branch:
         run_git(ctx.repo_root, "worktree", "add", str(target_dir), branch)
     else:
-        run_git(ctx.repo_root, "worktree", "add", "-b", branch, str(target_dir), "HEAD")
+        run_git(ctx.repo_root, "worktree", "add", "-b", branch, str(target_dir), start_point)
 
     head = run_git(target_dir, "rev-parse", "HEAD")
     return target_dir, existing_branch, head
@@ -149,6 +173,19 @@ def branch_merged_into_main(ctx: RepoContext, branch: str | None) -> bool:
         return False
     result = subprocess.run(
         ["git", "merge-base", "--is-ancestor", branch, "main"],
+        cwd=str(ctx.repo_root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def branch_merged_into_base(ctx: RepoContext, branch: str | None, base_branch: str | None) -> bool:
+    if not branch or not base_branch or branch == base_branch:
+        return False
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", branch, base_branch],
         cwd=str(ctx.repo_root),
         capture_output=True,
         text=True,

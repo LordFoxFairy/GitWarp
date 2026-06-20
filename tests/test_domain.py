@@ -49,6 +49,8 @@ class DomainModelTests(unittest.TestCase):
                 "lessons_md": "/repo/.gitwarp/dossiers/task/lessons.md",
                 "latest_progress": "Dispatch command prepared.",
                 "last_seen_head": "abc123",
+                "branch_role": "task",
+                "base_branch": "main",
                 "dispatch": {"agent_name": "codex"},
                 "instructions": [{"target": "AGENTS.md", "source": "/repo/AGENTS.md", "mode": "copy"}],
                 "instruction_profile": "codex",
@@ -58,6 +60,8 @@ class DomainModelTests(unittest.TestCase):
 
         payload = record.to_dict()
         self.assertEqual(payload["agent_id"], "codex-task")
+        self.assertEqual(payload["branch_role"], "task")
+        self.assertEqual(payload["base_branch"], "main")
         self.assertEqual(payload["dossier_path"], "/repo/.gitwarp/dossiers/task")
         self.assertEqual(payload["dispatch"], {"agent_name": "codex"})
         self.assertEqual(payload["instructions"][0]["target"], "AGENTS.md")

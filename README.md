@@ -8,6 +8,7 @@ The project follows the common Agent Skills layout while keeping product code in
 
 - Prevent branch collisions by refusing to allocate a branch already bound to a worktree.
 - Keep the main checkout stable; agents do not run `git switch` in the public repo.
+- Separate long-lived base branches from short-lived task branches.
 - Give every isolated workspace a task dossier for handoff and memory.
 - Detect unmanaged worktree commits with non-mutating `head_drift` audit findings.
 - Mark blocked work with `pause` and resume cleanly with `resume`.
@@ -74,11 +75,22 @@ gitwarp enter
 
 `statusline` is the low-noise automatic anchor for prompts and hooks. Run `enter` manually only when an agent needs the full dossier pointers and snippets.
 
-Create a sandbox:
+Create a task sandbox. By default it is a short-lived task branch based on `main`:
 
 ```bash
 gitwarp create --branch feature/my-task \
   --purpose "Implement isolated task"
+```
+
+When the user asks for a dedicated feature branch, create it as a long-lived base first, then create agent tasks under it:
+
+```bash
+gitwarp create --role base --branch feature/user-request \
+  --purpose "Coordinate user-request work"
+
+gitwarp create --branch agent/user-request-impl \
+  --base feature/user-request \
+  --purpose "Implement first pass"
 ```
 
 Move into an existing sandbox:
@@ -140,7 +152,17 @@ gitwarp finish --status pushed \
   --progress "Verified and pushed"
 ```
 
-Only collapse when the user explicitly wants the sandbox destroyed:
+Only collapse a task automatically after it has been merged into its parent base:
+
+```bash
+gitwarp finish --status merged \
+  --progress "Merged into feature/user-request" \
+  --collapse-merged
+```
+
+`--collapse-merged` refuses to run unless the target is a clean task worktree and Git proves its branch HEAD is already merged into `base_branch`. Base worktrees, including `main`, are not auto-collapsed.
+
+Only force-collapse when the user explicitly wants a sandbox destroyed regardless of merge state:
 
 ```bash
 gitwarp finish --status pushed \
@@ -148,7 +170,7 @@ gitwarp finish --status pushed \
   --collapse
 ```
 
-`remove` and `collapse` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They never merge, push, or delete the Git branch. Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch feature/my-task`. `remove` refuses dirty or untracked targets unless `--force` is provided.
+`remove`, `collapse`, `finish --collapse`, and `finish --collapse-merged` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They never merge, push, or delete the Git branch. Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch feature/my-task`. `remove` refuses dirty or untracked targets unless `--force` is provided.
 
 ## Usage Modes
 
@@ -163,7 +185,7 @@ gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a worktree from the dropdown, then use Code for tracked files at that worktree `HEAD`, Metadata for task/progress/lessons plus agent actions, and Health for doctor/reconcile findings.
+`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons plus agent actions; Health shows doctor/reconcile findings.
 
 ### Automated Agent
 
@@ -179,6 +201,8 @@ gitwarp handoff --status implementing --progress "Short milestone"
 `statusline` prints an unquoted banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]` for shell prompts and downstream model context.
 Session hooks should not print full `enter` output by default; they should inject the banner and remind the agent that `enter` is available when full context is needed.
 If the user explicitly assigns an existing worktree, complete the work in that worktree and stop there after verification. Do not push, merge, remove, or collapse unless the user asked for that action.
+
+For new user requests, prefer creating a base branch for the requested feature and separate task branches for agent implementation. Agent-created task branches may be collapsed with `finish --collapse-merged` only after they are merged back into their parent base. Do not auto-collapse base branches.
 
 ### Existing Worktree
 
@@ -203,7 +227,7 @@ GitWarp stores runtime state under `.gitwarp/` in the target repository. Run `gi
 
 By default, `init` writes `/.gitwarp/` to `.git/info/exclude`, which keeps runtime files local to one checkout. Use `gitwarp init --write-gitignore` when the team wants the ignore rule committed to `.gitignore`.
 
-Dossiers are lifecycle files for active sandboxes, not long-term archives. `handoff` keeps them current while a worktree exists. `remove`, `collapse`, and `finish --collapse` delete the matching dossier directory together with the worktree and ledger row while leaving the branch untouched.
+Dossiers are lifecycle files for active task sandboxes, not long-term archives. `handoff` keeps them current while a worktree exists. `remove`, `collapse`, `finish --collapse`, and `finish --collapse-merged` delete the matching dossier directory together with the worktree and ledger row while leaving the branch untouched. `init` also prunes ledger entries and dossiers for worktrees that Git no longer reports.
 
 `dispatch` is intentionally print-only in this release. `--command-mode execute` fails before creating anything so humans can review agent launch commands and host-specific flags.
 

@@ -124,6 +124,7 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
             agent_id=optional_string_field(payload, "agent_id"),
             branch=string_field(payload, "branch"),
             purpose=string_field(payload, "purpose"),
+            base_branch=optional_string_field(payload, "base_branch"),
             instructions=optional_instruction_list(payload),
             instruction_profile=optional_instruction_profile(payload),
             instruction_mode=optional_instruction_mode(payload),
@@ -134,6 +135,7 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
             agent_id=string_field(payload, "agent_id"),
             branch=string_field(payload, "branch"),
             purpose=string_field(payload, "purpose"),
+            base_branch=optional_string_field(payload, "base_branch"),
             instructions=optional_instruction_list(payload),
             instruction_profile=optional_instruction_profile(payload),
             instruction_mode=optional_instruction_mode(payload),
@@ -161,6 +163,7 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
         return {"ok": True, "confirmation": confirmation, "expires_at": expires_at, "challenge": challenge}
     if path == "/api/finish":
         collapse = optional_bool_field(payload, "collapse")
+        collapse_merged = optional_bool_field(payload, "collapse_merged")
         if collapse:
             require_confirmation(secret=confirmation_secret, ctx=ctx, action="finish-collapse", payload=payload)
         return build_finish_payload(
@@ -172,6 +175,7 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
             progress=string_field(payload, "progress"),
             lesson=optional_string_field(payload, "lesson"),
             collapse=collapse,
+            collapse_merged=collapse_merged,
         )
     if path == "/api/collapse":
         require_confirmation(secret=confirmation_secret, ctx=ctx, action="collapse", payload=payload)

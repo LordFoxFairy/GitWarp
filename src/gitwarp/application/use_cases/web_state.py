@@ -7,6 +7,7 @@ from typing import Any
 from ...application.diagnostics import build_doctor_payload, build_finding, summarize_findings
 from ...application.reconcile import build_reconcile_payload
 from ...application.views import board_row, statusline_banner
+from ...domain.branch_roles import enrich_role_metadata
 from ...infrastructure.ledger import default_ledger, discover_repo, normalize_ledger_schema
 from ...infrastructure.runtime import GitWarpError, RepoContext, resolve_path
 from ...infrastructure.worktrees import build_head_drift, find_worktree_for_cwd, parse_worktrees
@@ -31,12 +32,15 @@ def sync_ledger_for_web(
     for item in live_worktrees:
         meta = metadata_by_path.get(item["path"], {})
         last_seen_head = meta.get("last_seen_head")
+        branch_role, base_branch = enrich_role_metadata(item, meta)
         enriched_item = {
             "path": item["path"],
             "head": item["head"],
             "branch": item.get("branch"),
             "detached": item.get("detached", False),
             "is_main": item.get("is_main", False),
+            "branch_role": branch_role,
+            "base_branch": base_branch,
             "agent_id": meta.get("agent_id"),
             "purpose": meta.get("purpose"),
             "status": meta.get("status"),

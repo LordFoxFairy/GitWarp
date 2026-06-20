@@ -17,7 +17,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 
 | Command | Use |
 | --- | --- |
-| `gitwarp create` | Create a dossier-backed isolated worktree. |
+| `gitwarp create` | Create a base or task worktree. Task worktrees are dossier-backed. |
 | `gitwarp switch` | Locate an existing worktree and print its absolute path or `cd` command. |
 | `gitwarp remove` | Destroy a sandbox and its dossier when explicitly requested; add `--force` only for dirty targets. |
 | `gitwarp handoff` | Record progress and optional lessons during work. |
@@ -30,7 +30,25 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 
 `start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `create`, `switch`, and `remove` unless you specifically need a rendered launch command from `dispatch`.
 
-The Web Console is for human supervision: open a project, choose a worktree from the dropdown, browse tracked files in Code, inspect the same worktree's task/progress/lessons in Metadata, and review doctor/reconcile findings in Health.
+The Web Console is for human supervision: open a project, choose a base branch, choose a task worktree under that base, browse tracked files in Code, inspect task/progress/lessons in Metadata, and review doctor/reconcile findings in Health.
+
+## Branch Roles
+
+GitWarp tracks two workspace roles:
+
+- `base`: long-lived coordination branch. `main` is always base. User-requested feature branches are usually base branches. Base branches do not have task dossiers and must not be auto-collapsed.
+- `task`: short-lived agent branch under a `base_branch`. Task branches have dossiers and may be removed after they are merged into their parent base.
+
+For a new user feature, prefer:
+
+```bash
+gitwarp create --role base --branch feature/user-request \
+  --purpose "Coordinate user-request work"
+
+gitwarp create --branch agent/user-request-impl \
+  --base feature/user-request \
+  --purpose "Implement user-request task"
+```
 
 ## Agent Workflow
 
@@ -50,6 +68,8 @@ If work requires edits and you are in the main checkout:
 gitwarp create --branch feature/my-task \
   --purpose "Implement isolated task"
 ```
+
+If the user asked for a dedicated feature branch, create that branch as `--role base` first, then create your implementation branch as a task with `--base <feature-branch>`.
 
 Move into the returned `path`, or print a shell navigation command:
 
@@ -79,7 +99,17 @@ gitwarp finish --status pushed \
   --progress "Verified and pushed"
 ```
 
-When the user explicitly wants the sandbox destroyed:
+When a task branch has already been merged into its parent base and the worktree is clean, collapse the task sandbox:
+
+```bash
+gitwarp finish --status merged \
+  --progress "Merged into parent base" \
+  --collapse-merged
+```
+
+`--collapse-merged` refuses base worktrees, dirty worktrees, and task branches whose HEAD is not merged into `base_branch`.
+
+When the user explicitly wants the sandbox destroyed regardless of merge state:
 
 ```bash
 gitwarp finish --status pushed \
@@ -89,7 +119,7 @@ gitwarp finish --status pushed \
 
 Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch <branch>`. If the target has uncommitted or untracked files, `remove` refuses to proceed until you rerun with `--force`.
 
-`remove`, `collapse`, and `finish --collapse` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They do not merge, push, or delete the Git branch. If the user assigns an existing worktree, finish the requested work there and stop after verification unless the user explicitly asks for push, merge, remove, or collapse.
+`remove`, `collapse`, `finish --collapse`, and `finish --collapse-merged` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They do not merge, push, or delete the Git branch. If the user assigns an existing worktree, finish the requested work there and stop after verification unless the user explicitly asks for push, merge, remove, or collapse.
 
 ## Instructions
 

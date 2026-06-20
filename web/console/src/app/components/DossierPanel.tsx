@@ -29,6 +29,7 @@ export function DossierPanel({
   onHandoff,
   onFinish,
 }: DossierPanelProps) {
+  const isTask = Boolean(selected && !selected.is_main && selected.branch_role !== "base");
   const finish = (status: string, progress: string) => {
     if (!selected) {
       return Promise.resolve({ ok: false });
@@ -41,8 +42,8 @@ export function DossierPanel({
       <div className="panel-title row">
         <div>
           <span>Dossier</span>
-          <h2>{selected && !selected.is_main ? `${dossierKind}.md` : "No sandbox selected"}</h2>
-          {selected && !selected.is_main ? <p className="subtle">{selected.branch}</p> : null}
+          <h2>{isTask ? `${dossierKind}.md` : "No task selected"}</h2>
+          {isTask ? <p className="subtle">{selected?.branch}</p> : null}
         </div>
       </div>
 
@@ -63,16 +64,16 @@ export function DossierPanel({
 
       <pre className="readout">{dossierContent}</pre>
 
-      {selected && !selected.is_main && readonly ? (
+      {isTask && readonly ? (
         <p className="empty-state">Read-only mode is enabled. Handoff and finish actions are hidden.</p>
       ) : null}
 
-      {selected && !selected.is_main && !readonly ? (
+      {isTask && selected && !readonly ? (
         <WorktreeActions readonly={readonly} busy={busy} worktree={selected} onHandoff={onHandoff} onFinish={finish} />
       ) : null}
 
-      {(!selected || selected.is_main) ? (
-        <p className="empty-state">Select a non-main sandbox to record handoff notes or finish it.</p>
+      {!isTask ? (
+        <p className="empty-state">Select a task worktree under the current base to inspect task.md, record handoffs, or finish merged work.</p>
       ) : null}
     </aside>
   );
@@ -92,16 +93,16 @@ function WorktreeActions({
   onFinish: (status: string, progress: string) => Promise<CommandResult>;
 }) {
   const [showFinish, setShowFinish] = useState(false);
-  const [finalStatus, setFinalStatus] = useState("completed");
-  const [finalProgress, setFinalProgress] = useState("Verified; ready for user review");
+  const [finalStatus, setFinalStatus] = useState("merged");
+  const [finalProgress, setFinalProgress] = useState("Merged into parent base; ready to collapse task sandbox");
   const [confirmation, setConfirmation] = useState("");
   const expectedConfirmation = worktree.branch || worktree.path;
   const finishAllowed = confirmation === expectedConfirmation && finalStatus.trim().length > 0 && finalProgress.trim().length > 0;
 
   useEffect(() => {
     setShowFinish(false);
-    setFinalStatus("completed");
-    setFinalProgress("Verified; ready for user review");
+    setFinalStatus("merged");
+    setFinalProgress("Merged into parent base; ready to collapse task sandbox");
     setConfirmation("");
   }, [worktree.path]);
 
@@ -160,14 +161,14 @@ function WorktreeActions({
 
       {!showFinish ? (
         <Button variant="danger" type="button" onClick={() => setShowFinish(true)} disabled={readonly || busy}>
-          Finish + Collapse
+          Finish Merged Task
         </Button>
       ) : (
         <form className="finish-confirm" onSubmit={submitFinish}>
           <div>
-            <strong>Collapse this sandbox permanently</strong>
+            <strong>Collapse this task sandbox</strong>
             <p className="form-hint">
-              GitWarp will record final progress, force-remove the worktree, prune Git worktree metadata, delete the matching dossier directory, and remove the ledger row. It will not push, merge, or delete the branch.
+              GitWarp will only collapse this task when Git proves its branch HEAD is already merged into the parent base. It will remove the task worktree, ledger row, and matching dossier. It will not push, merge, or delete the branch.
             </p>
           </div>
           <label>

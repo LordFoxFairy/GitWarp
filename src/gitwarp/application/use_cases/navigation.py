@@ -46,6 +46,8 @@ def build_switch_payload(
         "purpose": target.get("purpose"),
         "status": target.get("status"),
         "is_main": target.get("is_main", False),
+        "branch_role": target.get("branch_role"),
+        "base_branch": target.get("base_branch"),
         "statusline": statusline_banner(target),
         "shell_command": shell_cd_command(target_path),
         "task_md": target.get("task_md"),

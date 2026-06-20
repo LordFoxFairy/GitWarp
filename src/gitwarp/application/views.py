@@ -33,6 +33,8 @@ def board_row(item: dict[str, Any], *, verbose: bool = False) -> dict[str, Any]:
         "purpose": item.get("purpose"),
         "status": item.get("status"),
         "is_main": item.get("is_main", False),
+        "branch_role": item.get("branch_role"),
+        "base_branch": item.get("base_branch"),
         "dossier_path": item.get("dossier_path"),
         "task_md": item.get("task_md"),
         "progress_md": item.get("progress_md"),

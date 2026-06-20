@@ -56,6 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--cwd")
     create.add_argument("--agent-id")
     create.add_argument("--branch", required=True)
+    create.add_argument("--role", choices=["base", "task"], default="task", help="Mark the worktree as a long-lived base or agent task")
+    create.add_argument("--base", help="Parent base branch for task worktrees; defaults to the current base or main")
     create.add_argument("--purpose", required=True)
     create.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
     create.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
@@ -81,6 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     summon.add_argument("--cwd")
     summon.add_argument("--agent-id", required=True)
     summon.add_argument("--branch", required=True)
+    summon.add_argument("--base", help="Parent base branch for this task worktree")
     summon.add_argument("--purpose", required=True)
     summon.set_defaults(func=cmd_summon)
 
@@ -88,6 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--cwd")
     start.add_argument("--agent-id", required=True)
     start.add_argument("--branch", required=True)
+    start.add_argument("--base", help="Parent base branch for this task worktree")
     start.add_argument("--purpose", required=True)
     start.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
     start.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
@@ -99,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     dispatch.add_argument("--agent")
     dispatch.add_argument("--agent-id")
     dispatch.add_argument("--branch", required=True)
+    dispatch.add_argument("--base", help="Parent base branch for this task worktree")
     dispatch.add_argument("--purpose", required=True)
     dispatch.add_argument("--command-mode", choices=["print", "execute"], default="print")
     dispatch.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
@@ -109,8 +114,10 @@ def build_parser() -> argparse.ArgumentParser:
     adopt = subparsers.add_parser("adopt", help="Bind an existing non-main worktree to GitWarp metadata")
     adopt.add_argument("--cwd")
     adopt.add_argument("--path")
-    adopt.add_argument("--agent-id", required=True)
-    adopt.add_argument("--purpose", required=True)
+    adopt.add_argument("--agent-id")
+    adopt.add_argument("--purpose")
+    adopt.add_argument("--role", choices=["base", "task"], default="task")
+    adopt.add_argument("--base", help="Parent base branch when adopting as a task")
     adopt.set_defaults(func=cmd_adopt)
 
     context = subparsers.add_parser("context", help="Print JSON context for the current worktree")
@@ -180,6 +187,11 @@ def build_parser() -> argparse.ArgumentParser:
     finish.add_argument("--progress", required=True)
     finish.add_argument("--lesson")
     finish.add_argument("--collapse", action="store_true", help="Destroy the worktree, ledger row, and matching dossier after recording progress")
+    finish.add_argument(
+        "--collapse-merged",
+        action="store_true",
+        help="Destroy only a clean task worktree whose branch HEAD is already merged into its base branch",
+    )
     finish.add_argument(
         "--purge-dossier",
         action="store_true",

@@ -5,6 +5,7 @@ from typing import Any
 from ...application.diagnostics import append_gitwarp_ignore_rule, init_recommendations, preflight_init
 from ...infrastructure.ledger import default_ledger, write_ledger
 from ...infrastructure.runtime import RepoContext
+from ...infrastructure.worktrees import parse_worktrees, sync_ledger
 
 
 def build_init_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, Any]:
@@ -31,6 +32,10 @@ def build_init_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, 
 
     if updated["ignore_rule"]:
         append_gitwarp_ignore_rule(preflight["ignore_target"])
+
+    ledger_before_sync = ctx.ledger_path.read_bytes()
+    sync_ledger(ctx, parse_worktrees(ctx))
+    updated["ledger"] = updated["ledger"] or ledger_before_sync != ctx.ledger_path.read_bytes()
 
     return {
         "ok": True,

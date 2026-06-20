@@ -4,6 +4,134 @@ from helpers import *
 
 
 class WorktreeTests(GitWarpTestCase):
+    def test_base_and_task_roles_group_work_to_parent_branch(self) -> None:
+        base = run_gitwarp(
+            self.repo,
+            "create",
+            "--role",
+            "base",
+            "--branch",
+            "feature/user-request",
+            "--purpose",
+            "User requested feature line",
+        )
+        base_path = Path(str(base["path"]))
+        self.assertTrue(base_path.exists())
+        self.assertEqual(base["branch_role"], "base")
+        self.assertIsNone(base["base_branch"])
+        self.assertNotIn("task_md", base)
+
+        task = run_gitwarp(
+            base_path,
+            "create",
+            "--branch",
+            "agent/user-request-impl",
+            "--purpose",
+            "Implement the user request under the feature line",
+        )
+        self.assertEqual(task["branch_role"], "task")
+        self.assertEqual(task["base_branch"], "feature/user-request")
+        self.assertTrue(Path(str(task["task_md"])).exists())
+
+        board = run_gitwarp(self.repo, "board", "--cwd", str(self.repo))
+        rows = {row["branch"]: row for row in board["worktrees"]}  # type: ignore[index]
+        self.assertEqual(rows["main"]["branch_role"], "base")
+        self.assertEqual(rows["feature/user-request"]["branch_role"], "base")
+        self.assertEqual(rows["agent/user-request-impl"]["branch_role"], "task")
+        self.assertEqual(rows["agent/user-request-impl"]["base_branch"], "feature/user-request")
+
+    def test_finish_collapse_merged_removes_clean_task_after_parent_merge(self) -> None:
+        base = run_gitwarp(
+            self.repo,
+            "create",
+            "--role",
+            "base",
+            "--branch",
+            "feature/parent",
+            "--purpose",
+            "Parent feature line",
+        )
+        base_path = Path(str(base["path"]))
+        task = run_gitwarp(
+            self.repo,
+            "create",
+            "--base",
+            "feature/parent",
+            "--branch",
+            "agent/parent-task",
+            "--purpose",
+            "Task under parent",
+        )
+        task_path = Path(str(task["path"]))
+        dossier_path = Path(str(task["dossier_path"]))
+
+        (task_path / "feature.txt").write_text("done\n", encoding="utf-8")
+        run_git(task_path, "add", "feature.txt")
+        run_git(task_path, "commit", "-m", "task change")
+
+        refused = run_gitwarp(
+            self.repo,
+            "finish",
+            "--cwd",
+            str(task_path),
+            "--status",
+            "merged",
+            "--progress",
+            "Attempt before merge",
+            "--collapse-merged",
+            expect_ok=False,
+        )
+        self.assertIn("merged into its base_branch", str(refused["error"]))
+        self.assertTrue(task_path.exists())
+
+        run_git(base_path, "merge", "--no-ff", "agent/parent-task", "-m", "merge task")
+
+        finish = run_gitwarp(
+            self.repo,
+            "finish",
+            "--cwd",
+            str(task_path),
+            "--status",
+            "merged",
+            "--progress",
+            "Merged into parent",
+            "--collapse-merged",
+        )
+        self.assertTrue(finish["collapsed"])
+        self.assertTrue(finish["purged_dossier"])
+        self.assertEqual(finish["removed_branch"], "agent/parent-task")
+        self.assertFalse(task_path.exists())
+        self.assertFalse(dossier_path.exists())
+        self.assertTrue(base_path.exists())
+
+    def test_sync_prunes_dead_worktree_entries_and_orphan_dossiers(self) -> None:
+        task = run_gitwarp(
+            self.repo,
+            "create",
+            "--branch",
+            "agent/dead-task",
+            "--purpose",
+            "Create task that disappears outside GitWarp",
+        )
+        task_path = Path(str(task["path"]))
+        dossier_path = Path(str(task["dossier_path"]))
+        self.assertTrue(dossier_path.exists())
+
+        run_git(self.repo, "worktree", "remove", "--force", str(task_path))
+        run_gitwarp(
+            self.repo,
+            "create",
+            "--branch",
+            "agent/next-task",
+            "--purpose",
+            "Trigger safe sync cleanup",
+        )
+
+        self.assertFalse(dossier_path.exists())
+        board = run_gitwarp(self.repo, "board", "--cwd", str(self.repo))
+        branches = {row["branch"] for row in board["worktrees"]}  # type: ignore[index]
+        self.assertNotIn("agent/dead-task", branches)
+
     def test_existing_branch_and_collision_are_reported(self) -> None:
         run_git(self.repo, "branch", "feature/existing")
 

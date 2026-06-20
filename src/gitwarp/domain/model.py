@@ -82,6 +82,8 @@ class WorkspaceRecord:
     latest_progress: str | None = None
     latest_lesson: str | None = None
     last_seen_head: str | None = None
+    branch_role: str | None = None
+    base_branch: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     dispatch: dict[str, Any] | None = None
@@ -105,6 +107,8 @@ class WorkspaceRecord:
             latest_progress=value.get("latest_progress") if isinstance(value.get("latest_progress"), str) else None,
             latest_lesson=value.get("latest_lesson") if isinstance(value.get("latest_lesson"), str) else None,
             last_seen_head=value.get("last_seen_head") if isinstance(value.get("last_seen_head"), str) else None,
+            branch_role=value.get("branch_role") if isinstance(value.get("branch_role"), str) else None,
+            base_branch=value.get("base_branch") if isinstance(value.get("base_branch"), str) else None,
             created_at=value.get("created_at") if isinstance(value.get("created_at"), str) else None,
             updated_at=value.get("updated_at") if isinstance(value.get("updated_at"), str) else None,
             dispatch=value.get("dispatch") if isinstance(value.get("dispatch"), dict) else None,
@@ -124,6 +128,8 @@ class WorkspaceRecord:
             "latest_progress": self.latest_progress,
             "latest_lesson": self.latest_lesson,
             "last_seen_head": self.last_seen_head,
+            "branch_role": self.branch_role,
+            "base_branch": self.base_branch,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }

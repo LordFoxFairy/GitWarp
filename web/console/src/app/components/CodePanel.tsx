@@ -170,6 +170,14 @@ function WorktreeAbout({
           <dd>{worktree.branch || "unknown"}</dd>
         </div>
         <div>
+          <dt>Role</dt>
+          <dd>{worktree.branch_role || (worktree.is_main ? "base" : "task")}</dd>
+        </div>
+        <div>
+          <dt>Parent Base</dt>
+          <dd>{worktree.base_branch || (worktree.is_main || worktree.branch_role === "base" ? "none" : "main")}</dd>
+        </div>
+        <div>
           <dt>Agent</dt>
           <dd>{worktree.agent_id || "unassigned"}</dd>
         </div>

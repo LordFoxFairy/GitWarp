@@ -6,6 +6,7 @@ import os
 from ...application.use_cases import (
     build_adopt_payload,
     build_annotate_payload,
+    build_base_payload,
     build_collapse_payload,
     build_dispatch_payload,
     build_finish_payload,
@@ -33,16 +34,26 @@ def default_agent_id(branch: str) -> str:
 
 def cmd_summon(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    emit_json(build_summon_payload(ctx, agent_id=args.agent_id, branch=args.branch, purpose=args.purpose))
+    emit_json(build_summon_payload(ctx, agent_id=args.agent_id, branch=args.branch, purpose=args.purpose, base_branch=args.base))
 
 
 def cmd_create(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
+    if args.role == "base":
+        payload = build_base_payload(
+            ctx,
+            branch=args.branch,
+            purpose=args.purpose,
+        )
+        payload["shell_command"] = shell_cd_command(str(payload["path"]))
+        emit_json(payload)
+        return
     payload = build_start_payload(
         ctx,
         agent_id=args.agent_id or default_agent_id(args.branch),
         branch=args.branch,
         purpose=args.purpose,
+        base_branch=args.base,
         instructions=args.instruction,
         instruction_profile=args.instruction_profile,
         instruction_mode=args.instruction_mode,
@@ -59,6 +70,7 @@ def cmd_start(args: argparse.Namespace) -> None:
             agent_id=args.agent_id,
             branch=args.branch,
             purpose=args.purpose,
+            base_branch=args.base,
             instructions=args.instruction,
             instruction_profile=args.instruction_profile,
             instruction_mode=args.instruction_mode,
@@ -77,6 +89,7 @@ def cmd_dispatch(args: argparse.Namespace) -> None:
             agent_id=args.agent_id,
             branch=args.branch,
             purpose=args.purpose,
+            base_branch=args.base,
             instructions=args.instruction,
             instruction_profile=args.instruction_profile,
             instruction_mode=args.instruction_mode,
@@ -88,7 +101,17 @@ def cmd_adopt(args: argparse.Namespace) -> None:
     anchor = args.cwd or args.path
     cwd = resolve_path(anchor)
     ctx = discover_repo(cwd)
-    emit_json(build_adopt_payload(ctx, cwd=str(cwd), path=args.path, agent_id=args.agent_id, purpose=args.purpose))
+    emit_json(
+        build_adopt_payload(
+            ctx,
+            cwd=str(cwd),
+            path=args.path,
+            agent_id=args.agent_id,
+            purpose=args.purpose,
+            branch_role=args.role,
+            base_branch=args.base,
+        )
+    )
 
 
 def cmd_annotate(args: argparse.Namespace) -> None:
@@ -171,6 +194,7 @@ def cmd_finish(args: argparse.Namespace) -> None:
         progress=args.progress,
         lesson=args.lesson,
         collapse=args.collapse,
+        collapse_merged=args.collapse_merged,
         purge_dossier=args.purge_dossier,
     )
     emit_json(payload)

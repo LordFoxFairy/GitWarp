@@ -4,13 +4,14 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from ...domain.branch_roles import BASE_ROLE, DEFAULT_BASE_BRANCH, TASK_ROLE
 from ...domain.model import DispatchPlan, DossierRef, WorkspaceRecord
 from ...infrastructure.agents import build_agent_id, load_agent_registry, render_agent_prompt, render_command, shell_preview
 from ...infrastructure.dossiers import create_dossier_files, dossier_paths
 from ...infrastructure.instructions import build_instruction_plan, mount_instruction_files
 from ...infrastructure.ledger import mutate_ledger
 from ...infrastructure.runtime import GitWarpError, RepoContext, now_iso, run_git
-from ...infrastructure.worktrees import create_worktree, ensure_branch_available, parse_worktrees, sync_ledger
+from ...infrastructure.worktrees import create_worktree, ensure_branch_available, find_worktree_for_cwd, parse_worktrees, sync_ledger
 
 
 def cleanup_created_dossier(ctx: RepoContext, raw_dossier_path: str | None) -> None:
@@ -49,25 +50,87 @@ def cleanup_created_worktree(
     cleanup_created_dossier(ctx, dossier_path)
 
 
+def infer_base_branch(ctx: RepoContext, worktrees: list[dict[str, Any]], requested_base: str | None) -> str:
+    if requested_base:
+        return requested_base
+    current = find_worktree_for_cwd(ctx.cwd, worktrees)
+    if current:
+        if current.get("branch_role") == BASE_ROLE and current.get("branch"):
+            return str(current["branch"])
+        if current.get("base_branch"):
+            return str(current["base_branch"])
+    return DEFAULT_BASE_BRANCH
+
+
+def build_base_payload(ctx: RepoContext, *, branch: str, purpose: str) -> dict[str, Any]:
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    ensure_branch_available(worktrees, branch)
+    target_dir, existing_branch, head = create_worktree(ctx, branch)
+    branch_created = not existing_branch
+    created_at = now_iso()
+    entry = WorkspaceRecord(
+        path=str(target_dir),
+        branch=branch,
+        agent_id=None,
+        purpose=purpose,
+        status="base",
+        notes=[],
+        latest_progress="Base workspace created.",
+        last_seen_head=head,
+        branch_role=BASE_ROLE,
+        base_branch=None,
+        created_at=created_at,
+    ).to_dict()
+
+    def update(ledger: dict[str, Any]) -> None:
+        ledger["entries"] = [item for item in ledger["entries"] if item.get("path") != entry["path"]]
+        ledger["entries"].append(entry)
+
+    try:
+        mutate_ledger(ctx, update)
+    except Exception:
+        cleanup_created_worktree(ctx, target_dir, branch=branch, branch_created=branch_created)
+        raise
+
+    return {
+        "ok": True,
+        "repo_root": str(ctx.repo_root),
+        "ledger_path": str(ctx.ledger_path),
+        "path": str(target_dir),
+        "branch": branch,
+        "head": head,
+        "agent_id": None,
+        "purpose": purpose,
+        "status": "base",
+        "branch_role": BASE_ROLE,
+        "base_branch": None,
+        "branch_created": not existing_branch,
+        "last_seen_head": head,
+        "latest_progress": "Base workspace created.",
+    }
+
+
 def build_start_payload(
     ctx: RepoContext,
     *,
     agent_id: str,
     branch: str,
     purpose: str,
+    base_branch: str | None = None,
     instructions: list[str] | None = None,
     instruction_profile: str | None = None,
     instruction_mode: str = "copy",
 ) -> dict[str, Any]:
     _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     ensure_branch_available(worktrees, branch)
+    resolved_base_branch = infer_base_branch(ctx, worktrees, base_branch)
     instruction_plan = build_instruction_plan(
         ctx,
         raw_instructions=instructions,
         profile_name=instruction_profile,
         mode=instruction_mode,
     )
-    target_dir, existing_branch, head = create_worktree(ctx, branch)
+    target_dir, existing_branch, head = create_worktree(ctx, branch, start_point=resolved_base_branch)
     branch_created = not existing_branch
     created_at = now_iso()
     dossier = dossier_paths(ctx, branch, target_dir)
@@ -87,6 +150,8 @@ def build_start_payload(
         dossier=DossierRef.from_mapping(dossier),
         latest_progress="Workspace created.",
         last_seen_head=head,
+        branch_role=TASK_ROLE,
+        base_branch=resolved_base_branch,
         created_at=created_at,
         instructions=mounted_instructions or None,
         instruction_profile=instruction_profile,
@@ -101,6 +166,8 @@ def build_start_payload(
             purpose=purpose,
             status="active",
             created_at=created_at,
+            branch_role=TASK_ROLE,
+            base_branch=resolved_base_branch,
             instructions=mounted_instructions,
             instruction_profile=instruction_profile,
         )
@@ -127,6 +194,8 @@ def build_start_payload(
         "agent_id": agent_id,
         "purpose": purpose,
         "status": "active",
+        "branch_role": TASK_ROLE,
+        "base_branch": resolved_base_branch,
         "branch_created": not existing_branch,
         "last_seen_head": head,
         "latest_progress": "Workspace created.",
@@ -137,11 +206,12 @@ def build_start_payload(
     }
 
 
-def build_summon_payload(ctx: RepoContext, *, agent_id: str, branch: str, purpose: str) -> dict[str, Any]:
+def build_summon_payload(ctx: RepoContext, *, agent_id: str, branch: str, purpose: str, base_branch: str | None = None) -> dict[str, Any]:
     _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     ensure_branch_available(worktrees, branch)
+    resolved_base_branch = infer_base_branch(ctx, worktrees, base_branch)
 
-    target_dir, existing_branch, head = create_worktree(ctx, branch)
+    target_dir, existing_branch, head = create_worktree(ctx, branch, start_point=resolved_base_branch)
     branch_created = not existing_branch
     entry = WorkspaceRecord(
         path=str(target_dir),
@@ -151,6 +221,8 @@ def build_summon_payload(ctx: RepoContext, *, agent_id: str, branch: str, purpos
         status="active",
         notes=[],
         last_seen_head=head,
+        branch_role=TASK_ROLE,
+        base_branch=resolved_base_branch,
         created_at=now_iso(),
     ).to_dict()
 
@@ -173,6 +245,8 @@ def build_summon_payload(ctx: RepoContext, *, agent_id: str, branch: str, purpos
         "head": head,
         "agent_id": agent_id,
         "purpose": purpose,
+        "branch_role": TASK_ROLE,
+        "base_branch": resolved_base_branch,
         "branch_created": not existing_branch,
     }
 
@@ -184,6 +258,7 @@ def build_dispatch_payload(
     agent_id: str | None,
     branch: str,
     purpose: str,
+    base_branch: str | None = None,
     instructions: list[str] | None = None,
     instruction_profile: str | None = None,
     instruction_mode: str = "copy",
@@ -195,6 +270,7 @@ def build_dispatch_payload(
         raise GitWarpError(f"unknown agent '{agent_name}'; available agents: {', '.join(sorted(agents_by_name))}")
     _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     ensure_branch_available(worktrees, branch)
+    resolved_base_branch = infer_base_branch(ctx, worktrees, base_branch)
     instruction_plan = build_instruction_plan(
         ctx,
         raw_instructions=instructions,
@@ -204,7 +280,7 @@ def build_dispatch_payload(
 
     selected_agent = agents_by_name[agent_name]
     resolved_agent_id = agent_id or build_agent_id(agent_name, branch)
-    target_dir, existing_branch, head = create_worktree(ctx, branch)
+    target_dir, existing_branch, head = create_worktree(ctx, branch, start_point=resolved_base_branch)
     branch_created = not existing_branch
     created_at = now_iso()
     dossier = dossier_paths(ctx, branch, target_dir)
@@ -245,6 +321,8 @@ def build_dispatch_payload(
         dossier=DossierRef.from_mapping(dossier),
         latest_progress="Dispatch command prepared.",
         last_seen_head=head,
+        branch_role=TASK_ROLE,
+        base_branch=resolved_base_branch,
         created_at=created_at,
         updated_at=created_at,
         dispatch=dispatch_meta,
@@ -261,6 +339,8 @@ def build_dispatch_payload(
             purpose=purpose,
             status="dispatched",
             created_at=created_at,
+            branch_role=TASK_ROLE,
+            base_branch=resolved_base_branch,
             instructions=mounted_instructions,
             instruction_profile=instruction_profile,
         )
@@ -289,6 +369,8 @@ def build_dispatch_payload(
         "head": head,
         "purpose": purpose,
         "status": "dispatched",
+        "branch_role": TASK_ROLE,
+        "base_branch": resolved_base_branch,
         "branch_created": not existing_branch,
         "last_seen_head": head,
         "launch_command": launch_command,
