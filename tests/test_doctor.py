@@ -301,7 +301,7 @@ class DoctorTests(GitWarpTestCase):
         (source_repo / ".agents" / "plugins" / "api_marketplace.json").write_text("{}\n", encoding="utf-8")
         (source_repo / "hooks").mkdir()
         (source_repo / "hooks" / "session-start-codex").write_text(
-            'gitwarp enter --cwd "$PWD"\nGitWarp Context:\nDiagnostics:\n',
+            'gitwarp statusline --cwd "$PWD"\nGitWarp:\ngitwarp enter\nDiagnostics:\n',
             encoding="utf-8",
         )
         (source_repo / "hooks" / "session-start-codex").chmod(0o755)
@@ -345,7 +345,10 @@ class DoctorTests(GitWarpTestCase):
             capture_output=True,
             text=True,
         )
-        (source_repo / "hooks" / "session-start-codex").write_text("gitwarp enter --cwd \"$PWD\"\n", encoding="utf-8")
+        (source_repo / "hooks" / "session-start-codex").write_text(
+            'gitwarp statusline --cwd "$PWD"\nGitWarp:\ngitwarp enter\nDiagnostics:\n',
+            encoding="utf-8",
+        )
 
         doctor = run_gitwarp(worktree_path, "doctor", "--cwd", str(worktree_path))
         hook_finding = findings_with_code(doctor, "session_hook_context")[0]

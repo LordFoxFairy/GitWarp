@@ -52,11 +52,26 @@ export interface WorktreeRow {
   instruction_mode?: "copy" | "symlink" | string;
 }
 
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  repo_root: string;
+  ledger_path: string;
+  readonly: boolean;
+  statusline: string;
+  worktree_count: number;
+  active_worktree_count: number;
+  assigned_agent_count: number;
+  doctor_finding_count: number;
+  reconcile_finding_count: number;
+}
+
 export interface WebState {
   ok: boolean;
   readonly: boolean;
   repo_root: string;
   statusline: string;
+  projects: ProjectSummary[];
   worktrees: WorktreeRow[];
   doctor?: FindingGroup;
   reconcile?: FindingGroup;
@@ -74,3 +89,4 @@ export interface CommandResult {
 }
 
 export type DossierKind = "task" | "progress" | "lessons";
+export type RepositoryTab = "overview" | "worktrees" | "agents" | "health";

@@ -54,10 +54,10 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
   };
 
   return (
-    <aside className="panel action-panel" aria-label="Create and dispatch workspaces">
+    <aside className="panel action-panel" aria-label="Sandbox actions">
       <div className="panel-title">
         <span>Actions</span>
-        <h2>Create Worktree</h2>
+        <h2>Create Sandbox</h2>
       </div>
       <form className="form-stack" onSubmit={submitStart}>
         <label>
@@ -74,7 +74,7 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
         </label>
         <InstructionFields readonly={readonly} />
         <button className="button primary full" type="submit" disabled={readonly}>
-          Start Worktree
+          Create Sandbox
         </button>
       </form>
 
@@ -82,7 +82,7 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
 
       <div className="panel-title compact">
         <span>Agent Launch</span>
-        <h2>Dispatch</h2>
+        <h2>Prepare Agent Launch</h2>
       </div>
       <form className="form-stack" onSubmit={submitDispatch}>
         <label>
@@ -102,7 +102,7 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
         </label>
         <InstructionFields readonly={readonly} />
         <button className="button secondary full" type="submit" disabled={readonly}>
-          Prepare Launch Command
+          Prepare Agent Launch
         </button>
       </form>
     </aside>

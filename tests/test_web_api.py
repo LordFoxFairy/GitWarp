@@ -80,9 +80,45 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(status, 200)
         self.assertTrue(state["ok"])
         self.assertEqual(state["repo_root"], str(self.repo.resolve()))
+        self.assertIn("projects", state)
+        self.assertEqual(state["projects"][0]["name"], self.repo.name)
+        self.assertEqual(state["projects"][0]["repo_root"], str(self.repo.resolve()))
+        self.assertEqual(state["projects"][0]["worktree_count"], len(state["worktrees"]))
+        self.assertEqual(state["projects"][0]["active_worktree_count"], 0)
+        self.assertEqual(
+            state["projects"][0]["doctor_finding_count"],
+            sum(1 for finding in state["doctor"]["findings"] if finding["severity"] != "ok"),
+        )
+        self.assertEqual(
+            state["projects"][0]["reconcile_finding_count"],
+            sum(1 for finding in state["reconcile"]["findings"] if finding["severity"] != "ok"),
+        )
         self.assertIn("worktrees", state)
         self.assertIn("doctor", state)
         self.assertIn("reconcile", state)
+
+    def test_web_project_summary_counts_only_actionable_findings(self) -> None:
+        services = load_gitwarp_services()
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-dirty-web-summary",
+            "--branch",
+            "feature/dirty-web-summary",
+            "--purpose",
+            "Exercise actionable web findings",
+        )
+        Path(str(start["path"]), "dirty.txt").write_text("dirty\n", encoding="utf-8")
+
+        payload = services.build_web_state_payload(self.repo, readonly=True)
+        project = payload["projects"][0]
+
+        self.assertEqual(
+            project["doctor_finding_count"],
+            sum(1 for finding in payload["doctor"]["findings"] if finding["severity"] != "ok"),
+        )
+        self.assertGreaterEqual(project["reconcile_finding_count"], 1)
 
     def test_web_parser_accepts_subcommand_and_global_alias(self) -> None:
         _, subcommand = self.start_web_server(
@@ -209,13 +245,15 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", content_type)
         self.assertIn("GitWarp Manager", html)
-        self.assertIn("Worktree Control", html)
-        self.assertIn("Start Worktree", html)
-        self.assertIn("Prepare Launch Command", html)
+        self.assertIn("Project Directory", html)
+        self.assertIn("Project Detail", html)
+        self.assertIn("Open Project", html)
+        self.assertIn("Create Sandbox", html)
+        self.assertIn("Prepare Agent Launch", html)
         self.assertIn("Instruction Mounts", html)
         self.assertIn("copy snapshot", html)
         self.assertIn("symlink live file", html)
-        self.assertIn("Active Worktrees", html)
+        self.assertIn("Worktrees", html)
         self.assertIn("Doctor / Reconcile", html)
         self.assertIn("Finish + Collapse", html)
         self.assertIn("createRoot", html)

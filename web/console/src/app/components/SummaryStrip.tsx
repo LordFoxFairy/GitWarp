@@ -5,6 +5,8 @@ interface SummaryStripProps {
 }
 
 export function SummaryStrip({ state }: SummaryStripProps) {
+  const project = state?.projects[0];
+  const findings = (project?.doctor_finding_count ?? 0) + (project?.reconcile_finding_count ?? 0);
   return (
     <section className="summary-strip" aria-label="Repository summary">
       <article className="summary-card wide">
@@ -13,15 +15,15 @@ export function SummaryStrip({ state }: SummaryStripProps) {
       </article>
       <article className="summary-card">
         <span>Worktrees</span>
-        <strong>{state?.worktrees.length ?? 0}</strong>
+        <strong>{project?.worktree_count ?? state?.worktrees.length ?? 0}</strong>
       </article>
       <article className="summary-card">
-        <span>Doctor</span>
-        <strong>{state?.doctor?.summary?.total ?? 0}</strong>
+        <span>Active</span>
+        <strong>{project?.active_worktree_count ?? 0}</strong>
       </article>
       <article className="summary-card">
-        <span>Reconcile</span>
-        <strong>{state?.reconcile?.summary?.total ?? 0}</strong>
+        <span>Findings</span>
+        <strong>{findings}</strong>
       </article>
     </section>
   );

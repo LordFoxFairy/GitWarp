@@ -16,13 +16,13 @@ function value(form: HTMLFormElement, name: string): string {
 
 export function WorktreeBoard({ readonly, worktrees, onSelect, onHandoff, onFinish }: WorktreeBoardProps) {
   return (
-    <section className="panel board-panel" aria-label="Active worktrees">
+    <section className="panel board-panel" aria-label="Worktrees">
       <div className="panel-title row">
         <div>
-          <span>Board</span>
-          <h2>Active Worktrees</h2>
+          <span>Project State</span>
+          <h2>Worktrees</h2>
         </div>
-        <span className="muted-hint">Select a row to inspect dossier files.</span>
+        <span className="muted-hint">Open a sandbox to inspect its dossier files.</span>
       </div>
       <div className="workspace-list">
         {worktrees.length === 0 ? (

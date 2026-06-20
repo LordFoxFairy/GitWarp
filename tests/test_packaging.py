@@ -248,14 +248,14 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("exit 0", default_command)
         self.assertNotIn("${CLAUDE_PLUGIN_ROOT}/hooks", default_command)
         self.assertEqual(default_session_hook, session_hook)
-        self.assertIn("GitWarp Context:", session_hook)
+        self.assertIn("GitWarp:", session_hook)
         self.assertIn("Diagnostics:", session_hook)
-        self.assertIn("gitwarp enter --cwd", session_hook)
-        self.assertIn("Run gitwarp enter manually", session_hook)
+        self.assertIn("gitwarp statusline --cwd", session_hook)
+        self.assertIn("gitwarp enter", session_hook)
+        self.assertNotIn("Agent protocol:", session_hook)
+        self.assertNotIn("Current GitWarp Context:", session_hook)
         self.assertIn("gitwarp create", session_hook)
         self.assertIn("gitwarp switch", session_hook)
-        self.assertIn("gitwarp remove", session_hook)
-        self.assertIn("gitwarp handoff", session_hook)
         self.assertTrue(codex_skill_link.is_symlink())
         self.assertTrue(claude_skill_link.is_symlink())
         self.assertEqual(codex_skill_link.resolve(), (REPO_ROOT / "skills" / "gitwarp").resolve())
@@ -291,9 +291,12 @@ class PluginStructureTests(unittest.TestCase):
             "web/console/src/app/gitwarp-api.ts",
             "web/console/src/app/types.ts",
             "web/console/src/app/components/ActionPanel.tsx",
+            "web/console/src/app/components/DossierPanel.tsx",
+            "web/console/src/app/components/HealthPanel.tsx",
             "web/console/src/app/components/Header.tsx",
-            "web/console/src/app/components/InspectorPanel.tsx",
             "web/console/src/app/components/OutputPanel.tsx",
+            "web/console/src/app/components/ProjectDirectory.tsx",
+            "web/console/src/app/components/RepositoryTabs.tsx",
             "web/console/src/app/components/SummaryStrip.tsx",
             "web/console/src/app/components/WorktreeBoard.tsx",
             "web/console/dist/index.html",

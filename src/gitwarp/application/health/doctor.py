@@ -37,7 +37,7 @@ def recommended_next_for_findings(ctx: RepoContext, findings: list[dict[str, Any
         elif code == "standard_skill_links" and severity == "warning":
             recommendations.append("Restore .agents/skills/gitwarp and .claude/skills/gitwarp links.")
         elif code == "session_hook_context" and severity == "warning":
-            recommendations.append("Update hooks/session-start-codex to include gitwarp enter --cwd context anchoring.")
+            recommendations.append("Update hooks/session-start-codex to include compact gitwarp statusline context anchoring.")
 
     deduped: list[str] = []
     seen: set[str] = set()

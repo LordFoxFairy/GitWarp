@@ -67,6 +67,40 @@ def web_board_row(item: dict[str, Any]) -> dict[str, Any]:
         row["dispatch"] = item["dispatch"]
     return row
 
+
+def actionable_finding_count(group: dict[str, Any]) -> int:
+    return sum(1 for finding in group.get("findings", []) if finding.get("severity") != "ok")
+
+
+def build_project_summary(
+    ctx: RepoContext,
+    *,
+    readonly: bool,
+    statusline: str,
+    worktree_rows: list[dict[str, Any]],
+    doctor: dict[str, Any],
+    reconcile: dict[str, Any],
+) -> dict[str, Any]:
+    active_worktrees = [row for row in worktree_rows if not row.get("is_main")]
+    assigned_agents = {
+        str(row["agent_id"])
+        for row in active_worktrees
+        if row.get("agent_id")
+    }
+    return {
+        "id": str(ctx.repo_root),
+        "name": ctx.repo_root.name,
+        "repo_root": str(ctx.repo_root),
+        "ledger_path": str(ctx.ledger_path),
+        "readonly": readonly,
+        "statusline": statusline,
+        "worktree_count": len(worktree_rows),
+        "active_worktree_count": len(active_worktrees),
+        "assigned_agent_count": len(assigned_agents),
+        "doctor_finding_count": actionable_finding_count(doctor),
+        "reconcile_finding_count": actionable_finding_count(reconcile),
+    }
+
 def build_web_state_payload(
     cwd: Path | str,
     *,
@@ -94,13 +128,24 @@ def build_web_state_payload(
         reconcile["summary"] = summarize_findings(reconcile["findings"])
     else:
         reconcile = build_reconcile_payload(ctx)
+    worktree_rows = [web_board_row(item) for item in worktrees]
+    statusline = statusline_banner(target)
+    project = build_project_summary(
+        ctx,
+        readonly=readonly,
+        statusline=statusline,
+        worktree_rows=worktree_rows,
+        doctor=doctor,
+        reconcile=reconcile,
+    )
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),
         "ledger_path": str(ctx.ledger_path),
         "readonly": readonly,
-        "statusline": statusline_banner(target),
-        "worktrees": [web_board_row(item) for item in worktrees],
+        "statusline": statusline,
+        "projects": [project],
+        "worktrees": worktree_rows,
         "doctor": doctor,
         "reconcile": reconcile,
         "recommended_next": list(doctor.get("recommended_next", [])),

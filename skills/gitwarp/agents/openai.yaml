@@ -1,4 +1,4 @@
 interface:
   display_name: "GitWarp"
   short_description: "Isolated Git worktrees and handoff dossiers for coding agents"
-  default_prompt: "Run gitwarp enter first. For parallel or isolated work, use gitwarp dispatch or start, read task.md/progress.md/lessons.md, and record handoffs."
+  default_prompt: "Run gitwarp statusline for a compact anchor and gitwarp enter only when full dossier context is needed. For isolated work, use gitwarp create, gitwarp switch, read task.md/progress.md/lessons.md, record handoffs, and use gitwarp remove only when the sandbox is no longer needed."

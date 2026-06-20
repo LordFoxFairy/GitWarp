@@ -154,7 +154,7 @@ gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console for creating worktrees, switching context, dispatching agents, mounting instruction files, inspecting dossiers, and recording handoffs.
+`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a Project Directory; open a project to create sandboxes, inspect its worktrees and Git health, mount instruction files, read dossiers, record handoffs, or finish and collapse work.
 
 ### Automated Agent
 

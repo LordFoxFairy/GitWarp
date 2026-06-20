@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "GitWarp",
     "shortDescription": "Isolated Git worktrees and handoff dossiers for coding agents",
-    "longDescription": "Use GitWarp as a standard Agent Skill plus CLI to enter with context, dispatch or start isolated git worktree sandboxes, inspect dossiers, hand off progress, audit state, and finish safely.",
+    "longDescription": "Use GitWarp as a standard Agent Skill plus CLI to create isolated git worktree sandboxes, switch into existing sandboxes, inspect dossiers, hand off progress, audit state, and finish safely.",
     "developerName": "thefoxfairy",
     "category": "Coding",
     "capabilities": [
@@ -26,9 +26,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Run gitwarp enter --cwd \"$PWD\" before repository work.",
-      "For parallel or isolated work, dispatch or start a GitWarp workspace with task.md, progress.md, and lessons.md.",
-      "Inspect context and read task.md, progress.md, and lessons.md before editing inside a sandbox."
+      "Run gitwarp statusline for a compact context anchor and gitwarp enter when full dossier context is needed.",
+      "For isolated work, create a GitWarp sandbox with gitwarp create, use gitwarp switch to navigate to it, and use gitwarp remove only when the sandbox is no longer needed.",
+      "Inside a sandbox, inspect context and read task.md, progress.md, and lessons.md before editing."
     ]
   }
 }
