@@ -277,16 +277,66 @@ class DoctorTests(GitWarpTestCase):
         ordinary_codes = {finding["code"] for finding in ordinary_doctor["findings"]}  # type: ignore[index]
         self.assertNotIn("standard_skill_links", ordinary_codes)
         self.assertNotIn("session_hook_context", ordinary_codes)
+        self.assertNotIn("codex_plugin_cache", ordinary_codes)
 
         source_doctor = run_gitwarp(REPO_ROOT, "doctor", "--cwd", str(REPO_ROOT))
         source_codes = {finding["code"] for finding in source_doctor["findings"]}  # type: ignore[index]
         self.assertIn("standard_skill_links", source_codes)
         self.assertIn("session_hook_context", source_codes)
+        self.assertIn("codex_plugin_cache", source_codes)
         hook_findings = findings_with_code(source_doctor, "session_hook_context")
         self.assertEqual(hook_findings[0]["severity"], "ok")
         configs = hook_findings[0]["details"]["configs"]  # type: ignore[index]
         self.assertTrue(configs["default"]["ok"])  # type: ignore[index]
         self.assertTrue(configs["codex"]["ok"])  # type: ignore[index]
+
+    def test_codex_plugin_cache_check_detects_stale_installed_hook_cache(self) -> None:
+        ensure_src_path()
+        from gitwarp.application.health.checks import codex_plugin_cache_check
+        from gitwarp.infrastructure.runtime import RepoContext
+
+        cache_root = self.repo / "codex-cache"
+        cache_path = cache_root / "gitwarp-dev" / "gitwarp" / "0.1.0"
+        source_relatives = [
+            "hooks/session-start-codex",
+            "hooks/hooks-codex.json",
+            "hooks/hooks.json",
+            "skills/gitwarp/SKILL.md",
+            "skills/gitwarp/scripts/install_cli.py",
+        ]
+        plugin_items = [
+            {
+                "pluginId": "gitwarp@gitwarp-dev",
+                "enabled": True,
+                "name": "gitwarp",
+                "marketplaceName": "gitwarp-dev",
+                "version": "0.1.0",
+                "marketplaceSource": {"source": str(REPO_ROOT)},
+            }
+        ]
+        ctx = RepoContext(cwd=REPO_ROOT, repo_root=REPO_ROOT, checkout_root=REPO_ROOT, common_dir=REPO_ROOT / ".git")
+
+        for relative in source_relatives:
+            target = cache_path / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if relative == "hooks/session-start-codex":
+                target.write_text("gitwarp enter --cwd \"$PWD\" --format prompt\nAgent protocol:\n", encoding="utf-8")
+            else:
+                target.write_text((REPO_ROOT / relative).read_text(encoding="utf-8"), encoding="utf-8")
+
+        stale = codex_plugin_cache_check(ctx, plugin_items=plugin_items, cache_root=cache_root)
+        self.assertEqual(stale["severity"], "warning")
+        self.assertEqual(stale["code"], "codex_plugin_cache")
+        mismatches = stale["details"]["mismatches"]  # type: ignore[index]
+        self.assertEqual(mismatches, ["hooks/session-start-codex"])
+
+        (cache_path / "hooks" / "session-start-codex").write_text(
+            (REPO_ROOT / "hooks" / "session-start-codex").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        current = codex_plugin_cache_check(ctx, plugin_items=plugin_items, cache_root=cache_root)
+        self.assertEqual(current["severity"], "ok")
+        self.assertEqual(current["details"]["mismatches"], [])  # type: ignore[index]
 
     def test_doctor_source_checkout_uses_worktree_hook_files(self) -> None:
         source_repo = self.make_repo()

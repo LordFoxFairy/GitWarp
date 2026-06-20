@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -12,6 +13,57 @@ from ...infrastructure.runtime import GitWarpError, RepoContext
 from .findings import doctor_check
 from .init import git_ignores_gitwarp
 from .process import run_command_for_doctor
+
+
+GITWARP_PLUGIN_ID = "gitwarp@gitwarp-dev"
+PLUGIN_CACHE_RELATIVE_PATHS = (
+    "hooks/session-start-codex",
+    "hooks/hooks-codex.json",
+    "hooks/hooks.json",
+    "skills/gitwarp/SKILL.md",
+    "skills/gitwarp/scripts/install_cli.py",
+)
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def parse_codex_plugin_list(raw: str) -> list[dict[str, Any]]:
+    start = raw.find("{")
+    if start < 0:
+        return []
+    try:
+        payload = json.loads(raw[start:])
+    except json.JSONDecodeError:
+        return []
+    installed = payload.get("installed", [])
+    if not isinstance(installed, list):
+        return []
+    return [item for item in installed if isinstance(item, dict)]
+
+
+def gitwarp_plugin_entry(plugin_items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return next((item for item in plugin_items if item.get("pluginId") == GITWARP_PLUGIN_ID), None)
+
+
+def infer_codex_plugin_cache_path(entry: dict[str, Any], cache_root: Path) -> Path | None:
+    marketplace = entry.get("marketplaceName")
+    name = entry.get("name")
+    version = entry.get("version")
+    if not all(isinstance(value, str) and value for value in (marketplace, name, version)):
+        return None
+    return cache_root / marketplace / name / version
+
+
+def plugin_source_root(entry: dict[str, Any]) -> Path | None:
+    marketplace_source = entry.get("marketplaceSource")
+    if isinstance(marketplace_source, dict) and isinstance(marketplace_source.get("source"), str):
+        return Path(marketplace_source["source"]).expanduser().resolve()
+    source = entry.get("source")
+    if isinstance(source, dict) and isinstance(source.get("path"), str):
+        return Path(source["path"]).expanduser().resolve()
+    return None
 
 
 def gitwarp_initialized_check(ctx: RepoContext) -> dict[str, Any]:
@@ -132,24 +184,94 @@ def codex_plugin_metadata_check(ctx: RepoContext) -> dict[str, Any]:
     result = run_command_for_doctor(["codex", "plugin", "list", "--json"], ctx.repo_root, timeout=5.0)
     enabled = False
     if result and result.returncode == 0:
-        raw = result.stdout
-        start = raw.find("{")
-        if start >= 0:
-            try:
-                payload = json.loads(raw[start:])
-                enabled = any(
-                    item.get("pluginId") == "gitwarp@gitwarp-dev" and item.get("enabled") is True
-                    for item in payload.get("installed", [])
-                )
-            except json.JSONDecodeError:
-                enabled = False
+        enabled = any(item.get("pluginId") == GITWARP_PLUGIN_ID and item.get("enabled") is True for item in parse_codex_plugin_list(result.stdout))
     return doctor_check(
         "codex_plugin_metadata",
         "ok" if enabled else "warning",
         "Codex GitWarp plugin is installed and enabled." if enabled else "Codex is available but GitWarp plugin metadata was not confirmed.",
         codex=codex_path,
-        plugin_id="gitwarp@gitwarp-dev",
+        plugin_id=GITWARP_PLUGIN_ID,
         enabled=enabled,
+    )
+
+
+def codex_plugin_cache_check(
+    ctx: RepoContext,
+    *,
+    plugin_items: list[dict[str, Any]] | None = None,
+    cache_root: Path | None = None,
+) -> dict[str, Any]:
+    codex_path = shutil.which("codex")
+    if plugin_items is None:
+        if not codex_path:
+            return doctor_check("codex_plugin_cache", "warning", "codex is not available on PATH.", plugin_id=GITWARP_PLUGIN_ID)
+        result = run_command_for_doctor(["codex", "plugin", "list", "--json"], ctx.repo_root, timeout=5.0)
+        if result is None or result.returncode != 0:
+            return doctor_check("codex_plugin_cache", "warning", "Codex plugin list was not available.", plugin_id=GITWARP_PLUGIN_ID)
+        plugin_items = parse_codex_plugin_list(result.stdout)
+
+    entry = gitwarp_plugin_entry(plugin_items)
+    if entry is None or entry.get("enabled") is not True:
+        return doctor_check("codex_plugin_cache", "warning", "Codex GitWarp plugin cache was not checked because the plugin is not enabled.", plugin_id=GITWARP_PLUGIN_ID)
+
+    cache_path = infer_codex_plugin_cache_path(entry, cache_root or (Path.home() / ".codex" / "plugins" / "cache"))
+    source_root = plugin_source_root(entry)
+    expected_source = ctx.checkout_root.resolve()
+    source_matches = source_root is None or source_root == expected_source
+    if cache_path is None:
+        return doctor_check(
+            "codex_plugin_cache",
+            "warning",
+            "Codex GitWarp plugin cache path could not be inferred.",
+            plugin_id=GITWARP_PLUGIN_ID,
+            source_root=str(source_root) if source_root else None,
+            source_matches=source_matches,
+        )
+
+    checked: list[dict[str, Any]] = []
+    source_missing: list[str] = []
+    missing: list[str] = []
+    mismatches: list[str] = []
+    for relative in PLUGIN_CACHE_RELATIVE_PATHS:
+        source_file = expected_source / relative
+        cached_file = cache_path / relative
+        source_exists = source_file.is_file()
+        cached_exists = cached_file.is_file()
+        source_hash = sha256_file(source_file) if source_exists else None
+        cached_hash = sha256_file(cached_file) if cached_exists else None
+        matches = bool(source_hash and cached_hash and source_hash == cached_hash)
+        checked.append(
+            {
+                "relative_path": relative,
+                "source_exists": source_exists,
+                "cached_exists": cached_exists,
+                "matches": matches,
+            }
+        )
+        if not cached_exists:
+            missing.append(relative)
+        if not source_exists:
+            source_missing.append(relative)
+        elif source_exists and not matches:
+            mismatches.append(relative)
+
+    ok = source_matches and cache_path.is_dir() and not source_missing and not missing and not mismatches
+    return doctor_check(
+        "codex_plugin_cache",
+        "ok" if ok else "warning",
+        "Installed Codex GitWarp plugin cache matches this checkout."
+        if ok
+        else "Installed Codex GitWarp plugin cache is stale or does not match this checkout.",
+        plugin_id=GITWARP_PLUGIN_ID,
+        cache_path=str(cache_path),
+        cache_exists=cache_path.is_dir(),
+        source_root=str(source_root) if source_root else None,
+        expected_source=str(expected_source),
+        source_matches=source_matches,
+        source_missing=source_missing,
+        missing=missing,
+        mismatches=mismatches,
+        checked=checked,
     )
 
 

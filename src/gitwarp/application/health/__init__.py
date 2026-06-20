@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .checks import (
     agent_config_check,
+    codex_plugin_cache_check,
     codex_plugin_metadata_check,
     gitwarp_ignored_check,
     gitwarp_initialized_check,
@@ -19,6 +20,7 @@ __all__ = [
     "append_gitwarp_ignore_rule",
     "build_doctor_payload",
     "build_finding",
+    "codex_plugin_cache_check",
     "codex_plugin_metadata_check",
     "doctor_check",
     "gitwarp_ignored_check",

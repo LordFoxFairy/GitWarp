@@ -8,6 +8,7 @@ from typing import Any
 from ...infrastructure.runtime import RepoContext
 from .checks import (
     agent_config_check,
+    codex_plugin_cache_check,
     codex_plugin_metadata_check,
     gitwarp_ignored_check,
     gitwarp_initialized_check,
@@ -34,6 +35,8 @@ def recommended_next_for_findings(ctx: RepoContext, findings: list[dict[str, Any
             recommendations.append("Run the GitWarp CLI installer from the skill scripts directory.")
         elif code == "codex_plugin_metadata" and severity == "warning" and details.get("codex"):
             recommendations.append("Install or enable gitwarp@gitwarp-dev in Codex.")
+        elif code == "codex_plugin_cache" and severity == "warning":
+            recommendations.append("Run scripts/install-codex-plugin.sh from this checkout to refresh the installed Codex plugin cache.")
         elif code == "standard_skill_links" and severity == "warning":
             recommendations.append("Restore .agents/skills/gitwarp and .claude/skills/gitwarp links.")
         elif code == "session_hook_context" and severity == "warning":
@@ -123,6 +126,7 @@ def build_doctor_payload(
     if source_checkout:
         findings.append(standard_skill_links_check(ctx))
         findings.append(session_hook_context_check(ctx))
+        findings.append(codex_plugin_cache_check(ctx))
 
     payload = {
         "ok": True,
