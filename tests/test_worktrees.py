@@ -176,6 +176,35 @@ class WorktreeTests(GitWarpTestCase):
         branches = {row["branch"] for row in board["worktrees"]}  # type: ignore[index]
         self.assertNotIn("agent/dead-task", branches)
 
+    def test_sync_prunes_unreferenced_dossier_directories(self) -> None:
+        task = run_gitwarp(
+            self.repo,
+            "create",
+            "--branch",
+            "agent/live-dossier",
+            "--purpose",
+            "Keep live dossier",
+        )
+        live_dossier = Path(str(task["dossier_path"]))
+        orphan_dossier = self.repo / ".gitwarp" / "dossiers" / "agent-orphan-dossier-deadbeef"
+        orphan_dossier.mkdir(parents=True)
+        (orphan_dossier / "task.md").write_text("# Task\n", encoding="utf-8")
+        (orphan_dossier / "progress.md").write_text("# Progress\n", encoding="utf-8")
+        (orphan_dossier / "lessons.md").write_text("# Lessons\n", encoding="utf-8")
+        manual_dir = self.repo / ".gitwarp" / "dossiers" / "manual-notes"
+        manual_dir.mkdir(parents=True)
+        (manual_dir / "README.md").write_text("manual\n", encoding="utf-8")
+
+        scan = run_gitwarp(self.repo, "scan", "--cwd", str(self.repo))
+        self.assertEqual(scan["tracked_entries"], 1)
+        self.assertTrue(orphan_dossier.exists())
+
+        run_gitwarp(self.repo, "init", "--cwd", str(self.repo))
+
+        self.assertTrue(live_dossier.exists())
+        self.assertFalse(orphan_dossier.exists())
+        self.assertTrue(manual_dir.exists())
+
     def test_existing_branch_and_collision_are_reported(self) -> None:
         run_git(self.repo, "branch", "feature/existing")
 

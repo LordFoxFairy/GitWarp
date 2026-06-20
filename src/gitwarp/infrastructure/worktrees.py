@@ -8,7 +8,15 @@ from typing import Any
 from ..domain.branch_roles import enrich_role_metadata
 from ..domain import policies
 from .ledger import load_ledger, mutate_ledger
-from .runtime import GitWarpError, RepoContext, run_git, sanitize_name
+from .runtime import (
+    GitWarpError,
+    LESSONS_FILENAME,
+    PROGRESS_FILENAME,
+    RepoContext,
+    TASK_FILENAME,
+    run_git,
+    sanitize_name,
+)
 
 
 def parse_worktrees(ctx: RepoContext) -> list[dict[str, Any]]:
@@ -52,6 +60,7 @@ def sync_ledger(
             for entry in stale_entries:
                 purge_orphan_dossier(ctx, entry)
             locked_ledger["entries"] = [entry for entry in locked_ledger["entries"] if entry.get("path") in live_paths]
+            purge_unreferenced_dossiers(ctx, locked_ledger)
 
         mutate_ledger(ctx, prune)
     ledger = load_ledger(ctx)
@@ -98,16 +107,64 @@ def purge_orphan_dossier(ctx: RepoContext, entry: dict[str, Any]) -> None:
     raw_path = entry.get("dossier_path")
     if not isinstance(raw_path, str) or not raw_path:
         return
+    dossier_path = resolve_dossier_child(ctx, raw_path)
+    if dossier_path is None:
+        return
+    if dossier_path.is_dir():
+        shutil.rmtree(dossier_path, ignore_errors=True)
+
+
+def resolve_dossier_child(ctx: RepoContext, raw_path: str) -> Path | None:
     dossier_path = Path(raw_path).expanduser().resolve()
     dossier_root = ctx.dossier_root.resolve()
     try:
         dossier_path.relative_to(dossier_root)
     except ValueError:
-        return
+        return None
     if dossier_path == dossier_root:
-        return
-    if dossier_path.is_dir():
-        shutil.rmtree(dossier_path, ignore_errors=True)
+        return None
+    return dossier_path
+
+
+def referenced_dossier_paths(ctx: RepoContext, ledger: dict[str, Any]) -> set[Path]:
+    referenced: set[Path] = set()
+    for entry in ledger.get("entries", []):
+        for key in ("dossier_path", "task_md", "progress_md", "lessons_md"):
+            raw_path = entry.get(key)
+            if not isinstance(raw_path, str) or not raw_path:
+                continue
+            resolved = resolve_dossier_child(ctx, raw_path)
+            if resolved is None:
+                continue
+            referenced.add(resolved if key == "dossier_path" else resolved.parent)
+    return referenced
+
+
+def looks_like_gitwarp_dossier(path: Path) -> bool:
+    return any((path / filename).exists() for filename in (TASK_FILENAME, PROGRESS_FILENAME, LESSONS_FILENAME))
+
+
+def purge_unreferenced_dossiers(ctx: RepoContext, ledger: dict[str, Any]) -> list[str]:
+    dossier_root = ctx.dossier_root.resolve()
+    if not dossier_root.is_dir():
+        return []
+    referenced = referenced_dossier_paths(ctx, ledger)
+    removed: list[str] = []
+    for child in dossier_root.iterdir():
+        if child.is_symlink() or not child.is_dir():
+            continue
+        child_path = child.resolve()
+        if child_path in referenced:
+            continue
+        try:
+            child_path.relative_to(dossier_root)
+        except ValueError:
+            continue
+        if not looks_like_gitwarp_dossier(child_path):
+            continue
+        shutil.rmtree(child_path, ignore_errors=True)
+        removed.append(str(child_path))
+    return removed
 
 
 def find_worktree_for_cwd(cwd: Path, worktrees: list[dict[str, Any]]) -> dict[str, Any] | None:
