@@ -1,5 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { BaseStyles, ThemeProvider } from "@primer/react";
 import { App } from "./app/App";
 import "./styles.css";
 
@@ -11,6 +12,10 @@ if (!root) {
 
 createRoot(root).render(
   <React.StrictMode>
-    <App token={document.documentElement.dataset.gitwarpToken ?? ""} />
+    <ThemeProvider colorMode="day">
+      <BaseStyles>
+        <App token={document.documentElement.dataset.gitwarpToken ?? ""} />
+      </BaseStyles>
+    </ThemeProvider>
   </React.StrictMode>,
 );

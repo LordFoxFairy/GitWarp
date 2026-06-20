@@ -1,3 +1,5 @@
+import { Button } from "@primer/react";
+
 interface OutputPanelProps {
   output: string;
   onClear: () => void;
@@ -11,9 +13,9 @@ export function OutputPanel({ output, onClear }: OutputPanelProps) {
           <span>Result</span>
           <h2>Last Command Output</h2>
         </div>
-        <button className="button quiet" type="button" onClick={onClear}>
+        <Button type="button" onClick={onClear}>
           Clear
-        </button>
+        </Button>
       </div>
       <pre className="readout small">{output}</pre>
     </section>

@@ -14,6 +14,7 @@ export default defineConfig({
     outDir: process.env.GITWARP_VITE_OUT_DIR ?? "dist/.vite",
     emptyOutDir: true,
     cssCodeSplit: false,
+    chunkSizeWarningLimit: 700,
     minify: "esbuild",
     rollupOptions: {
       input: resolve(__dirname, "src/main.tsx"),

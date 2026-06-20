@@ -1,8 +1,10 @@
 # GitWarp Web Console
 
-`web/console/` contains the React + TypeScript management UI for `gitwarp web`.
+`web/console/` contains the React + TypeScript management UI for `gitwarp web`. The UI intentionally follows a GitHub/GitLab-style repository management model: first choose a project, then use a repository page with a Code-style worktree list, agent actions, and health checks.
 
 Runtime assets are checked in under both `web/console/dist/` and `src/gitwarp/assets/web_console/`. The packaged copy lets the Python CLI serve the UI without requiring Node.js at startup. Editable source lives under `web/console/src/` and is built with Vite.
+
+The console uses `@primer/react` and `@primer/octicons-react` for mature GitHub-like controls while keeping GitWarp-specific layout in `src/styles.css`. Prefer Primer components for buttons, labels, form controls, navigation, and alerts; keep custom CSS focused on page grids, dossier readouts, and worktree density.
 
 Common commands:
 

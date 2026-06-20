@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ActionPanel } from "./components/ActionPanel";
-import { DossierPanel } from "./components/DossierPanel";
 import { HealthPanel } from "./components/HealthPanel";
 import { Header } from "./components/Header";
+import { OverviewPanel } from "./components/OverviewPanel";
 import { OutputPanel } from "./components/OutputPanel";
 import { ProjectDirectory } from "./components/ProjectDirectory";
+import { RepositoryHeader, RepositoryTitleBar } from "./components/RepositoryHeader";
 import { RepositoryTabs } from "./components/RepositoryTabs";
-import { SummaryStrip } from "./components/SummaryStrip";
-import { WorktreeBoard } from "./components/WorktreeBoard";
-import { GitWarpApi } from "./gitwarp-api";
+import { GitWarpApi, type DispatchInput, type HandoffInput, type StartWorktreeInput } from "./gitwarp-api";
 import type { CommandResult, DossierKind, ProjectSummary, RepositoryTab, WebState, WorktreeRow } from "./types";
 
 interface AppProps {
@@ -22,7 +20,7 @@ export function App({ token }: AppProps) {
   const [selected, setSelected] = useState<WorktreeRow | null>(null);
   const [dossierKind, setDossierKind] = useState<DossierKind>("task");
   const [dossierContent, setDossierContent] = useState("Select a non-main worktree to inspect task.md, progress.md, and lessons.md.");
-  const [activeTab, setActiveTab] = useState<RepositoryTab>("overview");
+  const [activeTab, setActiveTab] = useState<RepositoryTab>("workspace");
   const [output, setOutput] = useState("Ready.");
   const [loading, setLoading] = useState(false);
 
@@ -51,7 +49,12 @@ export function App({ token }: AppProps) {
 
   useEffect(() => {
     const path = selected?.[`${dossierKind}_md` as keyof WorktreeRow];
-    if (!selected || typeof path !== "string") {
+    if (!selected) {
+      setDossierContent("Select a worktree to inspect task.md, progress.md, and lessons.md.");
+      return;
+    }
+    if (selected.is_main || typeof path !== "string") {
+      setDossierContent("The main checkout has no GitWarp dossier. Select an isolated sandbox to inspect task.md, progress.md, and lessons.md.");
       return;
     }
     void api
@@ -60,17 +63,31 @@ export function App({ token }: AppProps) {
       .catch((error) => writeOutput(String(error)));
   }, [api, selected, dossierKind]);
 
+  useEffect(() => {
+    if (!selectedProject || !state) {
+      return;
+    }
+    if (selected && state.worktrees.some((worktree) => worktree.path === selected.path)) {
+      return;
+    }
+    const nextSelected = state.worktrees.find((worktree) => !worktree.is_main) ?? state.worktrees[0] ?? null;
+    if (nextSelected) {
+      setSelected(nextSelected);
+      setDossierKind("task");
+    }
+  }, [selected, selectedProject, state]);
+
   const selectWorktree = (worktree: WorktreeRow) => {
     setSelected(worktree);
     setDossierKind("task");
-    setActiveTab("worktrees");
+    setActiveTab("workspace");
   };
 
   const openProject = (project: ProjectSummary) => {
     setSelectedProject(project);
     setSelected(null);
     setDossierKind("task");
-    setActiveTab("overview");
+    setActiveTab("workspace");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
   };
 
@@ -78,7 +95,7 @@ export function App({ token }: AppProps) {
     setSelectedProject(null);
     setSelected(null);
     setDossierKind("task");
-    setActiveTab("overview");
+    setActiveTab("workspace");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
   };
 
@@ -109,17 +126,14 @@ export function App({ token }: AppProps) {
   }
 
   return (
-    <main className="app-shell">
-      <Header
-        readonly={Boolean(state?.readonly)}
+    <main className="app-shell repo-mode">
+      <RepositoryHeader
+        project={selectedProject}
         loading={loading}
-        title="Project Detail"
-        description={selectedProject.repo_root}
+        onBack={closeProject}
         onRefresh={() => void refresh()}
       />
-      <button className="button quiet back-button" type="button" onClick={closeProject}>
-        Back to Project Directory
-      </button>
+      <RepositoryTitleBar project={selectedProject} readonly={Boolean(state?.readonly)} />
       <RepositoryTabs activeTab={activeTab} onTabChange={setActiveTab} />
       <RepositorySection
         activeTab={activeTab}
@@ -150,10 +164,10 @@ interface RepositorySectionProps {
   dossierContent: string;
   onDossierKindChange: (kind: DossierKind) => void;
   onSelectWorktree: (worktree: WorktreeRow) => void;
-  onRunStart: Parameters<typeof ActionPanel>[0]["onStart"];
-  onRunDispatch: Parameters<typeof ActionPanel>[0]["onDispatch"];
-  onRunHandoff: Parameters<typeof WorktreeBoard>[0]["onHandoff"];
-  onRunFinish: Parameters<typeof WorktreeBoard>[0]["onFinish"];
+  onRunStart: (input: StartWorktreeInput) => void;
+  onRunDispatch: (input: DispatchInput) => void;
+  onRunHandoff: (input: HandoffInput) => void;
+  onRunFinish: (worktree: WorktreeRow, progress: string) => void;
 }
 
 function RepositorySection({
@@ -170,14 +184,6 @@ function RepositorySection({
   onRunHandoff,
   onRunFinish,
 }: RepositorySectionProps) {
-  if (activeTab === "agents") {
-    return (
-      <section className="tab-panel agent-panel" aria-label="Agent actions">
-        <ActionPanel readonly={readonly} onStart={onRunStart} onDispatch={onRunDispatch} />
-      </section>
-    );
-  }
-
   if (activeTab === "health") {
     return (
       <section className="tab-panel">
@@ -186,30 +192,19 @@ function RepositorySection({
     );
   }
 
-  if (activeTab === "worktrees") {
-    return (
-      <section className="tab-panel worktree-detail-grid">
-        <WorktreeBoard
-          readonly={readonly}
-          worktrees={state?.worktrees ?? []}
-          onSelect={onSelectWorktree}
-          onHandoff={onRunHandoff}
-          onFinish={onRunFinish}
-        />
-        <DossierPanel
-          selected={selected}
-          dossierKind={dossierKind}
-          dossierContent={dossierContent}
-          onDossierKindChange={onDossierKindChange}
-        />
-      </section>
-    );
-  }
-
   return (
-    <section className="tab-panel overview-grid">
-      <SummaryStrip state={state} />
-      <HealthPanel state={state} />
-    </section>
+    <OverviewPanel
+      state={state}
+      readonly={readonly}
+      selected={selected}
+      dossierKind={dossierKind}
+      dossierContent={dossierContent}
+      onSelectWorktree={onSelectWorktree}
+      onDossierKindChange={onDossierKindChange}
+      onRunStart={onRunStart}
+      onRunDispatch={onRunDispatch}
+      onRunHandoff={onRunHandoff}
+      onRunFinish={onRunFinish}
+    />
   );
 }

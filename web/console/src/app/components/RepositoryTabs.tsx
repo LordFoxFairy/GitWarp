@@ -1,10 +1,10 @@
+import { Button } from "@primer/react";
+import { GitBranchIcon, PulseIcon } from "@primer/octicons-react";
 import type { RepositoryTab } from "../types";
 
-const TABS: Array<{ id: RepositoryTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "worktrees", label: "Worktrees" },
-  { id: "agents", label: "Agents" },
-  { id: "health", label: "Health" },
+const TABS: Array<{ id: RepositoryTab; label: string; icon: typeof GitBranchIcon }> = [
+  { id: "workspace", label: "Code", icon: GitBranchIcon },
+  { id: "health", label: "Health", icon: PulseIcon },
 ];
 
 interface RepositoryTabsProps {
@@ -16,14 +16,16 @@ export function RepositoryTabs({ activeTab, onTabChange }: RepositoryTabsProps) 
   return (
     <nav className="repo-tabs" aria-label="Repository sections">
       {TABS.map((tab) => (
-        <button
+        <Button
           key={tab.id}
+          variant="invisible"
           className={`repo-tab ${tab.id === activeTab ? "active" : ""}`}
           type="button"
+          leadingVisual={tab.icon}
           onClick={() => onTabChange(tab.id)}
         >
           {tab.label}
-        </button>
+        </Button>
       ))}
     </nav>
   );

@@ -1,3 +1,6 @@
+import { Button, Label } from "@primer/react";
+import { SyncIcon } from "@primer/octicons-react";
+
 interface HeaderProps {
   readonly: boolean;
   loading: boolean;
@@ -16,10 +19,10 @@ export function Header({ readonly, loading, title, eyebrow = "GitWarp Manager", 
         {description ? <p className="topbar-description">{description}</p> : null}
       </div>
       <div className="topbar-actions">
-        <span className="status-pill">{readonly ? "Read-only" : "Mutation enabled"}</span>
-        <button className="button primary" type="button" onClick={onRefresh} disabled={loading}>
+        <Label variant={readonly ? "secondary" : "success"}>{readonly ? "Read-only" : "Mutation enabled"}</Label>
+        <Button variant="primary" type="button" leadingVisual={SyncIcon} onClick={onRefresh} disabled={loading}>
           {loading ? "Refreshing" : "Refresh"}
-        </button>
+        </Button>
       </div>
     </header>
   );

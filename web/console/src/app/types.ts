@@ -89,4 +89,4 @@ export interface CommandResult {
 }
 
 export type DossierKind = "task" | "progress" | "lessons";
-export type RepositoryTab = "overview" | "worktrees" | "agents" | "health";
+export type RepositoryTab = "workspace" | "health";

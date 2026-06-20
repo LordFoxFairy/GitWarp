@@ -1,4 +1,6 @@
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { Button, Select, Textarea, TextInput } from "@primer/react";
+import { RepoForkedIcon, RocketIcon } from "@primer/octicons-react";
 import type { DispatchInput, StartWorktreeInput } from "../gitwarp-api";
 
 interface ActionPanelProps {
@@ -6,6 +8,8 @@ interface ActionPanelProps {
   onStart: (input: StartWorktreeInput) => void;
   onDispatch: (input: DispatchInput) => void;
 }
+
+type ActionMode = "create" | "launch" | null;
 
 function value(form: HTMLFormElement, name: string): string {
   return new FormData(form).get(name)?.toString().trim() ?? "";
@@ -28,6 +32,8 @@ function instructionOptions(form: HTMLFormElement): Pick<StartWorktreeInput, "in
 }
 
 export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps) {
+  const [mode, setMode] = useState<ActionMode>(null);
+
   const submitStart = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -38,6 +44,7 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
       ...instructionOptions(form),
     });
     form.reset();
+    setMode(null);
   };
 
   const submitDispatch = (event: FormEvent<HTMLFormElement>) => {
@@ -51,82 +58,114 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
       ...instructionOptions(form),
     });
     form.reset();
+    setMode(null);
   };
 
   return (
-    <aside className="panel action-panel" aria-label="Sandbox actions">
+    <section className="panel agent-tools" aria-label="Agent tools">
       <div className="panel-title">
-        <span>Actions</span>
-        <h2>Create Sandbox</h2>
+        <span>Agent Tools</span>
+        <h2>Start or launch work</h2>
       </div>
-      <form className="form-stack" onSubmit={submitStart}>
-        <label>
-          Agent ID
-          <input name="agent_id" placeholder="codex-ui-fix" required disabled={readonly} />
-        </label>
-        <label>
-          Branch
-          <input name="branch" placeholder="feature/my-task" required disabled={readonly} />
-        </label>
-        <label>
-          Purpose
-          <textarea name="purpose" rows={3} placeholder="Short task description" required disabled={readonly} />
-        </label>
-        <InstructionFields readonly={readonly} />
-        <button className="button primary full" type="submit" disabled={readonly}>
-          Create Sandbox
-        </button>
-      </form>
 
-      <hr />
+      {readonly ? (
+        <p className="empty-state">Read-only mode is enabled. Start GitWarp Web without `--readonly` to create sandboxes or launch agents.</p>
+      ) : (
+        <>
+          <div className="agent-tool-buttons">
+            <Button variant="primary" leadingVisual={RepoForkedIcon} type="button" onClick={() => setMode(mode === "create" ? null : "create")}>
+              Create Sandbox
+            </Button>
+            <Button leadingVisual={RocketIcon} type="button" onClick={() => setMode(mode === "launch" ? null : "launch")}>
+              Prepare Agent Launch
+            </Button>
+          </div>
 
-      <div className="panel-title compact">
-        <span>Agent Launch</span>
-        <h2>Prepare Agent Launch</h2>
-      </div>
-      <form className="form-stack" onSubmit={submitDispatch}>
-        <label>
-          Agent
-          <select name="agent" defaultValue="codex" disabled={readonly}>
-            <option value="codex">codex</option>
-            <option value="claude">claude</option>
-          </select>
-        </label>
-        <label>
-          Branch
-          <input name="branch" placeholder="feature/parallel-task" required disabled={readonly} />
-        </label>
-        <label>
-          Purpose
-          <textarea name="purpose" rows={3} placeholder="Create workspace and launch command" required disabled={readonly} />
-        </label>
-        <InstructionFields readonly={readonly} />
-        <button className="button secondary full" type="submit" disabled={readonly}>
-          Prepare Agent Launch
-        </button>
-      </form>
-    </aside>
+          {mode === "create" ? <CreateSandboxForm onSubmit={submitStart} onCancel={() => setMode(null)} /> : null}
+          {mode === "launch" ? <PrepareLaunchForm onSubmit={submitDispatch} onCancel={() => setMode(null)} /> : null}
+        </>
+      )}
+    </section>
   );
 }
 
-function InstructionFields({ readonly }: { readonly: boolean }) {
+function CreateSandboxForm({ onSubmit, onCancel }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+  return (
+    <form className="form-stack action-form" onSubmit={onSubmit}>
+      <label>
+        Agent ID
+        <TextInput name="agent_id" placeholder="codex-ui-fix" required block />
+      </label>
+      <label>
+        Branch
+        <TextInput name="branch" placeholder="feature/my-task" required block />
+      </label>
+      <label>
+        Purpose
+        <Textarea name="purpose" rows={3} placeholder="Short task description" required block resize="vertical" />
+      </label>
+      <InstructionFields />
+      <div className="form-actions">
+        <Button variant="primary" type="submit">
+          Create Sandbox
+        </Button>
+        <Button type="button" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function PrepareLaunchForm({ onSubmit, onCancel }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+  return (
+    <form className="form-stack action-form" onSubmit={onSubmit}>
+      <label>
+        Agent
+        <Select name="agent" defaultValue="codex" block>
+          <Select.Option value="codex">codex</Select.Option>
+          <Select.Option value="claude">claude</Select.Option>
+        </Select>
+      </label>
+      <label>
+        Branch
+        <TextInput name="branch" placeholder="feature/parallel-task" required block />
+      </label>
+      <label>
+        Purpose
+        <Textarea name="purpose" rows={3} placeholder="Create workspace and launch command" required block resize="vertical" />
+      </label>
+      <InstructionFields />
+      <div className="form-actions">
+        <Button variant="primary" type="submit">
+          Prepare Agent Launch
+        </Button>
+        <Button type="button" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function InstructionFields() {
   return (
     <fieldset className="instruction-fields">
       <legend>Instruction Mounts</legend>
       <label>
         Files
-        <textarea name="instructions" rows={3} placeholder={"AGENTS.md\nCLAUDE.md=docs/claude-code.md"} disabled={readonly} />
+        <Textarea name="instructions" rows={3} placeholder={"AGENTS.md\nCLAUDE.md=docs/claude-code.md"} block resize="vertical" />
       </label>
       <label>
         Profile
-        <input name="instruction_profile" placeholder="claude-code" disabled={readonly} />
+        <TextInput name="instruction_profile" placeholder="claude-code" block />
       </label>
       <label>
         Mode
-        <select name="instruction_mode" defaultValue="copy" disabled={readonly}>
-          <option value="copy">copy snapshot</option>
-          <option value="symlink">symlink live file</option>
-        </select>
+        <Select name="instruction_mode" defaultValue="copy" block>
+          <Select.Option value="copy">copy snapshot</Select.Option>
+          <Select.Option value="symlink">symlink live file</Select.Option>
+        </Select>
       </label>
     </fieldset>
   );

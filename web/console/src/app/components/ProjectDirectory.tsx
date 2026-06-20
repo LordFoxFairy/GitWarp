@@ -1,3 +1,5 @@
+import { Button, Label } from "@primer/react";
+import { GitBranchIcon, RepoIcon } from "@primer/octicons-react";
 import type { ProjectSummary } from "../types";
 
 interface ProjectDirectoryProps {
@@ -17,10 +19,10 @@ export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDi
         <span className="muted-hint">Open a project to manage its worktrees and Git state.</span>
       </div>
 
-      <div className="project-grid">
+      <div className="repo-list">
         {projects.length === 0 ? (
           <article className="panel project-card empty">
-            <h3>{loading ? "Loading projects" : "No projects found"}</h3>
+            <h3>{loading ? "Loading projects" : "No repositories found"}</h3>
             <p>{loading ? "Reading GitWarp state..." : "Start GitWarp from a repository to manage its worktrees."}</p>
           </article>
         ) : (
@@ -34,28 +36,29 @@ export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDi
 function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOpenProject: (project: ProjectSummary) => void }) {
   const findings = project.doctor_finding_count + project.reconcile_finding_count;
   return (
-    <article className="panel project-card">
-      <div className="project-card-head">
+    <article className="repo-list-row">
+      <div className="repo-list-main">
         <div>
-          <p className="kicker">Repository</p>
-          <h3>{project.name}</h3>
+          <h3>
+            <RepoIcon size={20} />
+            <span>{project.name}</span>
+          </h3>
+          <p className="project-path">{project.repo_root}</p>
         </div>
-        <span className="status-chip">{project.readonly ? "read-only" : "writable"}</span>
+        <Label variant={project.readonly ? "secondary" : "success"}>{project.readonly ? "read-only" : "writable"}</Label>
       </div>
 
-      <p className="project-path">{project.repo_root}</p>
-      <p className="statusline-banner">{project.statusline}</p>
-
-      <dl className="project-metrics">
+      <div className="repo-list-meta" aria-label={`${project.name} summary`}>
+        <span className="statusline-banner">{project.statusline}</span>
         <Metric label="Worktrees" value={project.worktree_count} />
         <Metric label="Active" value={project.active_worktree_count} />
         <Metric label="Agents" value={project.assigned_agent_count} />
         <Metric label="Findings" value={findings} tone={findings > 0 ? "warning" : "ok"} />
-      </dl>
+      </div>
 
-      <button className="button primary" type="button" onClick={() => onOpenProject(project)}>
+      <Button variant="primary" type="button" leadingVisual={GitBranchIcon} onClick={() => onOpenProject(project)}>
         Open Project
-      </button>
+      </Button>
     </article>
   );
 }

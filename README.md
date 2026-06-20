@@ -154,7 +154,7 @@ gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a Project Directory; open a project to create sandboxes, inspect its worktrees and Git health, mount instruction files, read dossiers, record handoffs, or finish and collapse work.
+`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub-like Project Directory; open a repository to use a Code-style worktree list, create sandboxes, mount instruction files, read dossiers, record handoffs, or review full doctor/reconcile health checks.
 
 ### Automated Agent
 
@@ -227,7 +227,7 @@ Example `.gitwarp/agents.json`:
 - `.agents/plugins/api_marketplace.json`: local Codex marketplace entry named `gitwarp-dev`.
 - `plugins/gitwarp -> ..`: Codex marketplace discovery symlink. Keep it as a symlink; do not add `plugins/gitwarp/src`.
 - `hooks/`: session hook assets for compatible hosts. They are packaged as assets; enable them through the host-specific hook mechanism.
-- `web/console/`: React + TypeScript Web Console source, Vite config, and checked-in runtime `dist/` assets.
+- `web/console/`: React + TypeScript Web Console source, Primer React UI components, Vite config, and checked-in runtime `dist/` assets.
 - `tests/`: Python regression tests for GitWarp behavior and packaging.
 - `CHANGELOG.md` and `LICENSE`: release history and MIT license text.
 

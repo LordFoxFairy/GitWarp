@@ -1,3 +1,4 @@
+import { Flash, Label } from "@primer/react";
 import type { Finding, FindingGroup, WebState } from "../types";
 
 interface HealthPanelProps {
@@ -33,10 +34,7 @@ function HealthList({ doctor, reconcile }: HealthListProps) {
   if (findings.length === 0) {
     return (
       <div className="health-list">
-        <article className="health-item">
-          <strong>All clear</strong>
-          <p>Doctor and reconcile returned no findings.</p>
-        </article>
+        <Flash variant="success">Doctor and reconcile returned no findings.</Flash>
       </div>
     );
   }
@@ -45,14 +43,30 @@ function HealthList({ doctor, reconcile }: HealthListProps) {
     <div className="health-list">
       {findings.map((finding, index) => (
         <article className={`health-item ${finding.severity ?? ""}`} key={`${finding.source}:${finding.code}:${index}`}>
-          <strong>
-            {finding.source}:{finding.code || "finding"} [{finding.severity || "unknown"}]
-          </strong>
+          <div className="health-item-head">
+            <strong>
+              {finding.source}:{finding.code || "finding"}
+            </strong>
+            <Label variant={labelVariant(finding.severity)}>{finding.severity || "unknown"}</Label>
+          </div>
           <p>{finding.message || finding.description || "No details provided."}</p>
         </article>
       ))}
     </div>
   );
+}
+
+function labelVariant(severity?: string) {
+  if (severity === "error") {
+    return "danger";
+  }
+  if (severity === "warning") {
+    return "attention";
+  }
+  if (severity === "ok") {
+    return "success";
+  }
+  return "secondary";
 }
 
 function summarize(source: "doctor" | "reconcile", group?: FindingGroup): Array<Finding & { source: string }> {
