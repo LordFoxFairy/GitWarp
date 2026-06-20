@@ -30,6 +30,7 @@ MUTATION_ENDPOINTS: dict[str, EndpointSpec] = {
     "/api/confirmation": EndpointSpec("POST", True, ("action",)),
     "/api/finish": EndpointSpec("POST", True, ("cwd", "status", "progress")),
     "/api/collapse": EndpointSpec("POST", True, ("confirmation",)),
+    "/api/prune-branch": EndpointSpec("POST", True, ("branch", "confirm_branch")),
 }
 
 
@@ -87,6 +88,12 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "branch": FieldSpec("string"),
         "confirmation": FieldSpec("string", required=True),
     },
+    "/api/prune-branch": {
+        "cwd": FieldSpec("string"),
+        "branch": FieldSpec("string", required=True),
+        "base_branch": FieldSpec("string"),
+        "confirm_branch": FieldSpec("string", required=True),
+    },
 }
 
 
@@ -97,6 +104,7 @@ READ_ENDPOINTS: dict[str, EndpointSpec] = {
     "/api/dossier": EndpointSpec("GET", False, ("path",)),
     "/api/repository/tree": EndpointSpec("GET", False),
     "/api/repository/file": EndpointSpec("GET", False, ("path",)),
+    "/api/branches": EndpointSpec("GET", False),
 }
 
 

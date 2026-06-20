@@ -11,6 +11,7 @@ from ...application.use_cases import (
     build_dispatch_payload,
     build_finish_payload,
     build_handoff_payload,
+    build_prune_branch_payload,
     build_start_payload,
     build_switch_payload,
     build_summon_payload,
@@ -227,6 +228,11 @@ def cmd_remove(args: argparse.Namespace) -> None:
                 f"rerun with --force to remove anyway (dirty_count={dirty_count})"
             )
     emit_json(build_collapse_payload(ctx, path=target_path, branch=args.branch))
+
+
+def cmd_prune_branch(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    emit_json(build_prune_branch_payload(ctx, branch=args.branch, base_branch=args.base))
 
 
 def cmd_switch(args: argparse.Namespace) -> None:

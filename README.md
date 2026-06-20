@@ -11,6 +11,7 @@ The project follows the common Agent Skills layout while keeping product code in
 - Separate long-lived base branches from short-lived task branches.
 - Give every isolated workspace a task dossier for handoff and memory.
 - Detect unmanaged worktree commits with non-mutating `head_drift` audit findings.
+- List and prune safe merged local branch refs separately from sandbox removal.
 - Mark blocked work with `pause` and resume cleanly with `resume`.
 - Emit strict one-line JSON for automation and a raw `statusline` banner for prompts.
 - Support both standard skill discovery and Codex plugin installation.
@@ -128,7 +129,7 @@ Use `.gitwarp/instruction_profiles.json` for repeatable stacks:
 
 Then pass `--instruction-profile claude-code`. Instructions are copied by default as a safe snapshot; pass `--instruction-mode symlink` only when the worker should track live rule edits.
 
-Begin inside the returned absolute `path`, read `task.md`, `progress.md`, and `lessons.md`, then record milestones:
+Begin inside the returned absolute `path`, read the returned `task_md`, `progress_md`, and `lessons_md` dossier paths, then record milestones:
 
 ```bash
 gitwarp handoff --status testing \
@@ -172,6 +173,15 @@ gitwarp finish --status pushed \
 
 `remove`, `collapse`, `finish --collapse`, and `finish --collapse-merged` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They never merge, push, or delete the Git branch. Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch feature/my-task`. `remove` refuses dirty or untracked targets unless `--force` is provided.
 
+List local branch references before deleting old refs:
+
+```bash
+gitwarp branches
+gitwarp prune-branch --branch feature/old-merged-task
+```
+
+`prune-branch` deletes only the local branch ref. It refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in GitWarp, and branches whose HEAD is not merged into the selected base.
+
 ## Usage Modes
 
 ### Human Operator
@@ -180,12 +190,13 @@ Use these commands when you are coordinating agents from the main checkout:
 
 ```bash
 gitwarp board --format table
+gitwarp branches
 gitwarp reconcile --stale 4
 gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons plus agent actions; Health shows doctor/reconcile findings.
+`board` shows active sandboxes. `branches` shows local refs grouped as base, active, merged, or orphan with delete blockers. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons plus agent actions; Branches shows safe local ref cleanup; Health shows doctor/reconcile findings.
 
 ### Automated Agent
 
@@ -228,6 +239,8 @@ GitWarp stores runtime state under `.gitwarp/` in the target repository. Run `gi
 By default, `init` writes `/.gitwarp/` to `.git/info/exclude`, which keeps runtime files local to one checkout. Use `gitwarp init --write-gitignore` when the team wants the ignore rule committed to `.gitignore`.
 
 Dossiers are lifecycle files for active task sandboxes, not long-term archives. `handoff` keeps them current while a worktree exists. `remove`, `collapse`, `finish --collapse`, and `finish --collapse-merged` delete the matching dossier directory together with the worktree and ledger row while leaving the branch untouched. `init` also prunes ledger entries and dossiers for worktrees that Git no longer reports.
+
+Dossiers are stored in the root repository control plane, not inside each task worktree's source tree. Agents should read them through `gitwarp enter`, `gitwarp context`, `gitwarp board --verbose`, or the Web Console Metadata tab. This keeps task memory centralized for human review without polluting project files.
 
 `dispatch` is intentionally print-only in this release. `--command-mode execute` fails before creating anything so humans can review agent launch commands and host-specific flags.
 

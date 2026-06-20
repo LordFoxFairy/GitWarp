@@ -205,6 +205,33 @@ class WorktreeTests(GitWarpTestCase):
         self.assertFalse(orphan_dossier.exists())
         self.assertTrue(manual_dir.exists())
 
+    def test_sync_drops_metadata_when_same_path_recreated_for_different_branch(self) -> None:
+        old = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "old-agent",
+            "--branch",
+            "agent/old-path",
+            "--purpose",
+            "Old task metadata",
+        )
+        old_path = Path(str(old["path"]))
+        old_dossier = Path(str(old["dossier_path"]))
+
+        run_git(self.repo, "worktree", "remove", "--force", str(old_path))
+        run_git(self.repo, "worktree", "add", "-b", "agent/new-path", str(old_path), "HEAD")
+
+        run_gitwarp(self.repo, "init", "--cwd", str(self.repo))
+
+        ledger = json.loads((self.repo / ".gitwarp" / "ledger.json").read_text(encoding="utf-8"))
+        self.assertEqual(ledger["entries"], [])
+        self.assertFalse(old_dossier.exists())
+        scan = run_gitwarp(self.repo, "scan", "--cwd", str(self.repo))
+        rows = {row["branch"]: row for row in scan["worktrees"]}  # type: ignore[index]
+        self.assertIsNone(rows["agent/new-path"]["agent_id"])
+        self.assertIsNone(rows["agent/new-path"]["dossier_path"])
+
     def test_existing_branch_and_collision_are_reported(self) -> None:
         run_git(self.repo, "branch", "feature/existing")
 

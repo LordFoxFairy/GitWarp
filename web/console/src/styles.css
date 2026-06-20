@@ -272,6 +272,67 @@ h2 {
   background: var(--surface-muted);
 }
 
+.branch-list {
+  overflow: hidden;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.branch-list-header,
+.branch-list-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.3fr) minmax(160px, 0.8fr) minmax(220px, 1fr) minmax(280px, 1fr);
+  gap: 14px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+}
+
+.branch-list-header {
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.branch-list-row:last-child {
+  border-bottom: 0;
+}
+
+.branch-name-cell,
+.branch-action-cell {
+  min-width: 0;
+}
+
+.branch-name-cell strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  color: var(--accent);
+}
+
+.branch-name-cell span,
+.branch-list-row p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.safe-prune {
+  color: var(--success) !important;
+  font-weight: 700;
+}
+
+.branch-action-cell {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .repo-list-main {
   display: flex;
   align-items: flex-start;
@@ -1009,7 +1070,19 @@ legend {
     display: none;
   }
 
+  .branch-list-header {
+    display: none;
+  }
+
   .repo-list-row {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-list-row {
+    grid-template-columns: 1fr;
+  }
+
+  .branch-action-cell {
     grid-template-columns: 1fr;
   }
 

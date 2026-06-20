@@ -6,6 +6,7 @@ from ... import __version__
 from .read import (
     cmd_agents,
     cmd_board,
+    cmd_branches,
     cmd_context,
     cmd_doctor,
     cmd_enter,
@@ -23,6 +24,7 @@ from .workspaces import (
     cmd_finish,
     cmd_handoff,
     cmd_pause,
+    cmd_prune_branch,
     cmd_remove,
     cmd_resume,
     cmd_start,
@@ -52,6 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
     agents.add_argument("--cwd")
     agents.set_defaults(func=cmd_agents)
 
+    branches = subparsers.add_parser("branches", help="List local branch refs with GitWarp cleanup safety metadata")
+    branches.add_argument("--cwd")
+    branches.add_argument("--base", help="Branch used as the merge target for deletion safety; defaults to origin HEAD or main")
+    branches.set_defaults(func=cmd_branches)
+
     create = subparsers.add_parser("create", help="Create an isolated worktree and dossier")
     create.add_argument("--cwd")
     create.add_argument("--agent-id")
@@ -78,6 +85,12 @@ def build_parser() -> argparse.ArgumentParser:
     remove.add_argument("--branch")
     remove.add_argument("--force", action="store_true", help="Remove even when the target worktree has uncommitted or untracked files")
     remove.set_defaults(func=cmd_remove)
+
+    prune_branch = subparsers.add_parser("prune-branch", help="Delete a safe, merged, untracked local branch ref")
+    prune_branch.add_argument("--cwd")
+    prune_branch.add_argument("--branch", required=True)
+    prune_branch.add_argument("--base", help="Branch that must contain the target branch HEAD; defaults to origin HEAD or main")
+    prune_branch.set_defaults(func=cmd_prune_branch)
 
     summon = subparsers.add_parser("summon", help="Create an isolated worktree for an agent")
     summon.add_argument("--cwd")

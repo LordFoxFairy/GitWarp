@@ -11,6 +11,7 @@ from ...adapters.presenters import (
     print_board_table,
     statusline_banner,
 )
+from ...application.use_cases import build_branches_payload
 from ...application.diagnostics import build_doctor_payload
 from ...application.reconcile import build_reconcile_payload
 from ...infrastructure.agents import load_agent_registry
@@ -48,6 +49,11 @@ def cmd_agents(args: argparse.Namespace) -> None:
             "agents": registry["agents"],
         }
     )
+
+
+def cmd_branches(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    emit_json(build_branches_payload(ctx, base_branch=args.base))
 
 
 def cmd_context(args: argparse.Namespace) -> None:

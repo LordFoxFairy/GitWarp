@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { BranchesPanel } from "./components/BranchesPanel";
 import { CodePanel } from "./components/CodePanel";
 import { HealthPanel } from "./components/HealthPanel";
 import { Header } from "./components/Header";
@@ -32,6 +33,7 @@ export function App({ token }: AppProps) {
   const [output, setOutput] = useState("Ready.");
   const [loading, setLoading] = useState(false);
   const [operation, setOperation] = useState<OperationState>({ status: "idle", message: "" });
+  const [stateRevision, setStateRevision] = useState(0);
 
   const writeOutput = (payload: CommandResult | string) => {
     setOutput(typeof payload === "string" ? payload : JSON.stringify(payload, null, 2));
@@ -56,6 +58,7 @@ export function App({ token }: AppProps) {
     try {
       const nextState = await api.getState();
       setState(nextState);
+      setStateRevision((current) => current + 1);
       setSelectedProject((current) => (current ? nextState.projects.find((project) => project.id === current.id) ?? null : current));
       return nextState;
     } catch (error) {
@@ -189,6 +192,8 @@ export function App({ token }: AppProps) {
         api={api}
         activeTab={activeTab}
         state={state}
+        repoRoot={selectedProject.repo_root}
+        stateRevision={stateRevision}
         readonly={Boolean(state?.readonly)}
         busy={operationBusy}
         selected={selected}
@@ -209,6 +214,9 @@ export function App({ token }: AppProps) {
             return result;
           })
         }
+        onRunPruneBranch={(branch, confirmBranch) =>
+          runCommand("Prune branch", () => api.pruneBranch(selectedProject.repo_root, branch, confirmBranch))
+        }
         onViewMetadata={() => setActiveTab("metadata")}
       />
 
@@ -221,6 +229,8 @@ interface RepositorySectionProps {
   api: GitWarpApi;
   activeTab: RepositoryTab;
   state: WebState | null;
+  repoRoot: string;
+  stateRevision: number;
   readonly: boolean;
   busy: boolean;
   selected: WorktreeRow | null;
@@ -232,6 +242,7 @@ interface RepositorySectionProps {
   onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
   onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
   onRunFinish: (worktree: WorktreeRow, status: string, progress: string) => Promise<CommandResult>;
+  onRunPruneBranch: (branch: string, confirmBranch: string) => Promise<CommandResult>;
   onViewMetadata: () => void;
 }
 
@@ -239,6 +250,8 @@ function RepositorySection({
   api,
   activeTab,
   state,
+  repoRoot,
+  stateRevision,
   readonly,
   busy,
   selected,
@@ -250,6 +263,7 @@ function RepositorySection({
   onRunDispatch,
   onRunHandoff,
   onRunFinish,
+  onRunPruneBranch,
   onViewMetadata,
 }: RepositorySectionProps) {
   return (
@@ -264,20 +278,33 @@ function RepositorySection({
         />
       </div>
       <div hidden={activeTab !== "metadata"}>
-      <MetadataPanel
-        state={state}
-        readonly={readonly}
-        busy={busy}
-        selected={selected}
-        dossierKind={dossierKind}
-        dossierContent={dossierContent}
-        onSelectWorktree={onSelectWorktree}
-        onDossierKindChange={onDossierKindChange}
-        onRunStart={onRunStart}
-        onRunDispatch={onRunDispatch}
-        onRunHandoff={onRunHandoff}
-        onRunFinish={onRunFinish}
-      />
+        <MetadataPanel
+          state={state}
+          readonly={readonly}
+          busy={busy}
+          selected={selected}
+          dossierKind={dossierKind}
+          dossierContent={dossierContent}
+          onSelectWorktree={onSelectWorktree}
+          onDossierKindChange={onDossierKindChange}
+          onRunStart={onRunStart}
+          onRunDispatch={onRunDispatch}
+          onRunHandoff={onRunHandoff}
+          onRunFinish={onRunFinish}
+        />
+      </div>
+      <div hidden={activeTab !== "branches"}>
+        <section className="tab-panel">
+          <BranchesPanel
+            api={api}
+            cwd={repoRoot}
+            active={activeTab === "branches"}
+            refreshKey={stateRevision}
+            readonly={readonly}
+            busy={busy}
+            onRunPrune={onRunPruneBranch}
+          />
+        </section>
       </div>
       <div hidden={activeTab !== "health"}>
         <section className="tab-panel">

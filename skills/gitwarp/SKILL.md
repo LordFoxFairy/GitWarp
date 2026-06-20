@@ -9,6 +9,8 @@ description: Use when concurrent Claude Code or Codex agents need isolated git w
 
 GitWarp is the worktree isolation protocol for coding agents. It creates task sandboxes with native `git worktree`, records ownership in `.gitwarp/ledger.json`, and gives each sandbox a dossier: `task.md`, `progress.md`, and `lessons.md`.
 
+Dossiers live in the root repository control plane under `.gitwarp/dossiers/`. They are not copied into business source trees. Agents read them through `gitwarp enter`, `gitwarp context`, `gitwarp board`, or the Web Console Metadata tab.
+
 ## Core Rule
 
 Do not use `git switch`, `git checkout`, or direct `git worktree add` in the main checkout for agent task work. Use GitWarp commands so branch collisions, ledger state, and dossier files stay consistent.
@@ -20,6 +22,8 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 | `gitwarp create` | Create a base or task worktree. Task worktrees are dossier-backed. |
 | `gitwarp switch` | Locate an existing worktree and print its absolute path or `cd` command. |
 | `gitwarp remove` | Destroy a sandbox and its dossier when explicitly requested; add `--force` only for dirty targets. |
+| `gitwarp branches` | List local branch refs with cleanup safety metadata. |
+| `gitwarp prune-branch` | Delete only a safe merged local branch ref after explicit selection. |
 | `gitwarp handoff` | Record progress and optional lessons during work. |
 | `gitwarp statusline` | Print a raw prompt banner such as `GITWARP[main-repo]`. |
 | `gitwarp enter` | Return hook/session context and dossier snippets; not the main workflow command. |
@@ -30,7 +34,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 
 `start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `create`, `switch`, and `remove` unless you specifically need a rendered launch command from `dispatch`.
 
-The Web Console is for human supervision: open a project, choose a base branch, choose a task worktree under that base, browse tracked files in Code, inspect task/progress/lessons in Metadata, and review doctor/reconcile findings in Health.
+The Web Console is for human supervision: open a project, choose a base branch, choose a task worktree under that base, browse tracked files in Code, inspect task/progress/lessons in Metadata, review safe local refs in Branches, and review doctor/reconcile findings in Health.
 
 ## Branch Roles
 
@@ -120,6 +124,15 @@ gitwarp finish --status pushed \
 Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch <branch>`. If the target has uncommitted or untracked files, `remove` refuses to proceed until you rerun with `--force`.
 
 `remove`, `collapse`, `finish --collapse`, and `finish --collapse-merged` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They do not merge, push, or delete the Git branch. If the user assigns an existing worktree, finish the requested work there and stop after verification unless the user explicitly asks for push, merge, remove, or collapse.
+
+For local branch cleanup, use the separate ref commands:
+
+```bash
+gitwarp branches
+gitwarp prune-branch --branch feature/old-merged-task
+```
+
+`prune-branch` refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in the GitWarp ledger, and branches whose HEAD is not merged into the selected base. It deletes only the local Git ref; it does not delete worktrees or dossiers.
 
 ## Instructions
 

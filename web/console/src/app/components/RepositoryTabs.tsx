@@ -5,6 +5,7 @@ import type { RepositoryTab } from "../types";
 const TABS: Array<{ id: RepositoryTab; label: string; icon: typeof GitBranchIcon }> = [
   { id: "code", label: "Code", icon: CodeIcon },
   { id: "metadata", label: "Metadata", icon: GitBranchIcon },
+  { id: "branches", label: "Branches", icon: GitBranchIcon },
   { id: "health", label: "Health", icon: PulseIcon },
 ];
 

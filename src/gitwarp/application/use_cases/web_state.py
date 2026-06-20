@@ -10,7 +10,13 @@ from ...application.views import board_row, statusline_banner
 from ...domain.branch_roles import enrich_role_metadata
 from ...infrastructure.ledger import default_ledger, discover_repo, normalize_ledger_schema
 from ...infrastructure.runtime import GitWarpError, RepoContext, resolve_path
-from ...infrastructure.worktrees import build_head_drift, find_worktree_for_cwd, parse_worktrees
+from ...infrastructure.worktrees import (
+    build_head_drift,
+    find_worktree_for_cwd,
+    metadata_by_worktree_key,
+    parse_worktrees,
+    worktree_metadata_key,
+)
 
 
 def safe_load_ledger_for_web(ctx: RepoContext) -> tuple[dict[str, Any], str | None]:
@@ -22,15 +28,16 @@ def safe_load_ledger_for_web(ctx: RepoContext) -> tuple[dict[str, Any], str | No
     except (GitWarpError, json.JSONDecodeError) as exc:
         return default_ledger(ctx), str(exc)
 
+
 def sync_ledger_for_web(
     ctx: RepoContext,
     live_worktrees: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str | None]:
     ledger, ledger_error = safe_load_ledger_for_web(ctx)
-    metadata_by_path = {entry["path"]: entry for entry in ledger["entries"] if entry.get("path")}
+    metadata_by_key = metadata_by_worktree_key(ledger)
     enriched: list[dict[str, Any]] = []
     for item in live_worktrees:
-        meta = metadata_by_path.get(item["path"], {})
+        meta = metadata_by_key.get(worktree_metadata_key(item), {})
         last_seen_head = meta.get("last_seen_head")
         branch_role, base_branch = enrich_role_metadata(item, meta)
         enriched_item = {

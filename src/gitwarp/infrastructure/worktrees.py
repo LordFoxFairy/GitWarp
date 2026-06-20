@@ -46,6 +46,27 @@ def build_head_drift(last_seen_head: str | None, current_head: str | None) -> di
     return policies.build_head_drift(last_seen_head, current_head)
 
 
+def worktree_metadata_key(value: dict[str, Any]) -> tuple[str | None, str | None]:
+    path = value.get("path")
+    branch = value.get("branch")
+    return (
+        path if isinstance(path, str) else None,
+        branch if isinstance(branch, str) else None,
+    )
+
+
+def ledger_entry_matches_worktree(entry: dict[str, Any], worktree: dict[str, Any]) -> bool:
+    return worktree_metadata_key(entry) == worktree_metadata_key(worktree)
+
+
+def metadata_by_worktree_key(ledger: dict[str, Any]) -> dict[tuple[str | None, str | None], dict[str, Any]]:
+    return {
+        worktree_metadata_key(entry): entry
+        for entry in ledger["entries"]
+        if worktree_metadata_key(entry)[0] is not None
+    }
+
+
 def sync_ledger(
     ctx: RepoContext,
     live_worktrees: list[dict[str, Any]],
@@ -55,20 +76,27 @@ def sync_ledger(
     if persist:
 
         def prune(locked_ledger: dict[str, Any]) -> None:
-            live_paths = {item["path"] for item in live_worktrees}
-            stale_entries = [entry for entry in locked_ledger["entries"] if entry.get("path") not in live_paths]
+            stale_entries = [
+                entry
+                for entry in locked_ledger["entries"]
+                if not any(ledger_entry_matches_worktree(entry, item) for item in live_worktrees)
+            ]
             for entry in stale_entries:
                 purge_orphan_dossier(ctx, entry)
-            locked_ledger["entries"] = [entry for entry in locked_ledger["entries"] if entry.get("path") in live_paths]
+            locked_ledger["entries"] = [
+                entry
+                for entry in locked_ledger["entries"]
+                if any(ledger_entry_matches_worktree(entry, item) for item in live_worktrees)
+            ]
             purge_unreferenced_dossiers(ctx, locked_ledger)
 
         mutate_ledger(ctx, prune)
     ledger = load_ledger(ctx)
 
-    metadata_by_path = {entry["path"]: entry for entry in ledger["entries"]}
+    metadata_by_key = metadata_by_worktree_key(ledger)
     enriched: list[dict[str, Any]] = []
     for item in live_worktrees:
-        meta = metadata_by_path.get(item["path"], {})
+        meta = metadata_by_key.get(worktree_metadata_key(item), {})
         last_seen_head = meta.get("last_seen_head")
         branch_role, base_branch = enrich_role_metadata(item, meta)
         enriched_item = {

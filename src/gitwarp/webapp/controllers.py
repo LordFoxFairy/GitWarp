@@ -3,13 +3,15 @@ from __future__ import annotations
 from typing import Any
 
 from ..domain.errors import GitWarpError
-from ..infrastructure.runtime import RepoContext
+from ..infrastructure.ledger import discover_repo
+from ..infrastructure.runtime import RepoContext, resolve_path
 from ..application.use_cases import (
     build_collapse_payload,
     build_dispatch_payload,
     build_finish_payload,
     build_handoff_payload,
     build_init_payload,
+    build_prune_branch_payload,
     build_start_payload,
     inspect_destructive_target,
 )
@@ -183,5 +185,16 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
             ctx,
             path=optional_string_field(payload, "path"),
             branch=optional_string_field(payload, "branch"),
+        )
+    if path == "/api/prune-branch":
+        branch = string_field(payload, "branch")
+        if string_field(payload, "confirm_branch") != branch:
+            raise GitWarpError("confirm_branch must exactly match branch")
+        target_cwd = optional_string_field(payload, "cwd") or str(ctx.repo_root)
+        target_ctx = discover_repo(resolve_path(target_cwd))
+        return build_prune_branch_payload(
+            target_ctx,
+            branch=branch,
+            base_branch=optional_string_field(payload, "base_branch"),
         )
     raise GitWarpError("mutation endpoint is not implemented yet")

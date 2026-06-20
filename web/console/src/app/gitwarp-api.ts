@@ -1,4 +1,4 @@
-import type { CommandResult, DossierPayload, RepositoryFilePayload, RepositoryTreePayload, WebState } from "./types";
+import type { BranchesPayload, CommandResult, DossierPayload, RepositoryFilePayload, RepositoryTreePayload, WebState } from "./types";
 
 interface ApiErrorPayload {
   ok?: boolean;
@@ -51,6 +51,15 @@ export class GitWarpApi {
     return this.request<RepositoryFilePayload>(`/api/repository/file?${new URLSearchParams({ cwd, path }).toString()}`);
   }
 
+  getBranches(cwd: string, base?: string): Promise<BranchesPayload> {
+    const params = new URLSearchParams({ cwd });
+    if (base) {
+      params.set("base", base);
+    }
+    const query = params.toString();
+    return this.request<BranchesPayload>(`/api/branches${query ? `?${query}` : ""}`);
+  }
+
   start(input: StartWorktreeInput): Promise<CommandResult> {
     return this.post("/api/start", input);
   }
@@ -80,6 +89,15 @@ export class GitWarpApi {
       status,
       progress,
       collapse_merged: true,
+    });
+  }
+
+  pruneBranch(cwd: string, branch: string, confirmBranch: string, baseBranch?: string): Promise<CommandResult> {
+    return this.post("/api/prune-branch", {
+      cwd,
+      branch,
+      confirm_branch: confirmBranch,
+      ...(baseBranch ? { base_branch: baseBranch } : {}),
     });
   }
 

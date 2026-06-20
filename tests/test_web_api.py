@@ -223,8 +223,12 @@ class WebApiTests(GitWarpTestCase):
         self.assertGreater(len(str(session["token"])), 20)
         self.assertEqual(schema_status, 200)
         self.assertIn("/api/state", schema["endpoints"])
+        self.assertIn("/api/branches", schema["endpoints"])
+        self.assertIn("/api/prune-branch", schema["endpoints"])
         self.assertIn("/api/repository/tree", schema["endpoints"])
         self.assertIn("/api/repository/file", schema["endpoints"])
+        self.assertFalse(schema["endpoints"]["/api/branches"]["mutates"])  # type: ignore[index]
+        self.assertTrue(schema["endpoints"]["/api/prune-branch"]["mutates"])  # type: ignore[index]
         self.assertFalse(schema["endpoints"]["/api/repository/tree"]["mutates"])  # type: ignore[index]
         self.assertFalse(schema["endpoints"]["/api/repository/file"]["mutates"])  # type: ignore[index]
         self.assertTrue(schema["endpoints"]["/api/init"]["mutates"])  # type: ignore[index]
@@ -260,6 +264,8 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("Worktrees", html)
         self.assertIn("Base branch", html)
         self.assertIn("Task worktree", html)
+        self.assertIn("Branches", html)
+        self.assertIn("Prune Branch", html)
         self.assertIn("Doctor / Reconcile", html)
         self.assertIn("Finish Merged Task", html)
         self.assertIn("createRoot", html)
@@ -414,6 +420,72 @@ class WebApiTests(GitWarpTestCase):
                 self.assertFalse(payload["ok"])
                 self.assertEqual(payload["code"], "bad_repository_path")
                 self.assertIn(error, str(payload["error"]))
+
+    def test_web_branch_refs_list_and_prune_safe_local_branch(self) -> None:
+        run_git(self.repo, "branch", "feature/web-merged-ref")
+        unmerged_path = self.repo / "web-unmerged"
+        run_git(self.repo, "worktree", "add", "-b", "feature/web-unmerged-ref", str(unmerged_path), "HEAD")
+        (unmerged_path / "web-unmerged.txt").write_text("unmerged\n", encoding="utf-8")
+        run_git(unmerged_path, "add", "web-unmerged.txt")
+        run_git(unmerged_path, "commit", "-m", "web unmerged branch")
+        run_git(self.repo, "worktree", "remove", "--force", str(unmerged_path))
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        no_token_status, no_token = self.fetch_web_json(str(ready["url"]), "/api/branches")
+        branches_status, branches = self.fetch_web_json(str(ready["url"]), f"/api/branches?cwd={urllib.parse.quote(str(self.repo))}", token=token)
+        rows = {row["name"]: row for row in branches["branches"]}  # type: ignore[index]
+        bad_confirm_status, bad_confirm = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/prune-branch",
+            method="POST",
+            token=token,
+            data={"branch": "feature/web-merged-ref", "confirm_branch": "wrong"},
+        )
+        unmerged_status, unmerged = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/prune-branch",
+            method="POST",
+            token=token,
+            data={
+                "cwd": str(self.repo),
+                "branch": "feature/web-unmerged-ref",
+                "confirm_branch": "feature/web-unmerged-ref",
+            },
+        )
+        prune_status, prune = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/prune-branch",
+            method="POST",
+            token=token,
+            data={
+                "cwd": str(self.repo),
+                "branch": "feature/web-merged-ref",
+                "confirm_branch": "feature/web-merged-ref",
+            },
+        )
+
+        self.assertEqual(no_token_status, 403)
+        self.assertEqual(no_token["code"], "bad_token")
+        self.assertEqual(branches_status, 200, branches)
+        self.assertTrue(rows["feature/web-merged-ref"]["deletable"])
+        self.assertEqual(bad_confirm_status, 400)
+        self.assertIn("confirm_branch", str(bad_confirm["error"]))
+        self.assertEqual(unmerged_status, 400)
+        self.assertIn("not merged into main", str(unmerged["error"]))
+        self.assertEqual(prune_status, 200, prune)
+        self.assertTrue(prune["deleted"])
+        remaining = run_git(self.repo, "branch", "--format", "%(refname:short)")
+        self.assertNotIn("feature/web-merged-ref", remaining.splitlines())
 
     def test_web_mutations_require_csrf_and_json_content_type(self) -> None:
         _, ready = self.start_web_server(
@@ -671,6 +743,11 @@ class WebApiTests(GitWarpTestCase):
                 "/api/finish",
                 {"cwd": str(self.repo), "status": "pushed", "progress": "Reject non-bool collapse", "collapse": "true"},
                 "collapse must be a boolean",
+            ),
+            (
+                "/api/prune-branch",
+                {"branch": "feature/web-schema", "confirm_branch": 42},
+                "confirm_branch must be a string",
             ),
         ]
 

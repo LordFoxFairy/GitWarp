@@ -123,10 +123,41 @@ export interface RepositoryFilePayload {
   content: string;
 }
 
+export interface BranchRow {
+  name: string;
+  head: string;
+  upstream?: string | null;
+  is_default: boolean;
+  base_branch?: string | null;
+  branch_role?: "base" | "task" | string;
+  has_worktree: boolean;
+  worktree_path?: string | null;
+  in_ledger: boolean;
+  agent_id?: string | null;
+  status?: string | null;
+  merged_to_base: boolean;
+  deletable: boolean;
+  delete_blockers: string[];
+  category: "base" | "active" | "merged" | "orphan" | string;
+}
+
+export interface BranchesPayload {
+  ok: boolean;
+  repo_root: string;
+  default_branch: string;
+  merge_base: string;
+  branches: BranchRow[];
+  summary: {
+    total: number;
+    deletable: number;
+    by_category: Record<string, number>;
+  };
+}
+
 export interface CommandResult {
   ok: boolean;
   [key: string]: unknown;
 }
 
 export type DossierKind = "task" | "progress" | "lessons";
-export type RepositoryTab = "code" | "metadata" | "health";
+export type RepositoryTab = "code" | "metadata" | "branches" | "health";
