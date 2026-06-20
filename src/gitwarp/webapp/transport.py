@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from ..application.use_cases import build_web_state_payload
+from ..application.use_cases import build_repository_file_payload, build_repository_tree_payload, build_web_state_payload
 from ..domain.errors import GitWarpError
 from .contracts import MUTATION_ENDPOINTS, PayloadValidationError, build_schema_payload, validate_mutation_payload
 from .controllers import BadConfirmation, ConfirmationRequired, StaleConfirmation, handle_mutation
@@ -95,6 +95,32 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
             return
         self.send_json(200, payload)
 
+    def send_repository_tree(self, query: str) -> None:
+        values = parse_qs(query)
+        try:
+            payload = build_repository_tree_payload(
+                self.server.state.ctx,
+                cwd=values.get("cwd", [None])[0],
+                path=values.get("path", [None])[0],
+            )
+        except GitWarpError as exc:
+            self.send_json(400, {"ok": False, "error": str(exc), "code": "bad_repository_path"})
+            return
+        self.send_json(200, payload)
+
+    def send_repository_file(self, query: str) -> None:
+        values = parse_qs(query)
+        try:
+            payload = build_repository_file_payload(
+                self.server.state.ctx,
+                cwd=values.get("cwd", [None])[0],
+                path=values.get("path", [None])[0],
+            )
+        except GitWarpError as exc:
+            self.send_json(400, {"ok": False, "error": str(exc), "code": "bad_repository_path"})
+            return
+        self.send_json(200, payload)
+
     def do_GET(self) -> None:
         if not self.check_host():
             return
@@ -124,6 +150,16 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/dossier":
             self.send_dossier(parsed.query)
+            return
+        if parsed.path == "/api/repository/tree":
+            if not self.require_token():
+                return
+            self.send_repository_tree(parsed.query)
+            return
+        if parsed.path == "/api/repository/file":
+            if not self.require_token():
+                return
+            self.send_repository_file(parsed.query)
             return
         self.send_json(404, {"ok": False, "error": "unknown route", "code": "not_found"})
 

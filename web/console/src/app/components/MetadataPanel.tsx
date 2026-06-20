@@ -1,11 +1,11 @@
-import type { ChangeEvent } from "react";
-import { Label, Select } from "@primer/react";
+import { Label } from "@primer/react";
 import type { DispatchInput, HandoffInput, StartWorktreeInput } from "../gitwarp-api";
 import type { DossierKind, WebState, WorktreeRow } from "../types";
 import { ActionPanel } from "./ActionPanel";
 import { DossierPanel } from "./DossierPanel";
+import { WorktreePicker, defaultWorktree } from "./WorktreePicker";
 
-interface OverviewPanelProps {
+interface MetadataPanelProps {
   state: WebState | null;
   readonly: boolean;
   busy: boolean;
@@ -20,7 +20,7 @@ interface OverviewPanelProps {
   onRunFinish: (worktree: WorktreeRow, progress: string) => void;
 }
 
-export function OverviewPanel({
+export function MetadataPanel({
   state,
   readonly,
   busy,
@@ -33,31 +33,13 @@ export function OverviewPanel({
   onRunDispatch,
   onRunHandoff,
   onRunFinish,
-}: OverviewPanelProps) {
+}: MetadataPanelProps) {
   const worktrees = state?.worktrees ?? [];
   const selectedWorktree = selected && worktrees.some((worktree) => worktree.path === selected.path) ? selected : defaultWorktree(worktrees);
 
-  const changeWorktree = (event: ChangeEvent<HTMLSelectElement>) => {
-    const next = worktrees.find((worktree) => worktree.path === event.currentTarget.value);
-    if (next) {
-      onSelectWorktree(next);
-    }
-  };
-
   return (
-    <section className="tab-panel workspace-console" aria-label="Workspace console">
-      <div className="workspace-switcher">
-        <label className="worktree-picker">
-          Current worktree
-          <Select value={selectedWorktree?.path ?? ""} onChange={changeWorktree} disabled={worktrees.length === 0} block>
-            {worktrees.map((worktree) => (
-              <Select.Option key={worktree.path} value={worktree.path}>
-                {worktree.branch || "unknown"} {worktree.is_main ? "(main)" : `- ${worktree.agent_id || "unassigned"}`}
-              </Select.Option>
-            ))}
-          </Select>
-        </label>
-      </div>
+    <section className="tab-panel workspace-console" aria-label="Agent metadata console">
+      <WorktreePicker worktrees={worktrees} selected={selectedWorktree} onSelectWorktree={onSelectWorktree} />
 
       <div className="workspace-grid">
         <div className="workspace-main">
@@ -121,8 +103,4 @@ function SelectedWorktreeSummary({ worktree }: { worktree: WorktreeRow | null })
       </dl>
     </article>
   );
-}
-
-function defaultWorktree(worktrees: WorktreeRow[]): WorktreeRow | null {
-  return worktrees.find((worktree) => !worktree.is_main) ?? worktrees[0] ?? null;
 }

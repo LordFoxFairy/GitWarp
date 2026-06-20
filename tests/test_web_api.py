@@ -223,6 +223,10 @@ class WebApiTests(GitWarpTestCase):
         self.assertGreater(len(str(session["token"])), 20)
         self.assertEqual(schema_status, 200)
         self.assertIn("/api/state", schema["endpoints"])
+        self.assertIn("/api/repository/tree", schema["endpoints"])
+        self.assertIn("/api/repository/file", schema["endpoints"])
+        self.assertFalse(schema["endpoints"]["/api/repository/tree"]["mutates"])  # type: ignore[index]
+        self.assertFalse(schema["endpoints"]["/api/repository/file"]["mutates"])  # type: ignore[index]
         self.assertTrue(schema["endpoints"]["/api/init"]["mutates"])  # type: ignore[index]
         self.assertEqual(init_status, 403)
         self.assertFalse(init_payload["ok"])
@@ -299,6 +303,115 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(outside_status, 403)
         self.assertFalse(outside["ok"])
         self.assertEqual(outside["code"], "outside_dossier_root")
+
+    def test_web_repository_browser_reads_committed_tree_and_files(self) -> None:
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "app.py").write_text("print('hello')\n", encoding="utf-8")
+        (self.repo / "README.md").write_text("# Browser Fixture\n", encoding="utf-8")
+        (self.repo / "binary.bin").write_bytes(b"\x00\xff\x00")
+        (self.repo / "large.txt").write_text("x" * 513_000, encoding="utf-8")
+        run_git(self.repo, "add", "src/app.py", "README.md", "binary.bin", "large.txt")
+        run_git(self.repo, "commit", "-m", "add repository browser fixtures")
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        no_token_status, no_token = self.fetch_web_json(str(ready["url"]), "/api/repository/tree")
+        tree_status, tree = self.fetch_web_json(str(ready["url"]), "/api/repository/tree", token=token)
+        nested_status, nested = self.fetch_web_json(
+            str(ready["url"]),
+            f"/api/repository/tree?{urllib.parse.urlencode({'path': 'src', 'cwd': str(self.repo)})}",
+            token=token,
+        )
+        file_status, file_payload = self.fetch_web_json(
+            str(ready["url"]),
+            f"/api/repository/file?{urllib.parse.urlencode({'path': 'src/app.py', 'cwd': str(self.repo)})}",
+            token=token,
+        )
+        binary_status, binary_payload = self.fetch_web_json(
+            str(ready["url"]),
+            f"/api/repository/file?{urllib.parse.urlencode({'path': 'binary.bin', 'cwd': str(self.repo)})}",
+            token=token,
+        )
+        large_status, large_payload = self.fetch_web_json(
+            str(ready["url"]),
+            f"/api/repository/file?{urllib.parse.urlencode({'path': 'large.txt', 'cwd': str(self.repo)})}",
+            token=token,
+        )
+
+        self.assertEqual(no_token_status, 403)
+        self.assertEqual(no_token["code"], "bad_token")
+        self.assertEqual(tree_status, 200, tree)
+        self.assertEqual(tree["path"], "")
+        self.assertEqual(tree["breadcrumbs"][0]["name"], "root")
+        self.assertIn("src", {entry["name"] for entry in tree["entries"]})
+        self.assertEqual(nested_status, 200, nested)
+        self.assertEqual(nested["path"], "src")
+        self.assertEqual(nested["entries"][0]["name"], "app.py")
+        self.assertEqual(file_status, 200, file_payload)
+        self.assertEqual(file_payload["path"], "src/app.py")
+        self.assertEqual(file_payload["encoding"], "utf-8")
+        self.assertFalse(file_payload["truncated"])
+        self.assertIn("print('hello')", file_payload["content"])
+        self.assertEqual(binary_status, 200, binary_payload)
+        self.assertEqual(binary_payload["encoding"], "base64")
+        self.assertEqual(binary_payload["content"], "AP8A")
+        self.assertFalse(binary_payload["truncated"])
+        self.assertEqual(large_status, 200, large_payload)
+        self.assertTrue(large_payload["truncated"])
+        self.assertLessEqual(len(str(large_payload["content"])), 512_000)
+
+    def test_web_repository_browser_rejects_unsafe_or_wrong_paths(self) -> None:
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "inside.txt").write_text("inside\n", encoding="utf-8")
+        (self.repo / "visible.txt").write_text("visible\n", encoding="utf-8")
+        run_git(self.repo, "add", "src/inside.txt", "visible.txt")
+        run_git(self.repo, "commit", "-m", "add visible file")
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        cases = [
+            ("/api/repository/tree", {"path": "../README.md"}, "parent"),
+            ("/api/repository/tree", {"path": "/README.md"}, "relative POSIX"),
+            ("/api/repository/tree", {"path": "nested/.git/config"}, "Git internals"),
+            ("/api/repository/tree", {"path": "visible.txt"}, "not a directory"),
+            ("/api/repository/file", {"path": ""}, "required"),
+            ("/api/repository/file", {"path": "."}, "required"),
+            ("/api/repository/file", {"path": "missing.txt"}, "does not exist"),
+            ("/api/repository/file", {"path": ".git/config"}, "Git internals"),
+            ("/api/repository/file", {"path": "src"}, "not a file"),
+        ]
+
+        for route, query, error in cases:
+            with self.subTest(route=route, query=query):
+                status, payload = self.fetch_web_json(
+                    str(ready["url"]),
+                    f"{route}?{urllib.parse.urlencode(query)}",
+                    token=token,
+                )
+                self.assertEqual(status, 400)
+                self.assertFalse(payload["ok"])
+                self.assertEqual(payload["code"], "bad_repository_path")
+                self.assertIn(error, str(payload["error"]))
 
     def test_web_mutations_require_csrf_and_json_content_type(self) -> None:
         _, ready = self.start_web_server(

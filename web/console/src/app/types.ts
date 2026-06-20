@@ -83,10 +83,48 @@ export interface DossierPayload {
   content: string;
 }
 
+export interface RepositoryBreadcrumb {
+  name: string;
+  path: string;
+}
+
+export interface RepositoryTreeEntry {
+  name: string;
+  path: string;
+  type: "directory" | "file";
+  mode: string;
+  object: string;
+}
+
+export interface RepositoryTreePayload {
+  ok: boolean;
+  repo_root: string;
+  checkout_path: string;
+  branch?: string;
+  commit?: string;
+  path: string;
+  breadcrumbs: RepositoryBreadcrumb[];
+  entries: RepositoryTreeEntry[];
+}
+
+export interface RepositoryFilePayload {
+  ok: boolean;
+  repo_root: string;
+  checkout_path: string;
+  branch?: string;
+  commit?: string;
+  path: string;
+  name: string;
+  size: number;
+  encoding: "utf-8" | "base64" | string;
+  truncated: boolean;
+  content: string;
+}
+
 export interface CommandResult {
   ok: boolean;
   [key: string]: unknown;
 }
 
 export type DossierKind = "task" | "progress" | "lessons";
-export type RepositoryTab = "workspace" | "health";
+export type RepositoryTab = "code" | "metadata" | "health";

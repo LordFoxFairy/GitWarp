@@ -1,4 +1,4 @@
-import type { CommandResult, DossierPayload, WebState } from "./types";
+import type { CommandResult, DossierPayload, RepositoryFilePayload, RepositoryTreePayload, WebState } from "./types";
 
 interface ApiErrorPayload {
   ok?: boolean;
@@ -39,6 +39,14 @@ export class GitWarpApi {
 
   readDossier(path: string): Promise<DossierPayload> {
     return this.request<DossierPayload>(`/api/dossier?${new URLSearchParams({ path }).toString()}`);
+  }
+
+  getRepositoryTree(cwd: string, path = ""): Promise<RepositoryTreePayload> {
+    return this.request<RepositoryTreePayload>(`/api/repository/tree?${new URLSearchParams({ cwd, path }).toString()}`);
+  }
+
+  getRepositoryFile(cwd: string, path: string): Promise<RepositoryFilePayload> {
+    return this.request<RepositoryFilePayload>(`/api/repository/file?${new URLSearchParams({ cwd, path }).toString()}`);
   }
 
   start(input: StartWorktreeInput): Promise<CommandResult> {

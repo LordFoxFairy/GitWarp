@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { CodePanel } from "./components/CodePanel";
 import { HealthPanel } from "./components/HealthPanel";
 import { Header } from "./components/Header";
-import { OverviewPanel } from "./components/OverviewPanel";
+import { MetadataPanel } from "./components/MetadataPanel";
 import { OutputPanel } from "./components/OutputPanel";
 import { ProjectDirectory } from "./components/ProjectDirectory";
 import { RepositoryHeader, RepositoryTitleBar } from "./components/RepositoryHeader";
@@ -27,7 +28,7 @@ export function App({ token }: AppProps) {
   const [selectedWorktreePath, setSelectedWorktreePath] = useState<string | null>(null);
   const [dossierKind, setDossierKind] = useState<DossierKind>("task");
   const [dossierContent, setDossierContent] = useState("Select a non-main worktree to inspect task.md, progress.md, and lessons.md.");
-  const [activeTab, setActiveTab] = useState<RepositoryTab>("workspace");
+  const [activeTab, setActiveTab] = useState<RepositoryTab>("code");
   const [output, setOutput] = useState("Ready.");
   const [loading, setLoading] = useState(false);
   const [operation, setOperation] = useState<OperationState>({ status: "idle", message: "" });
@@ -70,6 +71,9 @@ export function App({ token }: AppProps) {
   }, [api]);
 
   useEffect(() => {
+    if (activeTab !== "metadata") {
+      return;
+    }
     const path = selected?.[`${dossierKind}_md` as keyof WorktreeRow];
     if (!selected) {
       setDossierContent("Select a worktree to inspect task.md, progress.md, and lessons.md.");
@@ -95,7 +99,7 @@ export function App({ token }: AppProps) {
     return () => {
       cancelled = true;
     };
-  }, [api, selected, dossierKind]);
+  }, [activeTab, api, selected, dossierKind]);
 
   useEffect(() => {
     if (!selectedProject || !state) {
@@ -114,14 +118,13 @@ export function App({ token }: AppProps) {
   const selectWorktree = (worktree: WorktreeRow) => {
     setSelectedWorktreePath(worktree.path);
     setDossierKind("task");
-    setActiveTab("workspace");
   };
 
   const openProject = (project: ProjectSummary) => {
     setSelectedProject(project);
     setSelectedWorktreePath(null);
     setDossierKind("task");
-    setActiveTab("workspace");
+    setActiveTab("code");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
   };
 
@@ -129,7 +132,7 @@ export function App({ token }: AppProps) {
     setSelectedProject(null);
     setSelectedWorktreePath(null);
     setDossierKind("task");
-    setActiveTab("workspace");
+    setActiveTab("code");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
   };
 
@@ -178,6 +181,7 @@ export function App({ token }: AppProps) {
       <RepositoryTabs activeTab={activeTab} onTabChange={setActiveTab} />
       {operation.status !== "idle" ? <CommandStatus operation={operation} /> : null}
       <RepositorySection
+        api={api}
         activeTab={activeTab}
         state={state}
         readonly={Boolean(state?.readonly)}
@@ -199,6 +203,7 @@ export function App({ token }: AppProps) {
 }
 
 interface RepositorySectionProps {
+  api: GitWarpApi;
   activeTab: RepositoryTab;
   state: WebState | null;
   readonly: boolean;
@@ -215,6 +220,7 @@ interface RepositorySectionProps {
 }
 
 function RepositorySection({
+  api,
   activeTab,
   state,
   readonly,
@@ -237,20 +243,31 @@ function RepositorySection({
     );
   }
 
+  if (activeTab === "metadata") {
+    return (
+      <MetadataPanel
+        state={state}
+        readonly={readonly}
+        busy={busy}
+        selected={selected}
+        dossierKind={dossierKind}
+        dossierContent={dossierContent}
+        onSelectWorktree={onSelectWorktree}
+        onDossierKindChange={onDossierKindChange}
+        onRunStart={onRunStart}
+        onRunDispatch={onRunDispatch}
+        onRunHandoff={onRunHandoff}
+        onRunFinish={onRunFinish}
+      />
+    );
+  }
+
   return (
-    <OverviewPanel
+    <CodePanel
+      api={api}
       state={state}
-      readonly={readonly}
-      busy={busy}
       selected={selected}
-      dossierKind={dossierKind}
-      dossierContent={dossierContent}
       onSelectWorktree={onSelectWorktree}
-      onDossierKindChange={onDossierKindChange}
-      onRunStart={onRunStart}
-      onRunDispatch={onRunDispatch}
-      onRunHandoff={onRunHandoff}
-      onRunFinish={onRunFinish}
     />
   );
 }

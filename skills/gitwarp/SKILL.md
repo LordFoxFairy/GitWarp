@@ -26,8 +26,11 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 | `gitwarp board` | List active sandboxes. |
 | `gitwarp reconcile` | Read-only audit for dirty, stale, missing, merged, or drifted worktrees. |
 | `gitwarp doctor` | Check install, hook, plugin, and runtime health. |
+| `gitwarp web` | Open a local Web Console with Code, Metadata, and Health tabs. |
 
 `start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `create`, `switch`, and `remove` unless you specifically need a rendered launch command from `dispatch`.
+
+The Web Console is for human supervision: the Code tab browses tracked files at the selected worktree `HEAD`, the Metadata tab shows dossiers and agent actions, and the Health tab shows doctor/reconcile findings.
 
 ## Agent Workflow
 

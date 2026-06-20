@@ -7,6 +7,7 @@ from .handoff import build_handoff_payload
 from .metadata import build_adopt_payload, build_annotate_payload
 from .navigation import build_switch_payload, shell_cd_command
 from .provisioning import build_dispatch_payload, build_start_payload, build_summon_payload
+from .repository_browser import build_repository_file_payload, build_repository_tree_payload
 
 __all__ = [
     "build_adopt_payload",
@@ -16,6 +17,8 @@ __all__ = [
     "build_finish_payload",
     "build_handoff_payload",
     "build_init_payload",
+    "build_repository_file_payload",
+    "build_repository_tree_payload",
     "build_start_payload",
     "build_switch_payload",
     "build_summon_payload",

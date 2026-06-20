@@ -154,7 +154,7 @@ gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub-like Project Directory; open a repository to use a Code-style worktree list, create sandboxes, mount instruction files, read dossiers, record handoffs, or review full doctor/reconcile health checks.
+`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub-like Project Directory; open a repository to use a Code tab for tracked files at the selected worktree `HEAD`, a Metadata tab for task/progress/lessons and agent actions, and a Health tab for doctor/reconcile findings.
 
 ### Automated Agent
 
@@ -215,7 +215,7 @@ Example `.gitwarp/agents.json`:
 
 - `src/gitwarp/`: the only canonical runtime package root. It contains package metadata only; implementation lives in the DDD subpackages below.
 - `src/gitwarp/domain/`: value objects and pure policies for worktree snapshots, workspace records, branch collisions, guarded paths, and head drift.
-- `src/gitwarp/application/use_cases/`: orchestration for init, create/switch/remove, dispatch/start/handoff/finish/collapse, and read-only web state.
+- `src/gitwarp/application/use_cases/`: orchestration for init, create/switch/remove, dispatch/start/handoff/finish/collapse, read-only web state, and repository file browsing.
 - `src/gitwarp/application/health/`: doctor/init health checks, findings, process probes, and recommendations.
 - `src/gitwarp/infrastructure/`: Git subprocess, ledger persistence, dossier files, agent registry, and repository discovery adapters.
 - `src/gitwarp/adapters/cli/`: argparse parser, entrypoint, read commands, system commands, and workspace commands.

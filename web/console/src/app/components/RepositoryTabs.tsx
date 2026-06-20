@@ -1,9 +1,10 @@
 import { Button } from "@primer/react";
-import { GitBranchIcon, PulseIcon } from "@primer/octicons-react";
+import { CodeIcon, GitBranchIcon, PulseIcon } from "@primer/octicons-react";
 import type { RepositoryTab } from "../types";
 
 const TABS: Array<{ id: RepositoryTab; label: string; icon: typeof GitBranchIcon }> = [
-  { id: "workspace", label: "Code", icon: GitBranchIcon },
+  { id: "code", label: "Code", icon: CodeIcon },
+  { id: "metadata", label: "Metadata", icon: GitBranchIcon },
   { id: "health", label: "Health", icon: PulseIcon },
 ];
 
