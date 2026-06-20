@@ -4,7 +4,7 @@ from typing import Any
 
 from ..domain.errors import GitWarpError
 from ..infrastructure.runtime import RepoContext
-from ..application.services import (
+from ..application.use_cases import (
     build_collapse_payload,
     build_dispatch_payload,
     build_finish_payload,
@@ -55,6 +55,38 @@ def optional_instruction_mode(payload: dict[str, Any]) -> str:
     return value
 
 
+def string_field(payload: dict[str, Any], field: str) -> str:
+    value = payload[field]
+    if not isinstance(value, str):
+        raise GitWarpError(f"{field} must be a string")
+    return value
+
+
+def optional_string_field(payload: dict[str, Any], field: str) -> str | None:
+    value = payload.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise GitWarpError(f"{field} must be a string")
+    return value
+
+
+def optional_bool_field(payload: dict[str, Any], field: str, default: bool = False) -> bool:
+    value = payload.get(field, default)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise GitWarpError(f"{field} must be a boolean")
+    return value
+
+
+def bool_field(payload: dict[str, Any], field: str) -> bool:
+    value = payload[field]
+    if not isinstance(value, bool):
+        raise GitWarpError(f"{field} must be a boolean")
+    return value
+
+
 def require_confirmation(
     *,
     secret: bytes,
@@ -70,9 +102,9 @@ def require_confirmation(
         current = inspect_destructive_target(
             ctx,
             action=action,
-            cwd=payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
-            path=payload.get("path") if isinstance(payload.get("path"), str) else None,
-            branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+            cwd=optional_string_field(payload, "cwd"),
+            path=optional_string_field(payload, "path"),
+            branch=optional_string_field(payload, "branch"),
         )
     except TimeoutError:
         raise
@@ -84,14 +116,14 @@ def require_confirmation(
 
 def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, confirmation_secret: bytes) -> dict[str, Any]:
     if path == "/api/init":
-        return build_init_payload(ctx, write_gitignore=bool(payload.get("write_gitignore", False)))
+        return build_init_payload(ctx, write_gitignore=bool_field(payload, "write_gitignore"))
     if path == "/api/dispatch":
         return build_dispatch_payload(
             ctx,
-            agent=payload.get("agent") if isinstance(payload.get("agent"), str) else None,
-            agent_id=payload.get("agent_id") if isinstance(payload.get("agent_id"), str) else None,
-            branch=str(payload["branch"]),
-            purpose=str(payload["purpose"]),
+            agent=optional_string_field(payload, "agent"),
+            agent_id=optional_string_field(payload, "agent_id"),
+            branch=string_field(payload, "branch"),
+            purpose=string_field(payload, "purpose"),
             instructions=optional_instruction_list(payload),
             instruction_profile=optional_instruction_profile(payload),
             instruction_mode=optional_instruction_mode(payload),
@@ -99,9 +131,9 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
     if path == "/api/start":
         return build_start_payload(
             ctx,
-            agent_id=str(payload["agent_id"]),
-            branch=str(payload["branch"]),
-            purpose=str(payload["purpose"]),
+            agent_id=string_field(payload, "agent_id"),
+            branch=string_field(payload, "branch"),
+            purpose=string_field(payload, "purpose"),
             instructions=optional_instruction_list(payload),
             instruction_profile=optional_instruction_profile(payload),
             instruction_mode=optional_instruction_mode(payload),
@@ -109,43 +141,43 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
     if path == "/api/handoff":
         return build_handoff_payload(
             ctx,
-            cwd=str(payload["cwd"]),
-            path=payload.get("path") if isinstance(payload.get("path"), str) else None,
-            branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
-            status=str(payload["status"]),
-            progress=str(payload["progress"]),
-            lesson=payload.get("lesson") if isinstance(payload.get("lesson"), str) else None,
+            cwd=string_field(payload, "cwd"),
+            path=optional_string_field(payload, "path"),
+            branch=optional_string_field(payload, "branch"),
+            status=string_field(payload, "status"),
+            progress=string_field(payload, "progress"),
+            lesson=optional_string_field(payload, "lesson"),
         )
     if path == "/api/confirmation":
-        action = str(payload["action"])
+        action = string_field(payload, "action")
         challenge = inspect_destructive_target(
             ctx,
             action=action,
-            cwd=payload.get("cwd") if isinstance(payload.get("cwd"), str) else None,
-            path=payload.get("path") if isinstance(payload.get("path"), str) else None,
-            branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+            cwd=optional_string_field(payload, "cwd"),
+            path=optional_string_field(payload, "path"),
+            branch=optional_string_field(payload, "branch"),
         )
         confirmation, expires_at = encode_confirmation(confirmation_secret, challenge)
         return {"ok": True, "confirmation": confirmation, "expires_at": expires_at, "challenge": challenge}
     if path == "/api/finish":
-        collapse = bool(payload.get("collapse", False))
+        collapse = optional_bool_field(payload, "collapse")
         if collapse:
             require_confirmation(secret=confirmation_secret, ctx=ctx, action="finish-collapse", payload=payload)
         return build_finish_payload(
             ctx,
-            cwd=str(payload["cwd"]),
-            path=payload.get("path") if isinstance(payload.get("path"), str) else None,
-            branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
-            status=str(payload["status"]),
-            progress=str(payload["progress"]),
-            lesson=payload.get("lesson") if isinstance(payload.get("lesson"), str) else None,
+            cwd=string_field(payload, "cwd"),
+            path=optional_string_field(payload, "path"),
+            branch=optional_string_field(payload, "branch"),
+            status=string_field(payload, "status"),
+            progress=string_field(payload, "progress"),
+            lesson=optional_string_field(payload, "lesson"),
             collapse=collapse,
         )
     if path == "/api/collapse":
         require_confirmation(secret=confirmation_secret, ctx=ctx, action="collapse", payload=payload)
         return build_collapse_payload(
             ctx,
-            path=payload.get("path") if isinstance(payload.get("path"), str) else None,
-            branch=payload.get("branch") if isinstance(payload.get("branch"), str) else None,
+            path=optional_string_field(payload, "path"),
+            branch=optional_string_field(payload, "branch"),
         )
     raise GitWarpError("mutation endpoint is not implemented yet")

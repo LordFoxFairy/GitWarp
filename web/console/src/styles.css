@@ -250,6 +250,11 @@ h2 {
   border-bottom: 0;
 }
 
+.repo-list-row > button {
+  justify-self: end;
+  min-width: 180px;
+}
+
 .repo-list-row:hover {
   background: var(--surface-muted);
 }
@@ -272,11 +277,11 @@ h2 {
 }
 
 .repo-list-meta {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 12px;
 }
 
 .project-card {
@@ -388,6 +393,38 @@ h2 {
   padding: 24px 32px;
 }
 
+.command-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 32px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.command-status strong {
+  color: var(--ink);
+}
+
+.command-status.running {
+  border-color: rgba(9, 105, 218, 0.38);
+  background: #ddf4ff;
+}
+
+.command-status.success {
+  border-color: rgba(26, 127, 55, 0.35);
+  background: #dafbe1;
+}
+
+.command-status.error {
+  border-color: rgba(207, 34, 46, 0.38);
+  background: #ffebe9;
+}
+
 .workspace-console {
   background: var(--surface);
 }
@@ -447,7 +484,8 @@ h2 {
 
 .health-list,
 .form-stack,
-.handoff-form {
+.handoff-form,
+.finish-confirm {
   display: grid;
   gap: 12px;
 }
@@ -552,6 +590,26 @@ legend {
   padding-top: 14px;
 }
 
+.finish-confirm {
+  border: 1px solid rgba(207, 34, 46, 0.38);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: #ffebe9;
+}
+
+.finish-confirm strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--danger);
+}
+
+.form-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .health-item {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -626,6 +684,22 @@ legend {
 
   .tab-panel {
     padding: 18px 14px;
+  }
+
+  .repo-list-row {
+    grid-template-columns: 1fr;
+  }
+
+  .repo-list-row > button {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .command-status {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-left: 14px;
+    margin-right: 14px;
   }
 
 }

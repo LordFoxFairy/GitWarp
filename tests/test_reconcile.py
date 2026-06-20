@@ -4,6 +4,34 @@ from helpers import *
 
 
 class ReconcileTests(GitWarpTestCase):
+    def test_read_commands_do_not_prune_stale_ledger_entries(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-readonly-prune",
+            "--branch",
+            "feature/read-commands-do-not-prune",
+            "--purpose",
+            "Verify read commands do not mutate ledger",
+        )
+        worktree_path = Path(str(start["path"]))
+        run_git(self.repo, "worktree", "remove", "--force", str(worktree_path))
+        run_git(self.repo, "worktree", "prune")
+
+        ledger_path = self.repo / ".gitwarp" / "ledger.json"
+        before = ledger_path.read_bytes()
+        scan = run_gitwarp(self.repo, "scan", "--cwd", str(self.repo))
+        board = run_gitwarp(self.repo, "board", "--cwd", str(self.repo))
+        context = run_gitwarp(self.repo, "context", "--cwd", str(self.repo))
+        after = ledger_path.read_bytes()
+
+        self.assertEqual(before, after)
+        self.assertEqual(scan["tracked_entries"], 1)
+        self.assertEqual(len(scan["worktrees"]), 1)
+        self.assertEqual(len(board["worktrees"]), 1)
+        self.assertTrue(context["worktree"]["is_main"])  # type: ignore[index]
+
     def test_reconcile_reports_findings_without_mutating_ledger(self) -> None:
         tracked = run_gitwarp(
             self.repo,

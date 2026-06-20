@@ -5,6 +5,7 @@ import type { DispatchInput, StartWorktreeInput } from "../gitwarp-api";
 
 interface ActionPanelProps {
   readonly: boolean;
+  busy: boolean;
   onStart: (input: StartWorktreeInput) => void;
   onDispatch: (input: DispatchInput) => void;
 }
@@ -31,7 +32,7 @@ function instructionOptions(form: HTMLFormElement): Pick<StartWorktreeInput, "in
   };
 }
 
-export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps) {
+export function ActionPanel({ readonly, busy, onStart, onDispatch }: ActionPanelProps) {
   const [mode, setMode] = useState<ActionMode>(null);
 
   const submitStart = (event: FormEvent<HTMLFormElement>) => {
@@ -73,43 +74,57 @@ export function ActionPanel({ readonly, onStart, onDispatch }: ActionPanelProps)
       ) : (
         <>
           <div className="agent-tool-buttons">
-            <Button variant="primary" leadingVisual={RepoForkedIcon} type="button" onClick={() => setMode(mode === "create" ? null : "create")}>
+            <Button
+              variant="primary"
+              leadingVisual={RepoForkedIcon}
+              type="button"
+              onClick={() => setMode(mode === "create" ? null : "create")}
+              disabled={busy}
+            >
               Create Sandbox
             </Button>
-            <Button leadingVisual={RocketIcon} type="button" onClick={() => setMode(mode === "launch" ? null : "launch")}>
+            <Button leadingVisual={RocketIcon} type="button" onClick={() => setMode(mode === "launch" ? null : "launch")} disabled={busy}>
               Prepare Agent Launch
             </Button>
           </div>
 
-          {mode === "create" ? <CreateSandboxForm onSubmit={submitStart} onCancel={() => setMode(null)} /> : null}
-          {mode === "launch" ? <PrepareLaunchForm onSubmit={submitDispatch} onCancel={() => setMode(null)} /> : null}
+          {mode === "create" ? <CreateSandboxForm busy={busy} onSubmit={submitStart} onCancel={() => setMode(null)} /> : null}
+          {mode === "launch" ? <PrepareLaunchForm busy={busy} onSubmit={submitDispatch} onCancel={() => setMode(null)} /> : null}
         </>
       )}
     </section>
   );
 }
 
-function CreateSandboxForm({ onSubmit, onCancel }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+function CreateSandboxForm({
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  busy: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
   return (
-    <form className="form-stack action-form" onSubmit={onSubmit}>
+    <form className="form-stack action-form" onSubmit={onSubmit} aria-busy={busy}>
       <label>
         Agent ID
-        <TextInput name="agent_id" placeholder="codex-ui-fix" required block />
+        <TextInput name="agent_id" placeholder="codex-ui-fix" required disabled={busy} block />
       </label>
       <label>
         Branch
-        <TextInput name="branch" placeholder="feature/my-task" required block />
+        <TextInput name="branch" placeholder="feature/my-task" required disabled={busy} block />
       </label>
       <label>
         Purpose
-        <Textarea name="purpose" rows={3} placeholder="Short task description" required block resize="vertical" />
+        <Textarea name="purpose" rows={3} placeholder="Short task description" required disabled={busy} block resize="vertical" />
       </label>
-      <InstructionFields />
+      <InstructionFields busy={busy} />
       <div className="form-actions">
-        <Button variant="primary" type="submit">
-          Create Sandbox
+        <Button variant="primary" type="submit" disabled={busy}>
+          {busy ? "Creating..." : "Create Sandbox"}
         </Button>
-        <Button type="button" onClick={onCancel}>
+        <Button type="button" onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
       </div>
@@ -117,30 +132,38 @@ function CreateSandboxForm({ onSubmit, onCancel }: { onSubmit: (event: FormEvent
   );
 }
 
-function PrepareLaunchForm({ onSubmit, onCancel }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+function PrepareLaunchForm({
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  busy: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
   return (
-    <form className="form-stack action-form" onSubmit={onSubmit}>
+    <form className="form-stack action-form" onSubmit={onSubmit} aria-busy={busy}>
       <label>
         Agent
-        <Select name="agent" defaultValue="codex" block>
+        <Select name="agent" defaultValue="codex" disabled={busy} block>
           <Select.Option value="codex">codex</Select.Option>
           <Select.Option value="claude">claude</Select.Option>
         </Select>
       </label>
       <label>
         Branch
-        <TextInput name="branch" placeholder="feature/parallel-task" required block />
+        <TextInput name="branch" placeholder="feature/parallel-task" required disabled={busy} block />
       </label>
       <label>
         Purpose
-        <Textarea name="purpose" rows={3} placeholder="Create workspace and launch command" required block resize="vertical" />
+        <Textarea name="purpose" rows={3} placeholder="Create workspace and launch command" required disabled={busy} block resize="vertical" />
       </label>
-      <InstructionFields />
+      <InstructionFields busy={busy} />
       <div className="form-actions">
-        <Button variant="primary" type="submit">
-          Prepare Agent Launch
+        <Button variant="primary" type="submit" disabled={busy}>
+          {busy ? "Preparing..." : "Prepare Agent Launch"}
         </Button>
-        <Button type="button" onClick={onCancel}>
+        <Button type="button" onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
       </div>
@@ -148,21 +171,21 @@ function PrepareLaunchForm({ onSubmit, onCancel }: { onSubmit: (event: FormEvent
   );
 }
 
-function InstructionFields() {
+function InstructionFields({ busy }: { busy: boolean }) {
   return (
     <fieldset className="instruction-fields">
       <legend>Instruction Mounts</legend>
       <label>
         Files
-        <Textarea name="instructions" rows={3} placeholder={"AGENTS.md\nCLAUDE.md=docs/claude-code.md"} block resize="vertical" />
+        <Textarea name="instructions" rows={3} placeholder={"AGENTS.md\nCLAUDE.md=docs/claude-code.md"} disabled={busy} block resize="vertical" />
       </label>
       <label>
         Profile
-        <TextInput name="instruction_profile" placeholder="claude-code" block />
+        <TextInput name="instruction_profile" placeholder="claude-code" disabled={busy} block />
       </label>
       <label>
         Mode
-        <Select name="instruction_mode" defaultValue="copy" block>
+        <Select name="instruction_mode" defaultValue="copy" disabled={busy} block>
           <Select.Option value="copy">copy snapshot</Select.Option>
           <Select.Option value="symlink">symlink live file</Select.Option>
         </Select>

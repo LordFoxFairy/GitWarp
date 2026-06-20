@@ -19,7 +19,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 | --- | --- |
 | `gitwarp create` | Create a dossier-backed isolated worktree. |
 | `gitwarp switch` | Locate an existing worktree and print its absolute path or `cd` command. |
-| `gitwarp remove` | Force-remove a sandbox only when it is no longer needed. |
+| `gitwarp remove` | Remove a sandbox when it is no longer needed; add `--force` only for dirty targets. |
 | `gitwarp handoff` | Record progress and optional lessons during work. |
 | `gitwarp statusline` | Print a raw prompt banner such as `GITWARP[main-repo]`. |
 | `gitwarp enter` | Return hook/session context and dossier snippets; not the main workflow command. |
@@ -75,7 +75,7 @@ gitwarp finish --status pushed \
   --collapse
 ```
 
-Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch <branch>`.
+Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch <branch>`. If the target has uncommitted or untracked files, `remove` refuses to proceed until you rerun with `--force`.
 
 ## Instructions
 

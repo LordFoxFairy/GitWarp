@@ -89,7 +89,7 @@ def ensure_src_path() -> None:
 
 def load_gitwarp_services() -> object:
     ensure_src_path()
-    return importlib.import_module("gitwarp.application.services")
+    return importlib.import_module("gitwarp.application.use_cases")
 
 
 def load_gitwarp_ledger() -> object:

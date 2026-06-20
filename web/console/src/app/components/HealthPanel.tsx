@@ -15,17 +15,34 @@ export function HealthPanel({ state }: HealthPanelProps) {
         </div>
         <span className="muted-hint">Shows actionable checks first; ok checks remain available for context.</span>
       </div>
-      <HealthList doctor={state?.doctor} reconcile={state?.reconcile} />
+      <HealthList ready={Boolean(state)} doctor={state?.doctor} reconcile={state?.reconcile} />
     </section>
   );
 }
 
 interface HealthListProps {
+  ready: boolean;
   doctor?: FindingGroup;
   reconcile?: FindingGroup;
 }
 
-function HealthList({ doctor, reconcile }: HealthListProps) {
+function HealthList({ ready, doctor, reconcile }: HealthListProps) {
+  if (!ready) {
+    return (
+      <div className="health-list">
+        <Flash>Loading doctor and reconcile checks...</Flash>
+      </div>
+    );
+  }
+
+  if (!doctor && !reconcile) {
+    return (
+      <div className="health-list">
+        <Flash variant="warning">Health data is unavailable. Refresh the repository state and inspect the command output if it remains empty.</Flash>
+      </div>
+    );
+  }
+
   const findings = [
     ...summarize("reconcile", reconcile),
     ...summarize("doctor", doctor),

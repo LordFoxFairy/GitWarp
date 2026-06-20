@@ -21,7 +21,7 @@ from ...infrastructure.worktrees import find_worktree_for_cwd, parse_worktrees, 
 
 def cmd_scan(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    ledger, worktrees = sync_ledger(ctx, parse_worktrees(ctx), persist=False)
     emit_json(
         {
             "ok": True,
@@ -53,7 +53,7 @@ def cmd_agents(args: argparse.Namespace) -> None:
 def cmd_context(args: argparse.Namespace) -> None:
     cwd = resolve_path(args.cwd)
     ctx = discover_repo(cwd)
-    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx), persist=False)
     target = find_worktree_for_cwd(cwd, worktrees)
     if target is None:
         raise GitWarpError(f"current directory is not inside a live worktree: {cwd}")
@@ -79,7 +79,7 @@ def cmd_enter(args: argparse.Namespace) -> None:
 
 def cmd_board(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
-    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx), persist=False)
     rows = [board_row(item, verbose=args.verbose or args.stale is not None) for item in worktrees]
     rows = filter_board_rows(
         rows,

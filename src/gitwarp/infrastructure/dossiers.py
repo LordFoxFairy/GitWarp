@@ -137,6 +137,18 @@ def ledger_entry_for_target(ledger: dict[str, Any], target: dict[str, Any]) -> d
     return entry
 
 
+def validate_dossier_paths(ctx: RepoContext, paths: dict[str, str]) -> None:
+    dossier_root = ctx.dossier_root.resolve()
+    for key, raw_path in paths.items():
+        target = Path(raw_path).expanduser().resolve()
+        try:
+            target.relative_to(dossier_root)
+        except ValueError as exc:
+            raise GitWarpError(f"refusing dossier path outside GitWarp dossier root: {key}={target}") from exc
+    if Path(paths["dossier_path"]).expanduser().resolve() == dossier_root:
+        raise GitWarpError("refusing to use the dossier root as a worktree dossier")
+
+
 def ensure_dossier_for_entry(ctx: RepoContext, entry: dict[str, Any], target: dict[str, Any]) -> dict[str, str]:
     branch = entry.get("branch") or target.get("branch") or "detached"
     paths = {
@@ -149,6 +161,7 @@ def ensure_dossier_for_entry(ctx: RepoContext, entry: dict[str, Any], target: di
         paths = dossier_paths(ctx, branch, Path(target["path"]))
         entry.update(paths)
     concrete_paths = {key: str(value) for key, value in paths.items()}
+    validate_dossier_paths(ctx, concrete_paths)
     create_dossier_files(
         concrete_paths,
         agent_id=entry.get("agent_id"),

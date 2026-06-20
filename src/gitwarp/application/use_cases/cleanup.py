@@ -19,6 +19,18 @@ def worktree_status_summary(path: str) -> tuple[dict[str, Any], dict[str, Any]]:
     )
 
 
+def resolve_purgeable_dossier_path(ctx: RepoContext, raw_path: str) -> Path:
+    dossier_root = ctx.dossier_root.resolve()
+    dossier_path = Path(raw_path).expanduser().resolve()
+    try:
+        dossier_path.relative_to(dossier_root)
+    except ValueError as exc:
+        raise GitWarpError(f"refusing to purge dossier outside GitWarp dossier root: {dossier_path}") from exc
+    if dossier_path == dossier_root:
+        raise GitWarpError("refusing to purge the dossier root")
+    return dossier_path
+
+
 def inspect_destructive_target(
     ctx: RepoContext,
     *,
@@ -94,7 +106,7 @@ def build_finish_payload(
         _, removed_branch = collapse_worktree(ctx, path=target["path"], branch=None)
         collapsed = True
     if purge_dossier and paths.get("dossier_path"):
-        shutil.rmtree(paths["dossier_path"], ignore_errors=True)
+        shutil.rmtree(resolve_purgeable_dossier_path(ctx, paths["dossier_path"]), ignore_errors=True)
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),

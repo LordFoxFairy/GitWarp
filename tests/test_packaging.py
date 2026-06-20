@@ -72,7 +72,6 @@ class PluginStructureTests(unittest.TestCase):
             "application/health/init.py",
             "application/health/process.py",
             "application/reconcile.py",
-            "application/services.py",
             "application/views.py",
             "application/use_cases/__init__.py",
             "application/use_cases/cleanup.py",
@@ -82,7 +81,6 @@ class PluginStructureTests(unittest.TestCase):
             "application/use_cases/metadata.py",
             "application/use_cases/provisioning.py",
             "application/use_cases/web_state.py",
-            "application/use_cases/workspace_lifecycle.py",
             "adapters/__init__.py",
             "adapters/cli/__init__.py",
             "adapters/cli/entrypoint.py",
@@ -147,6 +145,8 @@ class PluginStructureTests(unittest.TestCase):
             if path.name != "__init__.py"
         }
         self.assertEqual(set(), root_modules)
+        self.assertFalse((REPO_ROOT / "src" / "gitwarp" / "application" / "services.py").exists())
+        self.assertFalse((REPO_ROOT / "src" / "gitwarp" / "application" / "use_cases" / "workspace_lifecycle.py").exists())
 
     def test_skill_wrappers_do_not_ship_product_core(self) -> None:
         self.assertFalse((REPO_ROOT / "skills" / "gitwarp" / "scripts" / "gitwarp_core").exists())
@@ -263,6 +263,7 @@ class PluginStructureTests(unittest.TestCase):
 
     def test_marketplace_uses_root_package_sources(self) -> None:
         relative_paths = [
+            ".github/workflows/check.yml",
             ".codex-plugin/plugin.json",
             ".claude-plugin/plugin.json",
             ".agents/plugins/api_marketplace.json",
@@ -277,6 +278,7 @@ class PluginStructureTests(unittest.TestCase):
             "skills/gitwarp/agents/openai.yaml",
             "skills/gitwarp/references/install.md",
             "skills/gitwarp/scripts/install_cli.py",
+            "scripts/check-release.sh",
             "src/gitwarp/assets/web_console/index.html",
             "src/gitwarp/assets/web_console/app.css",
             "src/gitwarp/assets/web_console/app.js",
@@ -311,6 +313,20 @@ class PluginStructureTests(unittest.TestCase):
             with self.subTest(path=relative_path):
                 self.assertTrue((REPO_ROOT / relative_path).is_file())
         self.assertTrue((REPO_ROOT / "plugins" / "gitwarp").is_symlink())
+
+    def test_release_gate_runs_required_checks(self) -> None:
+        gate = (REPO_ROOT / "scripts" / "check-release.sh").read_text(encoding="utf-8")
+        workflow = (REPO_ROOT / ".github" / "workflows" / "check.yml").read_text(encoding="utf-8")
+
+        for command in (
+            "git diff --check",
+            "python3 -m compileall",
+            "npm run check:dist",
+            "python3 -m unittest discover",
+        ):
+            with self.subTest(command=command):
+                self.assertIn(command, gate)
+        self.assertIn("scripts/check-release.sh", workflow)
 
     def test_install_scripts_have_version_and_path_guards(self) -> None:
         installer = (REPO_ROOT / "skills" / "gitwarp" / "scripts" / "install_cli.py").read_text(encoding="utf-8")

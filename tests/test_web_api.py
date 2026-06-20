@@ -311,6 +311,7 @@ class WebApiTests(GitWarpTestCase):
             "--no-open",
         )
         _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
 
         missing_token_status, missing_token = self.fetch_web_json(
             str(ready["url"]),
@@ -321,14 +322,32 @@ class WebApiTests(GitWarpTestCase):
         bad_type_status, bad_type = self.post_web_raw(
             str(ready["url"]),
             "/api/init",
-            token=str(session["token"]),
+            token=token,
             body=b"{}",
         )
+        connection = http.client.HTTPConnection("127.0.0.1", int(ready["port"]), timeout=5)
+        try:
+            connection.request(
+                "POST",
+                "/api/init",
+                body=b"{}",
+                headers={
+                    "X-GitWarp-Token": token,
+                    "Content-Type": "application/json",
+                    "Content-Length": "not-an-int",
+                },
+            )
+            bad_length_response = connection.getresponse()
+            bad_length = json.loads(bad_length_response.read().decode("utf-8"))
+        finally:
+            connection.close()
 
         self.assertEqual(missing_token_status, 403)
         self.assertEqual(missing_token["code"], "bad_token")
         self.assertEqual(bad_type_status, 415)
         self.assertEqual(bad_type["code"], "bad_content_type")
+        self.assertEqual(bad_length_response.status, 400)
+        self.assertEqual(bad_length["code"], "bad_content_length")
 
     def test_web_confirmation_token_expires(self) -> None:
         web = load_gitwarp_web()
@@ -468,7 +487,7 @@ class WebApiTests(GitWarpTestCase):
                     "purpose": "Reject bad mode",
                     "instruction_mode": "hardlink",
                 },
-                "instruction_mode must be copy or symlink",
+                "instruction_mode must be one of: copy, symlink",
             ),
         ]
 
@@ -484,7 +503,67 @@ class WebApiTests(GitWarpTestCase):
 
                 self.assertEqual(status, 400)
                 self.assertFalse(payload["ok"])
-                self.assertEqual(payload["code"], "gitwarp_error")
+                self.assertEqual(payload["code"], "bad_payload")
+                self.assertIn(error, str(payload["error"]))
+
+    def test_web_mutation_payload_schema_rejects_wrong_types_and_unknown_fields(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+        cases = [
+            (
+                "/api/init",
+                {"write_gitignore": "false"},
+                "write_gitignore must be a boolean",
+            ),
+            (
+                "/api/start",
+                {"agent_id": "codex-web-schema", "branch": 42, "purpose": "Reject non-string branch"},
+                "branch must be a string",
+            ),
+            (
+                "/api/start",
+                {"agent_id": "codex-web-schema", "branch": "feature/web-schema", "purpose": ""},
+                "missing required field(s): purpose",
+            ),
+            (
+                "/api/dispatch",
+                {"branch": "feature/web-unknown", "purpose": "Reject unknown fields", "unexpected": True},
+                "unknown field(s): unexpected",
+            ),
+            (
+                "/api/confirmation",
+                {"action": "delete-everything"},
+                "action must be one of: collapse, finish-collapse",
+            ),
+            (
+                "/api/finish",
+                {"cwd": str(self.repo), "status": "pushed", "progress": "Reject non-bool collapse", "collapse": "true"},
+                "collapse must be a boolean",
+            ),
+        ]
+
+        for path, data, error in cases:
+            with self.subTest(path=path, error=error):
+                status, payload = self.fetch_web_json(
+                    str(ready["url"]),
+                    path,
+                    method="POST",
+                    token=token,
+                    data=data,
+                )
+
+                self.assertEqual(status, 400)
+                self.assertFalse(payload["ok"])
+                self.assertEqual(payload["code"], "bad_payload")
                 self.assertIn(error, str(payload["error"]))
 
     def test_web_finish_collapse_requires_fresh_confirmation(self) -> None:

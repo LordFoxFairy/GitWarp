@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from ...application.services import build_init_payload
+from ...application.use_cases import build_init_payload
 from ...infrastructure.ledger import discover_repo
 from ...infrastructure.runtime import emit_json, resolve_path
 

@@ -139,7 +139,7 @@ gitwarp finish --status pushed \
   --collapse
 ```
 
-Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch feature/my-task`.
+Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch feature/my-task`. `remove` refuses dirty or untracked targets unless `--force` is provided; prefer `gitwarp finish --collapse` when work was verified and should leave a final progress record.
 
 ## Usage Modes
 
@@ -234,14 +234,10 @@ Example `.gitwarp/agents.json`:
 ## Development
 
 ```bash
-python3 -m compileall -q src skills/gitwarp/scripts
-python3 /Users/nako/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/gitwarp
-python3 /Users/nako/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py .
-cd web/console && npm run check:dist
-python3 -m unittest discover -s tests -p 'test_*.py' -v
+scripts/check-release.sh
 scripts/verify-install.sh
 ```
 
-`npm run check:dist` builds React into a temporary directory and fails if the generated runtime assets differ from both `web/console/dist/` and `src/gitwarp/assets/web_console/`; use `npm run build` to intentionally regenerate them.
+`scripts/check-release.sh` is the tracked release gate used by CI. It runs whitespace checks, Python compilation, optional installed skill/plugin validators, the Web Console dist drift check, and the Python regression suite. `npm run check:dist` builds React into a temporary directory and fails if the generated runtime assets differ from both `web/console/dist/` and `src/gitwarp/assets/web_console/`; use `npm run build` to intentionally regenerate them.
 
 Keep runtime behavior in DDD subpackages under `src/gitwarp/`. Do not recreate `plugins/gitwarp/src`; `plugins/gitwarp` is a symlink for marketplace discovery, not a second source tree. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.

@@ -12,29 +12,47 @@ FALLBACK_WEB_CONSOLE_HTML = """<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GitWarp Web Console</title>
   <style>
-    :root { color-scheme: light; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    body { margin: 0; background: #f4efe5; color: #1f2421; }
-    main { max-width: 1120px; margin: 0 auto; padding: 32px 20px; }
-    h1 { font-size: 30px; margin: 0 0 8px; }
-    .card { background: #fffaf0; border: 2px solid #1f2421; border-radius: 14px; padding: 16px; box-shadow: 5px 5px 0 #1f2421; }
-    button { border: 2px solid #1f2421; background: #d96c4a; color: #fffaf0; border-radius: 10px; padding: 9px 12px; font-weight: 700; }
-    table { width: 100%; border-collapse: collapse; margin-top: 14px; }
-    th, td { text-align: left; border-bottom: 1px solid #d8c8aa; padding: 9px; vertical-align: top; }
-    pre { white-space: pre-wrap; background: #1f2421; color: #fffaf0; padding: 12px; border-radius: 10px; overflow: auto; }
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fa;
+      --surface: #ffffff;
+      --line: #d0d7de;
+      --ink: #24292f;
+      --muted: #57606a;
+      --accent: #0969da;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    }
+    body { margin: 0; background: var(--bg); color: var(--ink); }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding: 16px 24px; background: var(--surface); }
+    main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0; font-size: 24px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+    button { border: 1px solid rgba(31, 35, 40, 0.15); border-radius: 6px; background: #1f883d; color: white; padding: 7px 12px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 10px 12px; vertical-align: top; }
+    th { background: var(--bg); color: var(--muted); font-size: 12px; }
+    td:first-child { color: var(--accent); font-weight: 600; }
+    tr:last-child td { border-bottom: 0; }
+    pre { max-height: 320px; margin: 16px 0 0; overflow: auto; border: 1px solid #30363d; border-radius: 8px; padding: 12px; background: #0d1117; color: #f0f6fc; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
   </style>
 </head>
 <body>
-  <main>
-    <section class="card">
+  <header>
+    <div>
       <h1>GitWarp Web Console</h1>
-      <p id="summary">Loading /api/state...</p>
-      <button id="refresh">Refresh</button>
+      <div class="muted" id="summary">Loading /api/state...</div>
+    </div>
+    <button id="refresh">Refresh</button>
+  </header>
+  <main>
+    <section class="panel">
       <table>
         <thead><tr><th>Branch</th><th>Agent</th><th>Status</th><th>Purpose</th><th>Progress</th></tr></thead>
         <tbody id="worktrees"></tbody>
       </table>
-      <pre id="raw"></pre>
     </section>
+    <pre id="raw"></pre>
   </main>
   <script>
     const token = document.documentElement.dataset.gitwarpToken;

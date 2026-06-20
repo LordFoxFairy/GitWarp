@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 
-from ...application.services import (
+from ...application.use_cases import (
     build_adopt_payload,
     build_annotate_payload,
     build_collapse_payload,
@@ -13,6 +13,7 @@ from ...application.services import (
     build_start_payload,
     build_switch_payload,
     build_summon_payload,
+    inspect_destructive_target,
     shell_cd_command,
 )
 from ...infrastructure.agents import build_agent_id
@@ -187,6 +188,20 @@ def cmd_remove(args: argparse.Namespace) -> None:
     if target_path is None and args.branch is None:
         _, worktrees = sync_ledger(ctx, parse_worktrees(ctx), persist=False)
         target_path = select_live_target(worktrees=worktrees, cwd=cwd, path_arg=None, branch_arg=None)["path"]
+    if not args.force:
+        target = inspect_destructive_target(
+            ctx,
+            action="remove",
+            cwd=str(cwd),
+            path=target_path,
+            branch=args.branch,
+        )
+        dirty_count = target["dirty_summary"]["count"]
+        if dirty_count:
+            raise GitWarpError(
+                "remove target has uncommitted or untracked files; "
+                f"rerun with --force to remove anyway (dirty_count={dirty_count})"
+            )
     emit_json(build_collapse_payload(ctx, path=target_path, branch=args.branch))
 
 

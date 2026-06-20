@@ -74,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     remove.add_argument("--cwd")
     remove.add_argument("--path")
     remove.add_argument("--branch")
+    remove.add_argument("--force", action="store_true", help="Remove even when the target worktree has uncommitted or untracked files")
     remove.set_defaults(func=cmd_remove)
 
     summon = subparsers.add_parser("summon", help="Create an isolated worktree for an agent")

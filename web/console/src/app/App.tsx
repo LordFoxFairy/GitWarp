@@ -13,20 +13,42 @@ interface AppProps {
   token: string;
 }
 
+type OperationStatus = "idle" | "running" | "success" | "error";
+
+interface OperationState {
+  status: OperationStatus;
+  message: string;
+}
+
 export function App({ token }: AppProps) {
   const api = useMemo(() => new GitWarpApi(token), [token]);
   const [state, setState] = useState<WebState | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
-  const [selected, setSelected] = useState<WorktreeRow | null>(null);
+  const [selectedWorktreePath, setSelectedWorktreePath] = useState<string | null>(null);
   const [dossierKind, setDossierKind] = useState<DossierKind>("task");
   const [dossierContent, setDossierContent] = useState("Select a non-main worktree to inspect task.md, progress.md, and lessons.md.");
   const [activeTab, setActiveTab] = useState<RepositoryTab>("workspace");
   const [output, setOutput] = useState("Ready.");
   const [loading, setLoading] = useState(false);
+  const [operation, setOperation] = useState<OperationState>({ status: "idle", message: "" });
 
   const writeOutput = (payload: CommandResult | string) => {
     setOutput(typeof payload === "string" ? payload : JSON.stringify(payload, null, 2));
   };
+
+  const selected = useMemo(() => {
+    if (!selectedProject || !state) {
+      return null;
+    }
+    const worktrees = state.worktrees;
+    if (selectedWorktreePath) {
+      const current = worktrees.find((worktree) => worktree.path === selectedWorktreePath);
+      if (current) {
+        return current;
+      }
+    }
+    return worktrees.find((worktree) => !worktree.is_main) ?? worktrees[0] ?? null;
+  }, [selectedProject, selectedWorktreePath, state]);
 
   const refresh = async () => {
     setLoading(true);
@@ -57,35 +79,47 @@ export function App({ token }: AppProps) {
       setDossierContent("The main checkout has no GitWarp dossier. Select an isolated sandbox to inspect task.md, progress.md, and lessons.md.");
       return;
     }
+    let cancelled = false;
     void api
       .readDossier(path)
-      .then((payload) => setDossierContent(payload.content))
-      .catch((error) => writeOutput(String(error)));
+      .then((payload) => {
+        if (!cancelled) {
+          setDossierContent(payload.content);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          writeOutput(String(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [api, selected, dossierKind]);
 
   useEffect(() => {
     if (!selectedProject || !state) {
       return;
     }
-    if (selected && state.worktrees.some((worktree) => worktree.path === selected.path)) {
+    if (selectedWorktreePath && state.worktrees.some((worktree) => worktree.path === selectedWorktreePath)) {
       return;
     }
     const nextSelected = state.worktrees.find((worktree) => !worktree.is_main) ?? state.worktrees[0] ?? null;
     if (nextSelected) {
-      setSelected(nextSelected);
+      setSelectedWorktreePath(nextSelected.path);
       setDossierKind("task");
     }
-  }, [selected, selectedProject, state]);
+  }, [selectedProject, selectedWorktreePath, state]);
 
   const selectWorktree = (worktree: WorktreeRow) => {
-    setSelected(worktree);
+    setSelectedWorktreePath(worktree.path);
     setDossierKind("task");
     setActiveTab("workspace");
   };
 
   const openProject = (project: ProjectSummary) => {
     setSelectedProject(project);
-    setSelected(null);
+    setSelectedWorktreePath(null);
     setDossierKind("task");
     setActiveTab("workspace");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
@@ -93,21 +127,28 @@ export function App({ token }: AppProps) {
 
   const closeProject = () => {
     setSelectedProject(null);
-    setSelected(null);
+    setSelectedWorktreePath(null);
     setDossierKind("task");
     setActiveTab("workspace");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
   };
 
-  const runCommand = async (operation: () => Promise<CommandResult>) => {
+  const runCommand = async (label: string, command: () => Promise<CommandResult>) => {
+    setOperation({ status: "running", message: `${label} is running...` });
+    writeOutput(`${label} is running...`);
     try {
-      const result = await operation();
+      const result = await command();
       writeOutput(result);
+      setOperation({ status: "success", message: `${label} completed.` });
       await refresh();
     } catch (error) {
-      writeOutput(String(error));
+      const message = String(error);
+      writeOutput(message);
+      setOperation({ status: "error", message });
     }
   };
+
+  const operationBusy = operation.status === "running";
 
   if (!selectedProject) {
     return (
@@ -135,19 +176,21 @@ export function App({ token }: AppProps) {
       />
       <RepositoryTitleBar project={selectedProject} readonly={Boolean(state?.readonly)} />
       <RepositoryTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      {operation.status !== "idle" ? <CommandStatus operation={operation} /> : null}
       <RepositorySection
         activeTab={activeTab}
         state={state}
         readonly={Boolean(state?.readonly)}
+        busy={operationBusy}
         selected={selected}
         dossierKind={dossierKind}
         dossierContent={dossierContent}
         onDossierKindChange={setDossierKind}
         onSelectWorktree={selectWorktree}
-        onRunStart={(input) => runCommand(() => api.start(input))}
-        onRunDispatch={(input) => runCommand(() => api.dispatch(input))}
-        onRunHandoff={(input) => runCommand(() => api.handoff(input))}
-        onRunFinish={(worktree, progress) => runCommand(() => api.finishAndCollapse(worktree.path, progress))}
+        onRunStart={(input) => runCommand("Create sandbox", () => api.start(input))}
+        onRunDispatch={(input) => runCommand("Prepare agent launch", () => api.dispatch(input))}
+        onRunHandoff={(input) => runCommand("Record handoff", () => api.handoff(input))}
+        onRunFinish={(worktree, progress) => runCommand("Finish and collapse", () => api.finishAndCollapse(worktree.path, progress))}
       />
 
       {output !== "Ready." ? <OutputPanel output={output} onClear={() => setOutput("Ready.")} /> : null}
@@ -159,6 +202,7 @@ interface RepositorySectionProps {
   activeTab: RepositoryTab;
   state: WebState | null;
   readonly: boolean;
+  busy: boolean;
   selected: WorktreeRow | null;
   dossierKind: DossierKind;
   dossierContent: string;
@@ -174,6 +218,7 @@ function RepositorySection({
   activeTab,
   state,
   readonly,
+  busy,
   selected,
   dossierKind,
   dossierContent,
@@ -196,6 +241,7 @@ function RepositorySection({
     <OverviewPanel
       state={state}
       readonly={readonly}
+      busy={busy}
       selected={selected}
       dossierKind={dossierKind}
       dossierContent={dossierContent}
@@ -206,5 +252,14 @@ function RepositorySection({
       onRunHandoff={onRunHandoff}
       onRunFinish={onRunFinish}
     />
+  );
+}
+
+function CommandStatus({ operation }: { operation: OperationState }) {
+  return (
+    <section className={`command-status ${operation.status}`} role={operation.status === "error" ? "alert" : "status"}>
+      <strong>{operation.status === "running" ? "Running" : operation.status === "success" ? "Complete" : "Attention"}</strong>
+      <span>{operation.message}</span>
+    </section>
   );
 }

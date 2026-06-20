@@ -8,6 +8,7 @@ import { DossierPanel } from "./DossierPanel";
 interface OverviewPanelProps {
   state: WebState | null;
   readonly: boolean;
+  busy: boolean;
   selected: WorktreeRow | null;
   dossierKind: DossierKind;
   dossierContent: string;
@@ -22,6 +23,7 @@ interface OverviewPanelProps {
 export function OverviewPanel({
   state,
   readonly,
+  busy,
   selected,
   dossierKind,
   dossierContent,
@@ -61,6 +63,7 @@ export function OverviewPanel({
         <div className="workspace-main">
           <DossierPanel
             readonly={readonly}
+            busy={busy}
             selected={selectedWorktree}
             dossierKind={dossierKind}
             dossierContent={dossierContent}
@@ -72,7 +75,7 @@ export function OverviewPanel({
 
         <aside className="workspace-side" aria-label="Agent management">
           <SelectedWorktreeSummary worktree={selectedWorktree} />
-          <ActionPanel readonly={readonly} onStart={onRunStart} onDispatch={onRunDispatch} />
+          <ActionPanel readonly={readonly} busy={busy} onStart={onRunStart} onDispatch={onRunDispatch} />
         </aside>
       </div>
     </section>

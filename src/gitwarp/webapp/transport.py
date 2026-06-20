@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from ..application.services import build_web_state_payload
+from ..application.use_cases import build_web_state_payload
 from ..domain.errors import GitWarpError
-from .contracts import MUTATION_ENDPOINTS, build_schema_payload, missing_required_fields
+from .contracts import MUTATION_ENDPOINTS, PayloadValidationError, build_schema_payload, validate_mutation_payload
 from .controllers import BadConfirmation, ConfirmationRequired, StaleConfirmation, handle_mutation
 from .resources import read_dossier_file, render_console_html
 from .security import normalize_host_header
@@ -51,7 +51,14 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
         if "application/json" not in content_type:
             self.send_json(415, {"ok": False, "error": "mutation requests require application/json", "code": "bad_content_type"})
             return None
-        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.send_json(400, {"ok": False, "error": "Content-Length must be an integer", "code": "bad_content_length"})
+            return None
+        if length < 0:
+            self.send_json(400, {"ok": False, "error": "Content-Length must not be negative", "code": "bad_content_length"})
+            return None
         if length > 1_000_000:
             self.send_json(413, {"ok": False, "error": "request body too large", "code": "body_too_large"})
             return None
@@ -68,13 +75,6 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
     def require_token(self) -> bool:
         if self.headers.get("X-GitWarp-Token") != self.server.state.token:
             self.send_json(403, {"ok": False, "error": "missing or invalid GitWarp token", "code": "bad_token"})
-            return False
-        return True
-
-    def require_fields(self, payload: dict[str, Any], fields: tuple[str, ...]) -> bool:
-        missing = missing_required_fields(payload, fields)
-        if missing:
-            self.send_json(400, {"ok": False, "error": f"missing required field(s): {', '.join(missing)}", "code": "missing_field"})
             return False
         return True
 
@@ -142,8 +142,10 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
         if self.server.state.readonly:
             self.send_json(403, {"ok": False, "error": "Web console is read-only", "code": "readonly"})
             return
-        required = MUTATION_ENDPOINTS[parsed.path].required
-        if not self.require_fields(payload, required):
+        try:
+            validate_mutation_payload(parsed.path, payload)
+        except PayloadValidationError as exc:
+            self.send_json(400, {"ok": False, "error": str(exc), "code": "bad_payload"})
             return
         try:
             result = handle_mutation(

@@ -66,6 +66,26 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertEqual(current_remove["removed_branch"], "feature/remove-current")
         self.assertFalse(current_path.exists())
 
+        dirty_create = run_gitwarp(
+            self.repo,
+            "create",
+            "--branch",
+            "feature/remove-dirty",
+            "--purpose",
+            "Refuse unsafe remove",
+        )
+        dirty_path = Path(str(dirty_create["path"]))
+        (dirty_path / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+
+        refused = run_gitwarp(self.repo, "remove", "--branch", "feature/remove-dirty", expect_ok=False)
+        self.assertIn("--force", str(refused["error"]))
+        self.assertTrue(dirty_path.exists())
+
+        forced = run_gitwarp(self.repo, "remove", "--branch", "feature/remove-dirty", "--force")
+        self.assertEqual(forced["removed_path"], str(dirty_path))
+        self.assertEqual(forced["removed_branch"], "feature/remove-dirty")
+        self.assertFalse(dirty_path.exists())
+
     def test_scan_summon_statusline_and_collapse(self) -> None:
         scan = run_gitwarp(self.repo, "scan")
         self.assertEqual(Path(str(scan["repo_root"])).resolve(), self.repo.resolve())
@@ -309,3 +329,73 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertTrue(lessons_md.exists())
         self.assertIn("Verified and pushed", progress_md.read_text(encoding="utf-8"))
         self.assertIn("Keep dossier after collapse", lessons_md.read_text(encoding="utf-8"))
+
+    def test_finish_purge_dossier_is_scoped_to_dossier_root(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-purge-dossier",
+            "--branch",
+            "feature/purge-dossier",
+            "--purpose",
+            "Purge completed dossier",
+        )
+        dossier_path = Path(str(start["dossier_path"]))
+        worktree_path = Path(str(start["path"]))
+
+        finish = run_gitwarp(
+            self.repo,
+            "finish",
+            "--cwd",
+            str(worktree_path),
+            "--status",
+            "pushed",
+            "--progress",
+            "Verified and ready to purge",
+            "--collapse",
+            "--purge-dossier",
+        )
+
+        self.assertTrue(finish["purged_dossier"])
+        self.assertFalse(worktree_path.exists())
+        self.assertFalse(dossier_path.exists())
+
+        malicious = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-bad-purge",
+            "--branch",
+            "feature/bad-purge",
+            "--purpose",
+            "Reject unsafe purge",
+        )
+        malicious_path = Path(str(malicious["path"]))
+        readme_before = (self.repo / "README.md").read_text(encoding="utf-8")
+        ledger_path = self.repo / ".gitwarp" / "ledger.json"
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        for entry in ledger["entries"]:
+            if entry["path"] == str(malicious_path):
+                entry["dossier_path"] = str(self.repo / "README.md")
+                entry["task_md"] = str(self.repo / "README.md")
+                entry["progress_md"] = str(self.repo / "README.md")
+                entry["lessons_md"] = str(self.repo / "README.md")
+        ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+
+        refused = run_gitwarp(
+            self.repo,
+            "finish",
+            "--cwd",
+            str(malicious_path),
+            "--status",
+            "pushed",
+            "--progress",
+            "Should not purge outside dossier root",
+            "--purge-dossier",
+            expect_ok=False,
+        )
+
+        self.assertIn("outside GitWarp dossier root", str(refused["error"]))
+        self.assertTrue((self.repo / "README.md").exists())
+        self.assertEqual((self.repo / "README.md").read_text(encoding="utf-8"), readme_before)
