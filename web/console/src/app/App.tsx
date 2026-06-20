@@ -48,7 +48,7 @@ export function App({ token }: AppProps) {
         return current;
       }
     }
-    return worktrees.find((worktree) => !worktree.is_main) ?? worktrees[0] ?? null;
+    return worktrees.find((worktree) => worktree.is_main) ?? worktrees[0] ?? null;
   }, [selectedProject, selectedWorktreePath, state]);
 
   const refresh = async () => {
@@ -56,11 +56,11 @@ export function App({ token }: AppProps) {
     try {
       const nextState = await api.getState();
       setState(nextState);
-      if (selectedProject) {
-        setSelectedProject(nextState.projects.find((project) => project.id === selectedProject.id) ?? null);
-      }
+      setSelectedProject((current) => (current ? nextState.projects.find((project) => project.id === current.id) ?? null : current));
+      return nextState;
     } catch (error) {
       writeOutput(String(error));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,7 @@ export function App({ token }: AppProps) {
     if (selectedWorktreePath && state.worktrees.some((worktree) => worktree.path === selectedWorktreePath)) {
       return;
     }
-    const nextSelected = state.worktrees.find((worktree) => !worktree.is_main) ?? state.worktrees[0] ?? null;
+    const nextSelected = state.worktrees.find((worktree) => worktree.is_main) ?? state.worktrees[0] ?? null;
     if (nextSelected) {
       setSelectedWorktreePath(nextSelected.path);
       setDossierKind("task");
@@ -136,7 +136,7 @@ export function App({ token }: AppProps) {
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
   };
 
-  const runCommand = async (label: string, command: () => Promise<CommandResult>) => {
+  const runCommand = async (label: string, command: () => Promise<CommandResult>): Promise<CommandResult> => {
     setOperation({ status: "running", message: `${label} is running...` });
     writeOutput(`${label} is running...`);
     try {
@@ -144,10 +144,15 @@ export function App({ token }: AppProps) {
       writeOutput(result);
       setOperation({ status: "success", message: `${label} completed.` });
       await refresh();
+      if (typeof result.path === "string") {
+        setSelectedWorktreePath(String(result.path));
+      }
+      return result;
     } catch (error) {
       const message = String(error);
       writeOutput(message);
       setOperation({ status: "error", message });
+      throw error;
     }
   };
 
@@ -194,7 +199,13 @@ export function App({ token }: AppProps) {
         onRunStart={(input) => runCommand("Create sandbox", () => api.start(input))}
         onRunDispatch={(input) => runCommand("Prepare agent launch", () => api.dispatch(input))}
         onRunHandoff={(input) => runCommand("Record handoff", () => api.handoff(input))}
-        onRunFinish={(worktree, progress) => runCommand("Finish and collapse", () => api.finishAndCollapse(worktree.path, progress))}
+        onRunFinish={(worktree, progress) =>
+          runCommand("Finish and collapse", () => api.finishAndCollapse(worktree.path, progress)).then((result) => {
+            setSelectedWorktreePath(null);
+            return result;
+          })
+        }
+        onViewMetadata={() => setActiveTab("metadata")}
       />
 
       {output !== "Ready." ? <OutputPanel output={output} onClear={() => setOutput("Ready.")} /> : null}
@@ -213,10 +224,11 @@ interface RepositorySectionProps {
   dossierContent: string;
   onDossierKindChange: (kind: DossierKind) => void;
   onSelectWorktree: (worktree: WorktreeRow) => void;
-  onRunStart: (input: StartWorktreeInput) => void;
-  onRunDispatch: (input: DispatchInput) => void;
-  onRunHandoff: (input: HandoffInput) => void;
-  onRunFinish: (worktree: WorktreeRow, progress: string) => void;
+  onRunStart: (input: StartWorktreeInput) => Promise<CommandResult>;
+  onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
+  onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
+  onRunFinish: (worktree: WorktreeRow, progress: string) => Promise<CommandResult>;
+  onViewMetadata: () => void;
 }
 
 function RepositorySection({
@@ -234,17 +246,20 @@ function RepositorySection({
   onRunDispatch,
   onRunHandoff,
   onRunFinish,
+  onViewMetadata,
 }: RepositorySectionProps) {
-  if (activeTab === "health") {
-    return (
-      <section className="tab-panel">
-        <HealthPanel state={state} />
-      </section>
-    );
-  }
-
-  if (activeTab === "metadata") {
-    return (
+  return (
+    <div className="repository-tab-stack">
+      <div hidden={activeTab !== "code"}>
+        <CodePanel
+          api={api}
+          state={state}
+          selected={selected}
+          onSelectWorktree={onSelectWorktree}
+          onViewMetadata={onViewMetadata}
+        />
+      </div>
+      <div hidden={activeTab !== "metadata"}>
       <MetadataPanel
         state={state}
         readonly={readonly}
@@ -259,16 +274,13 @@ function RepositorySection({
         onRunHandoff={onRunHandoff}
         onRunFinish={onRunFinish}
       />
-    );
-  }
-
-  return (
-    <CodePanel
-      api={api}
-      state={state}
-      selected={selected}
-      onSelectWorktree={onSelectWorktree}
-    />
+      </div>
+      <div hidden={activeTab !== "health"}>
+        <section className="tab-panel">
+          <HealthPanel state={state} />
+        </section>
+      </div>
+    </div>
   );
 }
 

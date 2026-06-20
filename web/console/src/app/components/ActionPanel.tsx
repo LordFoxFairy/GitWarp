@@ -2,12 +2,13 @@ import { useState, type FormEvent } from "react";
 import { Button, Select, Textarea, TextInput } from "@primer/react";
 import { RepoForkedIcon, RocketIcon } from "@primer/octicons-react";
 import type { DispatchInput, StartWorktreeInput } from "../gitwarp-api";
+import type { CommandResult } from "../types";
 
 interface ActionPanelProps {
   readonly: boolean;
   busy: boolean;
-  onStart: (input: StartWorktreeInput) => void;
-  onDispatch: (input: DispatchInput) => void;
+  onStart: (input: StartWorktreeInput) => Promise<CommandResult>;
+  onDispatch: (input: DispatchInput) => Promise<CommandResult>;
 }
 
 type ActionMode = "create" | "launch" | null;
@@ -35,31 +36,39 @@ function instructionOptions(form: HTMLFormElement): Pick<StartWorktreeInput, "in
 export function ActionPanel({ readonly, busy, onStart, onDispatch }: ActionPanelProps) {
   const [mode, setMode] = useState<ActionMode>(null);
 
-  const submitStart = (event: FormEvent<HTMLFormElement>) => {
+  const submitStart = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
-    onStart({
-      agent_id: value(form, "agent_id"),
-      branch: value(form, "branch"),
-      purpose: value(form, "purpose"),
-      ...instructionOptions(form),
-    });
-    form.reset();
-    setMode(null);
+    try {
+      await onStart({
+        agent_id: value(form, "agent_id"),
+        branch: value(form, "branch"),
+        purpose: value(form, "purpose"),
+        ...instructionOptions(form),
+      });
+      form.reset();
+      setMode(null);
+    } catch {
+      // Keep the form open so branch collisions or validation errors can be corrected.
+    }
   };
 
-  const submitDispatch = (event: FormEvent<HTMLFormElement>) => {
+  const submitDispatch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const agent = value(form, "agent") === "claude" ? "claude" : "codex";
-    onDispatch({
-      agent,
-      branch: value(form, "branch"),
-      purpose: value(form, "purpose"),
-      ...instructionOptions(form),
-    });
-    form.reset();
-    setMode(null);
+    try {
+      await onDispatch({
+        agent,
+        branch: value(form, "branch"),
+        purpose: value(form, "purpose"),
+        ...instructionOptions(form),
+      });
+      form.reset();
+      setMode(null);
+    } catch {
+      // Keep the form open so branch collisions or validation errors can be corrected.
+    }
   };
 
   return (

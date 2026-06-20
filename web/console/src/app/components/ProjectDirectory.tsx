@@ -19,14 +19,23 @@ export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDi
         <span className="muted-hint">Open a project to manage its worktrees and Git state.</span>
       </div>
 
-      <div className="repo-list">
+      <div className="repo-list" role="table" aria-label="Managed repositories">
         {projects.length === 0 ? (
           <article className="panel project-card empty">
             <h3>{loading ? "Loading projects" : "No repositories found"}</h3>
             <p>{loading ? "Reading GitWarp state..." : "Start GitWarp from a repository to manage its worktrees."}</p>
           </article>
         ) : (
-          projects.map((project) => <ProjectCard key={project.id} project={project} onOpenProject={onOpenProject} />)
+          <>
+            <div className="repo-list-header" role="row">
+              <span role="columnheader">Repository</span>
+              <span role="columnheader">Worktrees</span>
+              <span role="columnheader">Agents</span>
+              <span role="columnheader">Health</span>
+              <span role="columnheader" aria-label="Actions" />
+            </div>
+            {projects.map((project) => <ProjectCard key={project.id} project={project} onOpenProject={onOpenProject} />)}
+          </>
         )}
       </div>
     </section>
@@ -36,7 +45,7 @@ export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDi
 function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOpenProject: (project: ProjectSummary) => void }) {
   const findings = project.doctor_finding_count + project.reconcile_finding_count;
   return (
-    <article className="repo-list-row">
+    <article className="repo-list-row" role="row">
       <div className="repo-list-main">
         <div>
           <h3>
@@ -48,13 +57,9 @@ function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOp
         <Label variant={project.readonly ? "secondary" : "success"}>{project.readonly ? "read-only" : "writable"}</Label>
       </div>
 
-      <div className="repo-list-meta" aria-label={`${project.name} summary`}>
-        <span className="statusline-banner">{project.statusline}</span>
-        <Metric label="Worktrees" value={project.worktree_count} />
-        <Metric label="Active" value={project.active_worktree_count} />
-        <Metric label="Agents" value={project.assigned_agent_count} />
-        <Metric label="Findings" value={findings} tone={findings > 0 ? "warning" : "ok"} />
-      </div>
+      <Metric label="Worktrees" value={project.worktree_count} detail={`${project.active_worktree_count} active`} />
+      <Metric label="Agents" value={project.assigned_agent_count} detail="assigned" />
+      <Metric label="Health" value={findings} detail={findings > 0 ? "findings" : "clean"} tone={findings > 0 ? "warning" : "ok"} />
 
       <Button variant="primary" type="button" leadingVisual={GitBranchIcon} onClick={() => onOpenProject(project)}>
         Open Project
@@ -63,11 +68,12 @@ function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOp
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: number; tone?: "ok" | "warning" }) {
+function Metric({ label, value, detail, tone }: { label: string; value: number; detail: string; tone?: "ok" | "warning" }) {
   return (
     <div className={tone ? `metric ${tone}` : "metric"}>
       <dt>{label}</dt>
       <dd>{value}</dd>
+      <span>{detail}</span>
     </div>
   );
 }

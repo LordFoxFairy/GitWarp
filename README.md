@@ -72,6 +72,8 @@ gitwarp statusline
 gitwarp enter
 ```
 
+`statusline` is the low-noise automatic anchor for prompts and hooks. Run `enter` manually only when an agent needs the full dossier pointers and snippets.
+
 Create a sandbox:
 
 ```bash
@@ -154,7 +156,7 @@ gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub-like Project Directory; open a repository to use a Code tab for tracked files at the selected worktree `HEAD`, a Metadata tab for task/progress/lessons and agent actions, and a Health tab for doctor/reconcile findings.
+`board` shows active sandboxes. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a worktree from the dropdown, then use Code for tracked files at that worktree `HEAD`, Metadata for task/progress/lessons plus agent actions, and Health for doctor/reconcile findings.
 
 ### Automated Agent
 
@@ -168,6 +170,7 @@ gitwarp handoff --status implementing --progress "Short milestone"
 ```
 
 `statusline` prints an unquoted banner such as `GITWARP[main-repo]` or `GITWARP[codex-alpha@feature/my-task]` for shell prompts and downstream model context.
+Session hooks should not print full `enter` output by default; they should inject the banner and remind the agent that `enter` is available when full context is needed.
 
 ### Existing Worktree
 

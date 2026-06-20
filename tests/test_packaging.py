@@ -317,6 +317,34 @@ class PluginStructureTests(unittest.TestCase):
                 self.assertTrue((REPO_ROOT / relative_path).is_file())
         self.assertTrue((REPO_ROOT / "plugins" / "gitwarp").is_symlink())
 
+    def test_web_source_encodes_github_like_worktree_experience(self) -> None:
+        app = (REPO_ROOT / "web" / "console" / "src" / "app" / "App.tsx").read_text(encoding="utf-8")
+        code_panel = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "CodePanel.tsx").read_text(encoding="utf-8")
+        action_panel = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "ActionPanel.tsx").read_text(encoding="utf-8")
+        tabs = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "RepositoryTabs.tsx").read_text(encoding="utf-8")
+        picker = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "WorktreePicker.tsx").read_text(encoding="utf-8")
+
+        self.assertIn('setActiveTab("metadata")', app)
+        self.assertIn("setSelectedWorktreePath(String(result.path))", app)
+        self.assertIn("repository-content-grid", code_panel)
+        self.assertIn("repo-about", code_panel)
+        self.assertIn("View metadata", code_panel)
+        self.assertIn("FileViewer", code_panel)
+        self.assertIn("Repository file viewer", code_panel)
+        self.assertIn("Back to directory", code_panel)
+        self.assertIn("repository-tab-stack", app)
+        self.assertIn('hidden={activeTab !== "code"}', app)
+        self.assertIn('hidden={activeTab !== "metadata"}', app)
+        self.assertIn('hidden={activeTab !== "health"}', app)
+        self.assertIn("async (event", action_panel)
+        self.assertIn("await onStart", action_panel)
+        self.assertIn("await onDispatch", action_panel)
+        self.assertIn('aria-current={tab.id === activeTab ? "page" : undefined}', tabs)
+        self.assertLess(
+            picker.index("worktrees.find((worktree) => worktree.is_main)"),
+            picker.index("worktrees.find((worktree) => !worktree.is_main)"),
+        )
+
     def test_release_gate_runs_required_checks(self) -> None:
         gate = (REPO_ROOT / "scripts" / "check-release.sh").read_text(encoding="utf-8")
         workflow = (REPO_ROOT / ".github" / "workflows" / "check.yml").read_text(encoding="utf-8")

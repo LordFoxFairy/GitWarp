@@ -30,7 +30,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 
 `start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `create`, `switch`, and `remove` unless you specifically need a rendered launch command from `dispatch`.
 
-The Web Console is for human supervision: the Code tab browses tracked files at the selected worktree `HEAD`, the Metadata tab shows dossiers and agent actions, and the Health tab shows doctor/reconcile findings.
+The Web Console is for human supervision: open a project, choose a worktree from the dropdown, browse tracked files in Code, inspect the same worktree's task/progress/lessons in Metadata, and review doctor/reconcile findings in Health.
 
 ## Agent Workflow
 
@@ -41,6 +41,8 @@ gitwarp init
 gitwarp statusline
 gitwarp enter
 ```
+
+Use `statusline` for automatic prompt hooks. Use `enter` manually when full dossier context is needed; do not wire full `enter` output into every session start.
 
 If work requires edits and you are in the main checkout:
 

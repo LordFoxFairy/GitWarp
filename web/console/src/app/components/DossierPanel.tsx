@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Button, TextInput } from "@primer/react";
 import { CheckCircleIcon } from "@primer/octicons-react";
 import type { HandoffInput } from "../gitwarp-api";
-import type { DossierKind, WorktreeRow } from "../types";
+import type { CommandResult, DossierKind, WorktreeRow } from "../types";
 
 interface DossierPanelProps {
   readonly: boolean;
@@ -11,8 +11,8 @@ interface DossierPanelProps {
   dossierKind: DossierKind;
   dossierContent: string;
   onDossierKindChange: (kind: DossierKind) => void;
-  onHandoff: (input: HandoffInput) => void;
-  onFinish: (worktree: WorktreeRow, progress: string) => void;
+  onHandoff: (input: HandoffInput) => Promise<CommandResult>;
+  onFinish: (worktree: WorktreeRow, progress: string) => Promise<CommandResult>;
 }
 
 function value(form: HTMLFormElement, name: string): string {
@@ -31,9 +31,9 @@ export function DossierPanel({
 }: DossierPanelProps) {
   const finish = (progress: string) => {
     if (!selected) {
-      return;
+      return Promise.resolve({ ok: false });
     }
-    onFinish(selected, progress);
+    return onFinish(selected, progress);
   };
 
   return (
@@ -88,8 +88,8 @@ function WorktreeActions({
   readonly: boolean;
   busy: boolean;
   worktree: WorktreeRow;
-  onHandoff: (input: HandoffInput) => void;
-  onFinish: (progress: string) => void;
+  onHandoff: (input: HandoffInput) => Promise<CommandResult>;
+  onFinish: (progress: string) => Promise<CommandResult>;
 }) {
   const [showFinish, setShowFinish] = useState(false);
   const [finalProgress, setFinalProgress] = useState("Verified and ready to collapse");
@@ -103,29 +103,37 @@ function WorktreeActions({
     setConfirmation("");
   }, [worktree.path]);
 
-  const submitHandoff = (event: FormEvent<HTMLFormElement>) => {
+  const submitHandoff = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy) {
       return;
     }
     const form = event.currentTarget;
     const lesson = value(form, "lesson");
-    onHandoff({
-      cwd: worktree.path,
-      status: value(form, "status"),
-      progress: value(form, "progress"),
-      ...(lesson ? { lesson } : {}),
-    });
-    form.reset();
+    try {
+      await onHandoff({
+        cwd: worktree.path,
+        status: value(form, "status"),
+        progress: value(form, "progress"),
+        ...(lesson ? { lesson } : {}),
+      });
+      form.reset();
+    } catch {
+      // Keep handoff text available when the command fails.
+    }
   };
 
-  const submitFinish = (event: FormEvent<HTMLFormElement>) => {
+  const submitFinish = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!finishAllowed || busy) {
       return;
     }
-    onFinish(finalProgress.trim());
-    setShowFinish(false);
+    try {
+      await onFinish(finalProgress.trim());
+      setShowFinish(false);
+    } catch {
+      // Keep destructive confirmation visible when the command fails.
+    }
   };
 
   return (

@@ -236,13 +236,26 @@ h2 {
   background: var(--surface);
 }
 
-.repo-list-row {
+.repo-list-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 120px 100px 120px 160px;
   gap: 16px;
   align-items: center;
   border-bottom: 1px solid var(--line);
-  padding: 18px;
+  padding: 9px 18px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.repo-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 100px 120px 160px;
+  gap: 16px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  padding: 14px 18px;
   background: var(--surface);
 }
 
@@ -252,7 +265,7 @@ h2 {
 
 .repo-list-row > button {
   justify-self: end;
-  min-width: 180px;
+  min-width: 150px;
 }
 
 .repo-list-row:hover {
@@ -325,10 +338,10 @@ h2 {
 
 .metric {
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 5px 8px;
-  background: var(--surface-muted);
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
 }
 
 .metric.warning {
@@ -349,15 +362,22 @@ h2 {
 }
 
 .metric dd {
-  display: inline;
-  margin: 0 0 0 4px;
+  display: block;
+  margin: 2px 0 0;
+  color: var(--ink);
   font-weight: 700;
 }
 
 .metric dt {
-  display: inline;
+  display: block;
   letter-spacing: normal;
   text-transform: none;
+}
+
+.metric span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .repo-tabs {
@@ -435,10 +455,9 @@ h2 {
 
 .workspace-switcher {
   display: grid;
-  grid-template-columns: minmax(320px, 560px);
+  grid-template-columns: minmax(260px, 420px);
   gap: 12px;
   align-items: end;
-  margin-bottom: 18px;
 }
 
 .workspace-switcher label {
@@ -457,6 +476,105 @@ h2 {
   grid-template-columns: minmax(0, 1fr) minmax(360px, 42%);
   gap: 20px;
   align-items: start;
+}
+
+.repository-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.repository-main-column {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.repo-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.repo-toolbar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.code-browser {
+  padding: 0;
+}
+
+.code-browser-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 12px 14px;
+  background: var(--surface-muted);
+}
+
+.commit-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.commit-strip strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.repo-about {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.about-purpose {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.about-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.about-list div {
+  min-width: 0;
+}
+
+.about-list dt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.about-list dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
 }
 
 .workspace-main,
@@ -598,11 +716,10 @@ legend {
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 8px 10px;
-  background: var(--surface-muted);
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+  background: var(--surface);
   font-size: 13px;
 }
 
@@ -621,8 +738,8 @@ legend {
 
 .file-list {
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
   background: var(--surface);
 }
 
@@ -667,20 +784,51 @@ legend {
 }
 
 .file-preview {
-  position: sticky;
-  top: 16px;
+  padding: 0;
+}
+
+.file-viewer {
+  display: grid;
+}
+
+.file-viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+  background: var(--surface-muted);
+}
+
+.file-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.file-preview .panel-title {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+  background: var(--surface-muted);
+}
+
+.file-preview > .empty-state {
+  padding: 14px;
 }
 
 .file-readout {
-  min-height: 460px;
-  max-height: 720px;
+  min-height: 320px;
+  max-height: 620px;
   margin: 0;
   overflow: auto;
-  border: 1px solid #30363d;
-  border-radius: var(--radius);
-  padding: 12px;
-  background: #0d1117;
-  color: #f0f6fc;
+  border: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 14px;
+  background: var(--surface);
+  color: var(--ink);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.55;
@@ -768,12 +916,14 @@ legend {
 @media (max-width: 1180px) {
   .workspace-switcher,
   .workspace-grid,
-  .code-browser-grid {
+  .code-browser-grid,
+  .repository-content-grid {
     grid-template-columns: 1fr;
   }
 
   .dossier-panel,
-  .file-preview {
+  .file-preview,
+  .repo-about {
     position: static;
   }
 }
@@ -815,8 +965,17 @@ legend {
     padding: 18px 14px;
   }
 
+  .repo-list-header {
+    display: none;
+  }
+
   .repo-list-row {
     grid-template-columns: 1fr;
+  }
+
+  .file-viewer-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .repo-list-row > button {

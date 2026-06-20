@@ -1,6 +1,6 @@
 import { Label } from "@primer/react";
 import type { DispatchInput, HandoffInput, StartWorktreeInput } from "../gitwarp-api";
-import type { DossierKind, WebState, WorktreeRow } from "../types";
+import type { CommandResult, DossierKind, WebState, WorktreeRow } from "../types";
 import { ActionPanel } from "./ActionPanel";
 import { DossierPanel } from "./DossierPanel";
 import { WorktreePicker, defaultWorktree } from "./WorktreePicker";
@@ -14,10 +14,10 @@ interface MetadataPanelProps {
   dossierContent: string;
   onSelectWorktree: (worktree: WorktreeRow) => void;
   onDossierKindChange: (kind: DossierKind) => void;
-  onRunStart: (input: StartWorktreeInput) => void;
-  onRunDispatch: (input: DispatchInput) => void;
-  onRunHandoff: (input: HandoffInput) => void;
-  onRunFinish: (worktree: WorktreeRow, progress: string) => void;
+  onRunStart: (input: StartWorktreeInput) => Promise<CommandResult>;
+  onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
+  onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
+  onRunFinish: (worktree: WorktreeRow, progress: string) => Promise<CommandResult>;
 }
 
 export function MetadataPanel({

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Label } from "@primer/react";
-import { FileDirectoryIcon, FileIcon } from "@primer/octicons-react";
+import { FileDirectoryIcon, FileIcon, GitBranchIcon, RepoIcon } from "@primer/octicons-react";
 import type { GitWarpApi } from "../gitwarp-api";
 import type { RepositoryFilePayload, RepositoryTreeEntry, RepositoryTreePayload, WebState, WorktreeRow } from "../types";
 import { WorktreePicker, defaultWorktree } from "./WorktreePicker";
@@ -10,9 +10,10 @@ interface CodePanelProps {
   state: WebState | null;
   selected: WorktreeRow | null;
   onSelectWorktree: (worktree: WorktreeRow) => void;
+  onViewMetadata: () => void;
 }
 
-export function CodePanel({ api, state, selected, onSelectWorktree }: CodePanelProps) {
+export function CodePanel({ api, state, selected, onSelectWorktree, onViewMetadata }: CodePanelProps) {
   const worktrees = state?.worktrees ?? [];
   const selectedWorktree = selected && worktrees.some((worktree) => worktree.path === selected.path) ? selected : defaultWorktree(worktrees);
   const [currentPath, setCurrentPath] = useState("");
@@ -92,29 +93,108 @@ export function CodePanel({ api, state, selected, onSelectWorktree }: CodePanelP
 
   return (
     <section className="tab-panel code-console" aria-label="Repository code browser" aria-busy={loading}>
-      <WorktreePicker worktrees={worktrees} selected={selectedWorktree} onSelectWorktree={onSelectWorktree} />
-
-      <div className="code-browser-grid">
-        <div className="panel code-browser">
-          <div className="panel-title row">
-            <div>
-              <span>Code</span>
-              <h2>{selectedWorktree?.branch || "Repository files"}</h2>
-              <p className="subtle">{tree?.commit ? `HEAD ${tree.commit.slice(0, 7)}` : "Browse tracked files at the selected worktree HEAD."}</p>
+      <div className="repository-content-grid">
+        <div className="repository-main-column">
+          <div className="repo-toolbar" aria-label="Worktree selection">
+            <WorktreePicker worktrees={worktrees} selected={selectedWorktree} onSelectWorktree={onSelectWorktree} />
+            <div className="repo-toolbar-status">
+              <Label variant={selectedWorktree?.is_main ? "secondary" : "accent"}>
+                {selectedWorktree?.is_main ? "main checkout" : selectedWorktree?.status || "active"}
+              </Label>
+              <span>{selectedWorktree?.agent_id || "unassigned agent"}</span>
             </div>
-            <Label variant="secondary">{loading ? "loading" : `${tree?.entries.length ?? 0} items`}</Label>
           </div>
 
-          <Breadcrumbs tree={tree} onOpenPath={openDirectory} />
+          <div className="panel code-browser">
+            <div className="code-browser-head">
+              <div className="commit-strip">
+                <RepoIcon size={16} />
+                <strong>{selectedWorktree?.branch || "Repository files"}</strong>
+                <span>{tree?.commit ? `HEAD ${tree.commit.slice(0, 7)}` : "Tracked files at selected HEAD"}</span>
+              </div>
+              <Label variant="secondary">{loading ? "loading" : `${tree?.entries.length ?? 0} items`}</Label>
+            </div>
 
-          {loading ? <p className="status-note" role="status">Loading repository contents...</p> : null}
-          {error ? <p className="inline-error" role="alert">{error}</p> : null}
-          <FileList entries={tree?.entries ?? []} loading={loading} onOpenDirectory={openDirectory} onOpenFile={openFile} />
+            {loading ? <p className="status-note" role="status">Loading repository contents...</p> : null}
+            {error ? <p className="inline-error" role="alert">{error}</p> : null}
+            {file ? (
+              <FileViewer file={file} tree={tree} onBackToDirectory={() => setFile(null)} onOpenPath={openDirectory} />
+            ) : (
+              <>
+                <Breadcrumbs tree={tree} onOpenPath={openDirectory} />
+                <FileList entries={tree?.entries ?? []} loading={loading} onOpenDirectory={openDirectory} onOpenFile={openFile} />
+              </>
+            )}
+          </div>
         </div>
 
-        <FilePreview file={file} />
+        <WorktreeAbout worktree={selectedWorktree} tree={tree} onViewMetadata={onViewMetadata} />
       </div>
     </section>
+  );
+}
+
+function WorktreeAbout({
+  worktree,
+  tree,
+  onViewMetadata,
+}: {
+  worktree: WorktreeRow | null;
+  tree: RepositoryTreePayload | null;
+  onViewMetadata: () => void;
+}) {
+  if (!worktree) {
+    return (
+      <aside className="repo-about panel" aria-label="Worktree about">
+        <div className="panel-title">
+          <span>About</span>
+          <h2>No worktree selected</h2>
+        </div>
+        <p className="empty-state">Create or select a worktree to view its agent, purpose, and progress.</p>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="repo-about panel" aria-label="Worktree about">
+      <div className="panel-title">
+        <span>About</span>
+        <h2>{worktree.is_main ? "Main repository" : "Isolated sandbox"}</h2>
+      </div>
+      <p className="about-purpose">{worktree.purpose || (worktree.is_main ? "Public checkout for coordination and review." : "No purpose recorded.")}</p>
+      <dl className="about-list">
+        <div>
+          <dt>
+            <GitBranchIcon size={14} /> Worktree
+          </dt>
+          <dd>{worktree.branch || "unknown"}</dd>
+        </div>
+        <div>
+          <dt>Agent</dt>
+          <dd>{worktree.agent_id || "unassigned"}</dd>
+        </div>
+        <div>
+          <dt>Progress</dt>
+          <dd>{worktree.latest_progress || "No progress recorded."}</dd>
+        </div>
+        <div>
+          <dt>Commit</dt>
+          <dd>{tree?.commit ? tree.commit.slice(0, 12) : worktree.commit?.slice(0, 12) || "unknown"}</dd>
+        </div>
+        <div>
+          <dt>Path</dt>
+          <dd>{worktree.path}</dd>
+        </div>
+      </dl>
+      {!worktree.is_main ? (
+        <p className="form-hint">Use the Metadata tab for task.md, progress.md, lessons.md, handoff, and finish actions.</p>
+      ) : (
+        <p className="form-hint">Use Create Sandbox from Metadata before making isolated or concurrent edits.</p>
+      )}
+      <Button type="button" onClick={onViewMetadata}>
+        View metadata
+      </Button>
+    </aside>
   );
 }
 
@@ -130,6 +210,37 @@ function Breadcrumbs({ tree, onOpenPath }: { tree: RepositoryTreePayload | null;
           </button>
         </span>
       ))}
+    </nav>
+  );
+}
+
+function FileBreadcrumbs({
+  file,
+  tree,
+  onOpenPath,
+}: {
+  file: RepositoryFilePayload;
+  tree: RepositoryTreePayload | null;
+  onOpenPath: (path: string) => void;
+}) {
+  const breadcrumbs = [...(tree?.breadcrumbs ?? [{ name: "root", path: "" }]), { name: file.name, path: file.path }];
+  return (
+    <nav className="repo-breadcrumbs" aria-label="Repository file path">
+      {breadcrumbs.map((crumb, index) => {
+        const isFile = index === breadcrumbs.length - 1;
+        return (
+          <span key={`${crumb.path}:${index}`}>
+            {index > 0 ? <span className="breadcrumb-separator">/</span> : null}
+            {isFile ? (
+              <strong>{crumb.name}</strong>
+            ) : (
+              <button type="button" onClick={() => onOpenPath(crumb.path)}>
+                {crumb.name}
+              </button>
+            )}
+          </span>
+        );
+      })}
     </nav>
   );
 }
@@ -172,31 +283,34 @@ function FileList({
   );
 }
 
-function FilePreview({ file }: { file: RepositoryFilePayload | null }) {
-  if (!file) {
-    return (
-      <aside className="panel file-preview" aria-label="File preview">
-        <div className="panel-title">
-          <span>Preview</span>
-          <h2>Select a file</h2>
-        </div>
-        <p className="empty-state">Open a file from the Code tab to inspect its committed contents.</p>
-      </aside>
-    );
-  }
-
+function FileViewer({
+  file,
+  tree,
+  onBackToDirectory,
+  onOpenPath,
+}: {
+  file: RepositoryFilePayload;
+  tree: RepositoryTreePayload | null;
+  onBackToDirectory: () => void;
+  onOpenPath: (path: string) => void;
+}) {
   const isText = file.encoding === "utf-8";
   return (
-    <aside className="panel file-preview" aria-label="File preview">
-      <div className="panel-title row">
+    <section className="file-viewer" aria-label="Repository file viewer">
+      <FileBreadcrumbs file={file} tree={tree} onOpenPath={onOpenPath} />
+      <div className="file-viewer-head">
         <div>
-          <span>Preview</span>
           <h2>{file.name}</h2>
           <p className="subtle">
             {formatBytes(file.size)} {file.truncated ? "· truncated" : ""}
           </p>
         </div>
-        <Label variant={isText ? "success" : "attention"}>{file.encoding}</Label>
+        <div className="file-viewer-actions">
+          <Label variant={isText ? "success" : "attention"}>{file.encoding}</Label>
+          <Button type="button" onClick={onBackToDirectory}>
+            Back to directory
+          </Button>
+        </div>
       </div>
       {isText ? (
         <pre className="file-readout">
@@ -205,7 +319,7 @@ function FilePreview({ file }: { file: RepositoryFilePayload | null }) {
       ) : (
         <p className="empty-state">Binary content is not rendered inline. The API returns a base64 preview for automation.</p>
       )}
-    </aside>
+    </section>
   );
 }
 

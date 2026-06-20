@@ -23,6 +23,7 @@ export function RepositoryTabs({ activeTab, onTabChange }: RepositoryTabsProps) 
           className={`repo-tab ${tab.id === activeTab ? "active" : ""}`}
           type="button"
           leadingVisual={tab.icon}
+          aria-current={tab.id === activeTab ? "page" : undefined}
           onClick={() => onTabChange(tab.id)}
         >
           {tab.label}

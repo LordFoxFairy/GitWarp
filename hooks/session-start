@@ -29,7 +29,7 @@ escape_for_json() {
 }
 
 context="GitWarp: ${gitwarp_banner:-unavailable. Run gitwarp init, then gitwarp doctor.}
-Use gitwarp create for isolated edits, gitwarp switch for existing sandboxes, and gitwarp enter for full dossier context."
+Use gitwarp create for isolated edits, gitwarp switch for existing sandboxes, and run gitwarp enter only when full dossier context is needed."
 if [[ "${#diagnostics[@]}" -gt 0 ]]; then
   context="${context}
 
