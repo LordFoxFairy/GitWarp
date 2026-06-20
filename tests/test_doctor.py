@@ -289,6 +289,7 @@ class DoctorTests(GitWarpTestCase):
         configs = hook_findings[0]["details"]["configs"]  # type: ignore[index]
         self.assertTrue(configs["default"]["ok"])  # type: ignore[index]
         self.assertTrue(configs["codex"]["ok"])  # type: ignore[index]
+        self.assertTrue(hook_findings[0]["details"]["has_install_guard"])  # type: ignore[index]
 
     def test_codex_plugin_cache_check_detects_stale_installed_hook_cache(self) -> None:
         ensure_src_path()
@@ -351,6 +352,7 @@ class DoctorTests(GitWarpTestCase):
         (source_repo / ".agents" / "plugins" / "api_marketplace.json").write_text("{}\n", encoding="utf-8")
         (source_repo / "hooks").mkdir()
         (source_repo / "hooks" / "session-start-codex").write_text(
+            'if ! command -v gitwarp >/dev/null 2>&1; then python3 skills/gitwarp/scripts/install_cli.py; fi\n'
             'gitwarp statusline --cwd "$PWD"\nGitWarp:\ngitwarp enter\nDiagnostics:\n',
             encoding="utf-8",
         )
@@ -396,6 +398,7 @@ class DoctorTests(GitWarpTestCase):
             text=True,
         )
         (source_repo / "hooks" / "session-start-codex").write_text(
+            'if ! command -v gitwarp >/dev/null 2>&1; then python3 skills/gitwarp/scripts/install_cli.py; fi\n'
             'gitwarp statusline --cwd "$PWD"\nGitWarp:\ngitwarp enter\nDiagnostics:\n',
             encoding="utf-8",
         )

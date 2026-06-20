@@ -6,8 +6,10 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 export PATH="${HOME}/.local/bin:${PATH:-}"
 
 diagnostics=()
-if ! install_output="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/install_cli.py" 2>&1)"; then
-  diagnostics+=("install_cli failed: ${install_output}")
+if ! command -v gitwarp >/dev/null 2>&1; then
+  if ! install_output="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/install_cli.py" 2>&1)"; then
+    diagnostics+=("install_cli failed: ${install_output}")
+  fi
 fi
 
 gitwarp_banner=""

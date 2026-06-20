@@ -253,6 +253,7 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("Diagnostics:", session_hook)
         self.assertIn("gitwarp statusline --cwd", session_hook)
         self.assertIn("gitwarp enter", session_hook)
+        self.assertIn("if ! command -v gitwarp", session_hook)
         self.assertIn("leave it intact after verification", session_hook)
         self.assertIn("push, merge, remove, or collapse", session_hook)
         self.assertNotIn("Agent protocol:", session_hook)
