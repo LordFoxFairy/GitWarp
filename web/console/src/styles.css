@@ -826,12 +826,52 @@ legend {
   overflow: auto;
   border: 0;
   border-radius: 0 0 var(--radius) var(--radius);
-  padding: 14px;
   background: var(--surface);
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.code-lines {
+  display: grid;
+  align-content: start;
+}
+
+.code-line {
+  display: grid;
+  grid-template-columns: 58px minmax(max-content, 1fr);
+  min-width: 100%;
+}
+
+.code-line:hover {
+  background: var(--surface-muted);
+}
+
+.line-number {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  border-right: 1px solid var(--line);
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
+.code-line:hover .line-number {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+
+.line-content {
+  display: block;
+  min-height: 1.55em;
+  padding: 0 14px;
+  color: var(--ink);
+  font: inherit;
   white-space: pre;
 }
 

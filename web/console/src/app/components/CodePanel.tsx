@@ -295,6 +295,7 @@ function FileViewer({
   onOpenPath: (path: string) => void;
 }) {
   const isText = file.encoding === "utf-8";
+  const lines = splitFileLines(file.content);
   return (
     <section className="file-viewer" aria-label="Repository file viewer">
       <FileBreadcrumbs file={file} tree={tree} onOpenPath={onOpenPath} />
@@ -306,6 +307,7 @@ function FileViewer({
           </p>
         </div>
         <div className="file-viewer-actions">
+          {isText ? <Label variant="secondary">{formatLineCount(lines.length)}</Label> : null}
           <Label variant={isText ? "success" : "attention"}>{file.encoding}</Label>
           <Button type="button" onClick={onBackToDirectory}>
             Back to directory
@@ -313,14 +315,38 @@ function FileViewer({
         </div>
       </div>
       {isText ? (
-        <pre className="file-readout">
-          <code>{file.content}</code>
-        </pre>
+        <div className="file-readout code-lines" role="table" aria-label={`${file.name} contents with line numbers`}>
+          {lines.map((line, index) => (
+            <div className="code-line" role="row" key={`${file.path}:${index}`}>
+              <span className="line-number" role="rowheader" aria-label={`Line ${index + 1}`}>
+                {index + 1}
+              </span>
+              <code className="line-content" role="cell">
+                {line}
+              </code>
+            </div>
+          ))}
+        </div>
       ) : (
         <p className="empty-state">Binary content is not rendered inline. The API returns a base64 preview for automation.</p>
       )}
     </section>
   );
+}
+
+function splitFileLines(content: string) {
+  if (content.length === 0) {
+    return [""];
+  }
+  const lines = content.split("\n");
+  if (lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines;
+}
+
+function formatLineCount(lines: number) {
+  return lines === 1 ? "1 line" : `${lines} lines`;
 }
 
 function formatBytes(bytes: number) {
