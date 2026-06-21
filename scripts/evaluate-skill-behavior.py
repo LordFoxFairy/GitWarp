@@ -100,12 +100,27 @@ def scenario_plugin_prompt_matches_skill() -> list[str]:
     return [item for item in checks if item]
 
 
+def scenario_skill_preserves_engineering_discipline() -> list[str]:
+    skill = read("skills/gitwarp/SKILL.md")
+    checks = [
+        require_contains(skill, "Session Startup Loop", "SKILL.md"),
+        require_contains(skill, "Read the dossier before editing", "SKILL.md"),
+        require_contains(skill, "Failure Pivot Rule", "SKILL.md"),
+        require_contains(skill, "Python and TypeScript Guardrails", "SKILL.md"),
+        require_contains(skill, "run the narrowest relevant checks first", "SKILL.md"),
+        require_contains(skill, "record the correction with `gitwarp handoff --lesson", "SKILL.md"),
+        require_contains(skill, "Handoff Standard", "SKILL.md"),
+    ]
+    return [item for item in checks if item]
+
+
 SCENARIOS: tuple[tuple[str, Callable[[], list[str]]], ...] = (
     ("new_task_prefers_task_create", scenario_new_task_prefers_task_create),
     ("existing_worktree_preserved", scenario_existing_worktree_preserved),
     ("merged_cleanup_requires_explicit_action", scenario_merged_cleanup_requires_explicit_action),
     ("session_hook_is_low_noise", scenario_session_hook_is_low_noise),
     ("plugin_prompt_matches_skill", scenario_plugin_prompt_matches_skill),
+    ("skill_preserves_engineering_discipline", scenario_skill_preserves_engineering_discipline),
 )
 
 

@@ -95,6 +95,16 @@ Use `statusline` for automatic prompt hooks. Use `matrix` when the agent needs t
 
 If `doctor` reports `gitwarp_launcher_capability`, run `gitwarp upgrade --check` to confirm drift, then run `gitwarp upgrade` only when the user or operator agrees to refresh the local launcher. Session hooks should not perform noisy repair loops.
 
+### Session Startup Loop
+
+At the start of substantial work:
+
+1. Confirm location with `pwd` and `gitwarp statusline`.
+2. Run `gitwarp matrix` or `gitwarp next` before creating, adopting, sweeping, or pruning anything.
+3. If inside a task sandbox, run `gitwarp enter` and read `task.md`, `progress.md`, and `lessons.md`. Read the dossier before editing.
+4. Check the repo's native dependency and smoke commands. For GitWarp itself, prefer `scripts/check-release.sh`; for narrower work, run the closest focused tests first.
+5. Work on one unfinished task at a time until its verification gate passes or it is marked blocked with `gitwarp pause`.
+
 If work requires edits and you are in the main checkout:
 
 ```bash
@@ -126,6 +136,23 @@ If blocked:
 gitwarp pause --reason "Waiting for credentials"
 gitwarp resume --progress "Credentials configured; continuing"
 ```
+
+### Python and TypeScript Guardrails
+
+When changing Python runtime code, preserve the DDD boundaries: `domain/` stays pure, `application/` orchestrates use cases, `infrastructure/` owns Git/filesystem/process adapters, and `adapters/` owns CLI/Web entrypoints. Do not add framework or subprocess details to domain code. Prefer Python standard library and small functions; avoid compatibility shims, deferred imports, `type: ignore`, broad `Any`, and speculative abstractions unless a boundary genuinely requires them.
+
+When changing Web Console TypeScript, keep API contracts explicit, validate unsafe payloads at the boundary, avoid `any`, and keep React changes aligned with the existing Primer/Vite structure. Do not manually duplicate backend contracts if a generated or shared contract path exists.
+
+For both stacks, run the narrowest relevant checks first, then the broader gate before claiming completion. If a check fails unexpectedly, stop and diagnose the cause before editing more code.
+
+### Failure Pivot Rule
+
+If a command, test, or assumption fails in an unexpected way:
+
+1. Stop the current implementation path.
+2. Re-read the relevant callers, exports, and shared helpers before patching.
+3. Update the plan or dossier with the new finding.
+4. If the failure came from user correction, record the correction with `gitwarp handoff --lesson "..."` so later agents do not repeat it.
 
 When verified, record the outcome and leave the sandbox for user review unless cleanup was explicitly requested:
 
@@ -175,6 +202,16 @@ gitwarp prune-branch --branch feature/old-merged-task
 ```
 
 `matrix` marks legacy and merged candidates but does not clean them. Unmanaged branch refs are classified against `main` by default and expose `managed_state`, `commit_state`, `cleanup_policy`, and `classification_basis` for agents and UI. `next` turns those candidates into an ordered action queue. `prune-branch` refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in the GitWarp ledger, and branches whose HEAD is not merged into the selected base. It deletes only the local Git ref; it does not delete worktrees or dossiers.
+
+## Handoff Standard
+
+Before pausing, handing off, or asking for review:
+
+- Record what changed with `gitwarp handoff --status <status> --progress "<summary>"`.
+- Add `--lesson` when the task revealed a reusable rule, pitfall, or user preference.
+- State the exact verification command that passed or the exact blocker that remains.
+- Leave assigned existing worktrees intact unless the user explicitly asked for push, merge, remove, collapse, sweep, or prune.
+- Keep the working tree free of unrelated untracked files; ignore or remove generated residue before final status.
 
 ## Instructions
 
