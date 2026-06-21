@@ -27,7 +27,7 @@
     ],
     "defaultPrompt": [
       "Run gitwarp statusline for a compact context anchor and gitwarp enter when full dossier context is needed.",
-      "For isolated work, create a GitWarp sandbox with gitwarp create, use gitwarp switch to navigate to it, and use gitwarp remove only when the sandbox is no longer needed.",
+      "For new isolated work, prefer gitwarp task create; use gitwarp create --role base only for long-lived user feature branches, and gitwarp switch for existing sandboxes.",
       "Inside a sandbox, inspect context and read task.md, progress.md, and lessons.md before editing."
     ]
   }

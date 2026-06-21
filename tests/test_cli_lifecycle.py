@@ -224,7 +224,7 @@ class CliLifecycleTests(GitWarpTestCase):
         main_enter = run_gitwarp(self.repo, "enter", "--cwd", str(self.repo))
         self.assertEqual(main_enter["location"], "main")
         self.assertEqual(main_enter["statusline"], "GITWARP[main-repo]")
-        self.assertIn("gitwarp create", " ".join(main_enter["recommended_next"]))  # type: ignore[arg-type]
+        self.assertIn("gitwarp task create", " ".join(main_enter["recommended_next"]))  # type: ignore[arg-type]
 
         start = run_gitwarp(
             self.repo,

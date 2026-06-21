@@ -54,7 +54,7 @@ The generated launcher runs `python -m gitwarp.adapters.cli.entrypoint` with the
 gitwarp --version
 gitwarp init
 gitwarp doctor
-gitwarp create --branch feature/check --purpose "Verify install"
+gitwarp task create --title "Verify install" --branch feature/check
 gitwarp switch --branch feature/check
 gitwarp remove --branch feature/check
 ```

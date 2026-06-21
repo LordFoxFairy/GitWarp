@@ -352,8 +352,18 @@ def session_hook_context_check(ctx: RepoContext) -> dict[str, Any]:
     has_enter_reference = "gitwarp enter" in text
     has_diagnostics = "Diagnostics:" in text
     has_install_guard = "if ! command -v gitwarp" in text
+    has_task_create_probe = "gitwarp task create --help" in text
     configs_ok = all(state["ok"] for state in config_states.values())
-    ok = executable and has_context and has_statusline and has_enter_reference and has_diagnostics and has_install_guard and configs_ok
+    ok = (
+        executable
+        and has_context
+        and has_statusline
+        and has_enter_reference
+        and has_diagnostics
+        and has_install_guard
+        and has_task_create_probe
+        and configs_ok
+    )
     return doctor_check(
         "session_hook_context",
         "ok" if ok else "warning",
@@ -366,5 +376,6 @@ def session_hook_context_check(ctx: RepoContext) -> dict[str, Any]:
         has_enter_reference=has_enter_reference,
         has_diagnostics=has_diagnostics,
         has_install_guard=has_install_guard,
+        has_task_create_probe=has_task_create_probe,
         configs=config_states,
     )

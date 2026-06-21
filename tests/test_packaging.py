@@ -258,12 +258,22 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("push, merge, remove, or collapse", session_hook)
         self.assertNotIn("Agent protocol:", session_hook)
         self.assertNotIn("Current GitWarp Context:", session_hook)
-        self.assertIn("gitwarp create", session_hook)
+        self.assertIn("gitwarp task create", session_hook)
+        self.assertIn("gitwarp task create --help", session_hook)
+        self.assertNotIn("Use gitwarp create for isolated edits", session_hook)
         self.assertIn("gitwarp switch", session_hook)
         self.assertTrue(codex_skill_link.is_symlink())
         self.assertTrue(claude_skill_link.is_symlink())
         self.assertEqual(codex_skill_link.resolve(), (REPO_ROOT / "skills" / "gitwarp").resolve())
         self.assertEqual(claude_skill_link.resolve(), (REPO_ROOT / "skills" / "gitwarp").resolve())
+
+    def test_codex_plugin_prompt_prefers_task_create(self) -> None:
+        plugin = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        prompt_text = "\n".join(plugin["interface"]["defaultPrompt"])
+
+        self.assertIn("gitwarp task create", prompt_text)
+        self.assertIn("gitwarp create --role base", prompt_text)
+        self.assertNotIn("with gitwarp create", prompt_text)
 
     def test_marketplace_uses_root_package_sources(self) -> None:
         relative_paths = [
@@ -283,6 +293,7 @@ class PluginStructureTests(unittest.TestCase):
             "skills/gitwarp/references/install.md",
             "skills/gitwarp/scripts/install_cli.py",
             "scripts/check-release.sh",
+            "scripts/evaluate-skill-behavior.py",
             "src/gitwarp/assets/web_console/index.html",
             "src/gitwarp/assets/web_console/app.css",
             "src/gitwarp/assets/web_console/app.js",
@@ -386,6 +397,7 @@ class PluginStructureTests(unittest.TestCase):
         for command in (
             "git diff --check",
             "python3 -m compileall",
+            "python3 scripts/evaluate-skill-behavior.py",
             "npm run check:dist",
             "python3 -m unittest discover",
         ):
@@ -412,3 +424,4 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("recommended_next", install_script)
         self.assertIn("GITWARP_BIN", verify_script)
         self.assertIn("~/.local/bin", verify_script)
+        self.assertIn("gitwarp task create --help", verify_script)

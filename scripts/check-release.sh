@@ -27,6 +27,8 @@ else
   printf '==> skip missing plugin validator: %s\n' "$PLUGIN_VALIDATOR"
 fi
 
+run python3 scripts/evaluate-skill-behavior.py
+
 (
   cd web/console
   if [[ ! -d node_modules ]]; then

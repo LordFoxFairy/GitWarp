@@ -90,7 +90,7 @@ def init_recommendations(ctx: RepoContext) -> list[str]:
     return [
         "gitwarp doctor",
         "gitwarp enter",
-        'gitwarp create --branch <branch> --purpose "<purpose>"',
+        'gitwarp task create --title "<title>" --description "<summary>"',
     ]
 
 

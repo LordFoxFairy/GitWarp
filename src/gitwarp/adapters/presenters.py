@@ -60,7 +60,7 @@ def enter_recommendations(ctx: RepoContext | None, cwd: Path, target: dict[str, 
         return [f"Move inside a live worktree for {ctx.repo_root} or run gitwarp scan."]
     if target.get("is_main"):
         return [
-            'Run gitwarp create --branch <branch> --purpose "<purpose>" before isolated work.',
+            'Run gitwarp task create --title "<title>" --description "<summary>" before isolated work.',
             "Run gitwarp switch --branch <branch> --format shell to print a cd command for an existing sandbox.",
             "Run gitwarp board to inspect active sandboxes.",
         ]

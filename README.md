@@ -302,6 +302,6 @@ scripts/check-release.sh
 scripts/verify-install.sh
 ```
 
-`scripts/check-release.sh` is the tracked release gate used by CI. It runs whitespace checks, Python compilation, optional installed skill/plugin validators, the Web Console dist drift check, and the Python regression suite. `npm run check:dist` builds React into a temporary directory and fails if the generated runtime assets differ from both `web/console/dist/` and `src/gitwarp/assets/web_console/`; use `npm run build` to intentionally regenerate them.
+`scripts/check-release.sh` is the tracked release gate used by CI. It runs whitespace checks, Python compilation, optional installed skill/plugin validators, deterministic skill behavior checks, the Web Console dist drift check, and the Python regression suite. `npm run check:dist` builds React into a temporary directory and fails if the generated runtime assets differ from both `web/console/dist/` and `src/gitwarp/assets/web_console/`; use `npm run build` to intentionally regenerate them.
 
 Keep runtime behavior in DDD subpackages under `src/gitwarp/`. Do not recreate `plugins/gitwarp/src`; `plugins/gitwarp` is a symlink for marketplace discovery, not a second source tree. Keep plugin metadata at the repository root and standard discovery links pointing at the canonical skill folder.

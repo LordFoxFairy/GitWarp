@@ -73,6 +73,8 @@ if [[ "$version" != "gitwarp 0.1.0" ]]; then
   exit 1
 fi
 
+gitwarp task create --help >/dev/null
+
 banner="$(gitwarp statusline --cwd "$REPO_ROOT")"
 if [[ "$banner" != "GITWARP[main-repo]" && "$banner" != GITWARP\[*@*\] ]]; then
   echo "unexpected repository banner: $banner" >&2
@@ -167,7 +169,7 @@ payload = json.loads(os.environ["MAIN_ENTER"])
 assert payload["ok"] is True
 assert payload["location"] == "main"
 assert payload["statusline"] == "GITWARP[main-repo]"
-assert any("gitwarp create" in item for item in payload["recommended_next"])
+assert any("gitwarp task create" in item for item in payload["recommended_next"])
 PY
 
 agents_output="$(gitwarp agents --cwd "$tmpdir")"
@@ -560,7 +562,7 @@ print(
             "plugin": os.environ["PLUGIN_ID"],
             "cli": os.environ["CLI_PATH"],
             "dispatch_path": os.environ["DISPATCH_PATH"],
-            "smoke": "init-agents-create-switch-remove-dispatch-adopt-reconcile-doctor-enter-context-handoff-board-statusline-finish",
+            "smoke": "init-agents-task-create-create-switch-remove-dispatch-adopt-reconcile-doctor-enter-context-handoff-board-statusline-finish",
         },
         separators=(",", ":"),
         sort_keys=True,
