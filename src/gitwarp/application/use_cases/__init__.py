@@ -8,6 +8,7 @@ from .handoff import build_handoff_payload
 from .matrix import build_matrix_payload
 from .metadata import build_adopt_payload, build_annotate_payload
 from .navigation import build_switch_payload, shell_cd_command
+from .next_actions import build_next_actions_payload
 from .provisioning import build_base_payload, build_dispatch_payload, build_start_payload, build_summon_payload
 from .repository_browser import build_repository_file_payload, build_repository_tree_payload
 from .tasks import TaskCreateRequest, build_task_create_payload
@@ -24,6 +25,7 @@ __all__ = [
     "build_handoff_payload",
     "build_init_payload",
     "build_matrix_payload",
+    "build_next_actions_payload",
     "build_prune_branch_payload",
     "build_repository_file_payload",
     "build_repository_tree_payload",

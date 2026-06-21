@@ -32,7 +32,7 @@ export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDi
               <span role="columnheader">Git refs</span>
               <span role="columnheader">Live worktrees</span>
               <span role="columnheader">Agents</span>
-              <span role="columnheader">Health</span>
+              <span role="columnheader">Next</span>
               <span role="columnheader" aria-label="Actions" />
             </div>
             {projects.map((project) => <ProjectCard key={project.id} project={project} onOpenProject={onOpenProject} />)}
@@ -45,6 +45,8 @@ export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDi
 
 function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOpenProject: (project: ProjectSummary) => void }) {
   const findings = project.doctor_finding_count + project.reconcile_finding_count;
+  const nextActions = project.next_action_count ?? findings;
+  const destructive = project.destructive_action_count ?? 0;
   return (
     <article className="repo-list-row" role="row">
       <div className="repo-list-main">
@@ -61,7 +63,12 @@ function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOp
       <Metric label="Git refs" value={project.branch_ref_count} detail="local branches" />
       <Metric label="Live worktrees" value={project.worktree_count} detail={`${project.active_worktree_count} non-main`} />
       <Metric label="Agents" value={project.assigned_agent_count} detail="assigned" />
-      <Metric label="Health" value={findings} detail={findings > 0 ? "findings" : "clean"} tone={findings > 0 ? "warning" : "ok"} />
+      <Metric
+        label="Next"
+        value={nextActions}
+        detail={destructive > 0 ? `${destructive} confirm` : nextActions > 0 ? "review" : "clear"}
+        tone={nextActions > 0 ? "warning" : "ok"}
+      />
 
       <Button variant="primary" type="button" leadingVisual={GitBranchIcon} onClick={() => onOpenProject(project)}>
         Open Project

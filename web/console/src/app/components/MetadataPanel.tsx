@@ -1,6 +1,7 @@
 import { Label } from "@primer/react";
 import type { DispatchInput, HandoffInput, StartWorktreeInput, TaskCreateInput } from "../gitwarp-api";
 import type { CommandResult, DossierKind, WebState, WorktreeRow } from "../types";
+import { ActionQueuePanel } from "./ActionQueuePanel";
 import { ActionPanel } from "./ActionPanel";
 import { DossierPanel } from "./DossierPanel";
 import { WorktreePicker, baseForSelection, defaultWorktree } from "./WorktreePicker";
@@ -60,6 +61,7 @@ export function MetadataPanel({
 
         <aside className="workspace-side" aria-label="Agent management">
           <SelectedWorktreeSummary worktree={selectedWorktree} />
+          <ActionQueuePanel actions={state?.next_actions ?? []} fallback={state?.recommended_next ?? []} />
           <ActionPanel
             readonly={readonly}
             busy={busy}

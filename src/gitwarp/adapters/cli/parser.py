@@ -11,6 +11,7 @@ from .read import (
     cmd_doctor,
     cmd_enter,
     cmd_matrix,
+    cmd_next,
     cmd_reconcile,
     cmd_scan,
     cmd_statusline,
@@ -65,6 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
     matrix.add_argument("--cwd")
     matrix.add_argument("--base", help="Branch used as the merge target for cleanup classification; defaults to origin HEAD or main")
     matrix.set_defaults(func=cmd_matrix)
+
+    next_actions = subparsers.add_parser("next", help="List prioritized safe next actions without mutating GitWarp state")
+    next_actions.add_argument("--cwd")
+    next_actions.add_argument("--base", help="Branch used as the merge target for cleanup classification; defaults to origin HEAD or main")
+    next_actions.set_defaults(func=cmd_next)
 
     create = subparsers.add_parser("create", help="Create an isolated worktree and dossier")
     create.add_argument("--cwd")

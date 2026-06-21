@@ -26,6 +26,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 | `gitwarp switch` | Locate an existing worktree and print its absolute path or `cd` command. |
 | `gitwarp remove` | Destroy a sandbox and its dossier when explicitly requested; add `--force` only for dirty targets. |
 | `gitwarp matrix` | Read-only control-plane view across Git refs, live worktrees, ledger rows, and dossiers. |
+| `gitwarp next` | Read-only prioritized action queue derived from matrix categories; shows safety and recommended commands. |
 | `gitwarp branches` | List local branch refs with cleanup safety metadata. |
 | `gitwarp prune-branch` | Delete only a safe merged local branch ref after explicit selection. |
 | `gitwarp handoff` | Record progress and optional lessons during work. |
@@ -38,11 +39,13 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 
 `start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `task create` for new work, `create --role base` for long-lived user feature branches, and `switch` or `remove` for existing sandboxes unless you specifically need a rendered launch command from `dispatch`.
 
-The Web Console is for human supervision: open a project, choose a base branch, choose a task worktree under that base, browse tracked files in Code, inspect task/progress/lessons in Metadata, review Git refs/live worktrees/ledger rows/dossiers in Refs & Worktrees, and review doctor/reconcile findings in Health.
+The Web Console is for human supervision: open a project, choose a base branch, choose a task worktree under that base, browse tracked files in Code, inspect task/progress/lessons and next actions in Metadata, review Git refs/live worktrees/ledger rows/dossiers in Refs & Worktrees, and review doctor/reconcile findings in Health.
 
 ## Control Plane Matrix
 
 Use `gitwarp matrix` when onboarding an existing repository or when `.git` and `.gitwarp` appear inconsistent. It reads Git branch refs, live Git worktrees, GitWarp ledger rows, and dossier directories without mutating any of them.
+
+Use `gitwarp next` after `matrix` when you need a short prioritized queue. It returns actions such as `merged_task`, `merged_ref`, `untracked_worktree`, `stale_ledger`, and `orphan_dossier` with `safety`, `priority`, and `command` fields. It never removes, prunes, merges, or adopts by itself.
 
 Important matrix categories:
 
@@ -81,10 +84,11 @@ From any repository path:
 gitwarp init
 gitwarp statusline
 gitwarp matrix
+gitwarp next
 gitwarp enter
 ```
 
-Use `statusline` for automatic prompt hooks. Use `matrix` when the agent needs to understand historical Git state before creating or removing anything. Use `enter` manually when full dossier context is needed; do not wire full `enter` output into every session start.
+Use `statusline` for automatic prompt hooks. Use `matrix` when the agent needs to understand historical Git state before creating or removing anything. Use `next` when the agent needs the safest prioritized maintenance action. Use `enter` manually when full dossier context is needed; do not wire full `enter` output into every session start.
 
 If work requires edits and you are in the main checkout:
 
@@ -151,11 +155,12 @@ For local branch cleanup, use the separate ref commands:
 
 ```bash
 gitwarp matrix
+gitwarp next
 gitwarp branches
 gitwarp prune-branch --branch feature/old-merged-task
 ```
 
-`matrix` marks legacy and merged candidates but does not clean them. `prune-branch` refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in the GitWarp ledger, and branches whose HEAD is not merged into the selected base. It deletes only the local Git ref; it does not delete worktrees or dossiers.
+`matrix` marks legacy and merged candidates but does not clean them. `next` turns those candidates into an ordered action queue. `prune-branch` refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in the GitWarp ledger, and branches whose HEAD is not merged into the selected base. It deletes only the local Git ref; it does not delete worktrees or dossiers.
 
 ## Instructions
 

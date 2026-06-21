@@ -18,6 +18,7 @@ from ...infrastructure.worktrees import (
     worktree_metadata_key,
 )
 from .branches import list_local_branch_refs
+from .next_actions import build_next_actions_payload
 
 
 def safe_load_ledger_for_web(ctx: RepoContext) -> tuple[dict[str, Any], str | None]:
@@ -93,6 +94,7 @@ def build_project_summary(
     branch_ref_count: int,
     doctor: dict[str, Any],
     reconcile: dict[str, Any],
+    next_actions: list[dict[str, Any]],
 ) -> dict[str, Any]:
     active_worktrees = [row for row in worktree_rows if not row.get("is_main")]
     assigned_agents = {
@@ -113,6 +115,8 @@ def build_project_summary(
         "assigned_agent_count": len(assigned_agents),
         "doctor_finding_count": actionable_finding_count(doctor),
         "reconcile_finding_count": actionable_finding_count(reconcile),
+        "next_action_count": len(next_actions),
+        "destructive_action_count": sum(1 for action in next_actions if action.get("safety") == "confirm_destructive"),
     }
 
 def build_web_state_payload(
@@ -143,6 +147,7 @@ def build_web_state_payload(
         reconcile["summary"] = summarize_findings(reconcile["findings"])
     else:
         reconcile = build_reconcile_payload(ctx)
+    next_actions = build_next_actions_payload(ctx)["actions"]
     worktree_rows = [web_board_row(item) for item in worktrees]
     statusline = statusline_banner(target)
     project = build_project_summary(
@@ -153,6 +158,7 @@ def build_web_state_payload(
         branch_ref_count=branch_ref_count,
         doctor=doctor,
         reconcile=reconcile,
+        next_actions=next_actions,
     )
     return {
         "ok": True,
@@ -164,5 +170,6 @@ def build_web_state_payload(
         "worktrees": worktree_rows,
         "doctor": doctor,
         "reconcile": reconcile,
+        "next_actions": next_actions,
         "recommended_next": list(doctor.get("recommended_next", [])),
     }

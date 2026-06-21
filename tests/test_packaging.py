@@ -79,6 +79,7 @@ class PluginStructureTests(unittest.TestCase):
             "application/use_cases/init.py",
             "application/use_cases/navigation.py",
             "application/use_cases/metadata.py",
+            "application/use_cases/next_actions.py",
             "application/use_cases/provisioning.py",
             "application/use_cases/repository_browser.py",
             "application/use_cases/web_state.py",
@@ -347,6 +348,7 @@ class PluginStructureTests(unittest.TestCase):
             "web/console/src/app/App.tsx",
             "web/console/src/app/gitwarp-api.ts",
             "web/console/src/app/types.ts",
+            "web/console/src/app/components/ActionQueuePanel.tsx",
             "web/console/src/app/components/ActionPanel.tsx",
             "web/console/src/app/components/CodePanel.tsx",
             "web/console/src/app/components/DossierPanel.tsx",
@@ -376,9 +378,11 @@ class PluginStructureTests(unittest.TestCase):
         code_panel = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "CodePanel.tsx").read_text(encoding="utf-8")
         dossier_panel = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "DossierPanel.tsx").read_text(encoding="utf-8")
         action_panel = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "ActionPanel.tsx").read_text(encoding="utf-8")
+        action_queue = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "ActionQueuePanel.tsx").read_text(encoding="utf-8")
         branches_panel = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "BranchesPanel.tsx").read_text(encoding="utf-8")
         tabs = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "RepositoryTabs.tsx").read_text(encoding="utf-8")
         picker = (REPO_ROOT / "web" / "console" / "src" / "app" / "components" / "WorktreePicker.tsx").read_text(encoding="utf-8")
+        types = (REPO_ROOT / "web" / "console" / "src" / "app" / "types.ts").read_text(encoding="utf-8")
 
         self.assertIn('setActiveTab("metadata")', app)
         self.assertIn("setSelectedWorktreePath(String(result.path))", app)
@@ -416,6 +420,10 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("async (event", action_panel)
         self.assertIn("await onStart", action_panel)
         self.assertIn("await onDispatch", action_panel)
+        self.assertIn("Next actions", action_queue)
+        self.assertIn("confirm_destructive", action_queue)
+        self.assertIn("Recommended command", action_queue)
+        self.assertIn("next_actions", types)
         self.assertIn("getMatrix", branches_panel)
         self.assertIn("Refs &amp; worktrees", branches_panel)
         self.assertIn("source-chip", branches_panel)

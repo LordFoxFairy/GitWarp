@@ -96,6 +96,7 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("worktrees", state)
         self.assertIn("doctor", state)
         self.assertIn("reconcile", state)
+        self.assertIn("next_actions", state)
 
     def test_web_project_summary_counts_only_actionable_findings(self) -> None:
         services = load_gitwarp_services()
@@ -131,6 +132,20 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(project["branch_ref_count"], 3)
         self.assertEqual(project["worktree_count"], 1)
         self.assertGreater(project["branch_ref_count"], project["worktree_count"])
+
+    def test_web_state_includes_shared_next_actions(self) -> None:
+        services = load_gitwarp_services()
+        run_git(self.repo, "branch", "feature/web-next-ref")
+
+        payload = services.build_web_state_payload(self.repo, readonly=True)
+        actions = payload["next_actions"]
+        project = payload["projects"][0]
+
+        self.assertEqual(project["next_action_count"], len(actions))
+        self.assertEqual(project["destructive_action_count"], 1)
+        self.assertEqual(actions[0]["category"], "merged_ref")
+        self.assertEqual(actions[0]["safety"], "confirm_destructive")
+        self.assertIn("gitwarp prune-branch", actions[0]["command"])
 
     def test_web_parser_accepts_subcommand_and_global_alias(self) -> None:
         _, subcommand = self.start_web_server(

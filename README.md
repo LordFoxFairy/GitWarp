@@ -11,6 +11,7 @@ The project follows the common Agent Skills layout while keeping product code in
 - Separate long-lived base branches from short-lived task branches.
 - Give every isolated workspace a task dossier for handoff and memory.
 - Explain `.git` branch refs, live worktrees, GitWarp ledger rows, and dossiers in one read-only matrix.
+- Convert matrix findings into a prioritized, read-only next-action queue.
 - Detect unmanaged worktree commits with non-mutating `head_drift` audit findings.
 - List and prune safe merged local branch refs separately from sandbox removal.
 - Mark blocked work with `pause` and resume cleanly with `resume`.
@@ -66,10 +67,13 @@ Initialize each target repository once, then run a read-only diagnostic:
 ```bash
 gitwarp init
 gitwarp matrix
+gitwarp next
 gitwarp doctor
 ```
 
 `matrix` is the control-plane view for repositories that already have Git worktrees or old local branches. It reads `.git`, `.gitwarp/ledger.json`, and `.gitwarp/dossiers/`, then marks each row as active, untracked, stale, merged, or legacy without deleting anything.
+
+`next` is the operator action queue. It turns matrix categories such as `merged_task`, `merged_ref`, `untracked_worktree`, `stale_ledger`, and `orphan_dossier` into prioritized JSON actions with safety labels and explicit recommended commands. It is read-only and never cleans up by itself.
 
 Check repository context when a session starts:
 
@@ -199,13 +203,14 @@ Use these commands when you are coordinating agents from the main checkout:
 ```bash
 gitwarp board --format table
 gitwarp matrix
+gitwarp next
 gitwarp branches
 gitwarp reconcile --stale 4
 gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active GitWarp-managed sandboxes. `matrix` is broader: it syncs the view across Git branch refs, live Git worktrees, ledger rows, and dossier directories, including worktrees that were created outside GitWarp. `branches` shows local refs grouped as base, active, merged, or orphan with delete blockers. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons plus agent actions; Refs & Worktrees shows the read-only matrix of Git refs, live worktrees, ledger rows, dossier dirs, and explicit local-ref cleanup; Health shows doctor/reconcile findings.
+`board` shows active GitWarp-managed sandboxes. `matrix` is broader: it syncs the view across Git branch refs, live Git worktrees, ledger rows, and dossier directories, including worktrees that were created outside GitWarp. `next` is the concise action queue for humans and agents; it preserves the same safety rules but shows what to review first. `branches` shows local refs grouped as base, active, merged, or orphan with delete blockers. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons, agent actions, and the shared next-action queue; Refs & Worktrees shows the read-only matrix of Git refs, live worktrees, ledger rows, dossier dirs, and explicit local-ref cleanup; Health shows doctor/reconcile findings.
 
 ### Automated Agent
 
@@ -213,6 +218,7 @@ Agents should use this minimal loop:
 
 ```bash
 gitwarp statusline
+gitwarp next
 gitwarp enter
 # read returned task_md, progress_md, lessons_md
 gitwarp handoff --status implementing --progress "Short milestone"

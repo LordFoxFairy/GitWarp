@@ -72,6 +72,28 @@ export interface ProjectSummary {
   assigned_agent_count: number;
   doctor_finding_count: number;
   reconcile_finding_count: number;
+  next_action_count?: number;
+  destructive_action_count?: number;
+}
+
+export interface NextAction {
+  id: string;
+  priority: number;
+  severity: Severity;
+  safety: "confirm_destructive" | "review" | "safe" | string;
+  category: string;
+  title: string;
+  description: string;
+  command: string;
+  branch?: string | null;
+  path?: string | null;
+  role?: "base" | "task" | string | null;
+  source?: {
+    kind?: string;
+    row_id?: string;
+    recommended_action?: string;
+    legacy_state?: string;
+  };
 }
 
 export interface WebState {
@@ -83,6 +105,8 @@ export interface WebState {
   worktrees: WorktreeRow[];
   doctor?: FindingGroup;
   reconcile?: FindingGroup;
+  next_actions?: NextAction[];
+  recommended_next?: string[];
 }
 
 export interface DossierPayload {

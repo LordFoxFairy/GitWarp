@@ -798,6 +798,147 @@ h2 {
   gap: 12px;
 }
 
+.action-queue {
+  padding: 0;
+  overflow: hidden;
+}
+
+.action-queue .panel-title {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+  background: var(--surface-muted);
+}
+
+.action-queue-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.action-queue-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.action-queue-item:last-child {
+  border-bottom: 0;
+}
+
+.action-queue-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.action-queue-item.confirm_destructive .action-queue-icon {
+  border-color: rgba(207, 34, 46, 0.35);
+  color: var(--danger);
+  background: #ffebe9;
+}
+
+.action-queue-item.review .action-queue-icon {
+  border-color: rgba(154, 103, 0, 0.35);
+  color: var(--warning);
+  background: #fff8c5;
+}
+
+.action-queue-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.action-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.action-queue-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.action-queue-body p,
+.queue-fallback p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.action-queue-meta {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.action-queue-meta div {
+  min-width: 0;
+}
+
+.action-queue-meta dt,
+.recommended-command span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.action-queue-meta dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.recommended-command {
+  display: grid;
+  gap: 4px;
+}
+
+.recommended-command code,
+.queue-fallback code {
+  display: block;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: var(--surface-muted);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.queue-fallback {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.queue-fallback ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .agent-tool-buttons,
 .form-actions {
   display: flex;
