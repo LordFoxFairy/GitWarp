@@ -131,6 +131,10 @@ def build_matrix_row(
         "path": live.get("path") if live is not None else ledger_entry.get("path") if ledger_entry else None,
         "head": live.get("head") if live is not None else branch_ref.get("head") if branch_ref else ledger_entry.get("last_seen_head") if ledger_entry else None,
         "role": branch_role,
+        "managed_state": resolve_managed_state(branch_ref, live, ledger_entry),
+        "commit_state": resolve_commit_state(category, branch_ref, live, ledger_entry),
+        "cleanup_policy": resolve_cleanup_policy(category, branch_ref, live, ledger_entry),
+        "classification_basis": resolve_classification_basis(branch_ref, live, ledger_entry),
         "agent_id": ledger_entry.get("agent_id") if ledger_entry else None,
         "status": ledger_entry.get("status") if ledger_entry else None,
         "purpose": ledger_entry.get("purpose") if ledger_entry else None,
@@ -149,6 +153,75 @@ def build_matrix_row(
             "progress_md": ledger_entry.get("progress_md") if ledger_entry else None,
             "lessons_md": ledger_entry.get("lessons_md") if ledger_entry else None,
         },
+    }
+
+
+def resolve_managed_state(
+    branch_ref: dict[str, Any] | None,
+    live: dict[str, Any] | None,
+    ledger_entry: dict[str, Any] | None,
+) -> str:
+    if branch_ref is not None and isinstance(branch_ref.get("managed_state"), str):
+        return str(branch_ref["managed_state"])
+    if ledger_entry is not None:
+        return "gitwarp_managed"
+    if live is not None:
+        return "unmanaged_worktree"
+    return "unmanaged"
+
+
+def resolve_commit_state(
+    category: str,
+    branch_ref: dict[str, Any] | None,
+    live: dict[str, Any] | None,
+    ledger_entry: dict[str, Any] | None,
+) -> str:
+    if branch_ref is not None and isinstance(branch_ref.get("commit_state"), str):
+        return str(branch_ref["commit_state"])
+    if category in {"main", "base"}:
+        return "base"
+    merged = branch_ref.get("merged_to_base") if branch_ref is not None else None
+    if merged:
+        return "merged"
+    if live is not None or ledger_entry is not None:
+        return "active"
+    return "unmerged"
+
+
+def resolve_cleanup_policy(
+    category: str,
+    branch_ref: dict[str, Any] | None,
+    live: dict[str, Any] | None,
+    ledger_entry: dict[str, Any] | None,
+) -> str:
+    if branch_ref is not None and isinstance(branch_ref.get("cleanup_policy"), str):
+        return str(branch_ref["cleanup_policy"])
+    if category in {"main", "base"}:
+        return "preserve_base"
+    if category == "merged_task":
+        return "finish_collapse_merged"
+    if category == "merged_ref":
+        return "user_confirmed_ref_prune"
+    if live is not None or ledger_entry is not None:
+        return "preserve_managed"
+    if category == "orphan_ref":
+        return "review_unmerged_ref"
+    return "review"
+
+
+def resolve_classification_basis(
+    branch_ref: dict[str, Any] | None,
+    live: dict[str, Any] | None,
+    ledger_entry: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if branch_ref is not None and isinstance(branch_ref.get("classification_basis"), dict):
+        return dict(branch_ref["classification_basis"])
+    return {
+        "base_branch": branch_ref.get("base_branch") if branch_ref is not None else ledger_entry.get("base_branch") if ledger_entry else None,
+        "head": live.get("head") if live is not None else branch_ref.get("head") if branch_ref is not None else ledger_entry.get("last_seen_head") if ledger_entry else None,
+        "merged_to_base": branch_ref.get("merged_to_base") if branch_ref is not None else None,
+        "managed_by_gitwarp": ledger_entry is not None,
+        "has_worktree": live is not None,
     }
 
 

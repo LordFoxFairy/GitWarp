@@ -101,6 +101,35 @@ class BranchRefTests(GitWarpTestCase):
         )
         self.assertIn("default branch", str(main_refused["error"]))
 
+    def test_unmanaged_branch_refs_explain_main_baseline_and_commit_state(self) -> None:
+        run_git(self.repo, "branch", "feature/legacy-merged")
+        run_git(self.repo, "checkout", "-b", "feature/legacy-unmerged")
+        (self.repo / "legacy.txt").write_text("legacy\n", encoding="utf-8")
+        run_git(self.repo, "add", "legacy.txt")
+        run_git(self.repo, "commit", "-m", "legacy unmerged work")
+        run_git(self.repo, "checkout", "main")
+
+        branches = run_gitwarp(self.repo, "branches", "--cwd", str(self.repo))
+        rows = {row["name"]: row for row in branches["branches"]}  # type: ignore[index]
+
+        merged = rows["feature/legacy-merged"]
+        unmerged = rows["feature/legacy-unmerged"]
+        self.assertEqual(merged["managed_state"], "unmanaged")
+        self.assertEqual(merged["base_branch"], "main")
+        self.assertEqual(merged["commit_state"], "merged")
+        self.assertEqual(merged["cleanup_policy"], "user_confirmed_ref_prune")
+        self.assertEqual(merged["classification_basis"]["base_branch"], "main")
+        self.assertEqual(merged["classification_basis"]["head"], merged["head"])
+        self.assertTrue(merged["classification_basis"]["merged_to_base"])
+        self.assertFalse(merged["classification_basis"]["managed_by_gitwarp"])
+
+        self.assertEqual(unmerged["managed_state"], "unmanaged")
+        self.assertEqual(unmerged["base_branch"], "main")
+        self.assertEqual(unmerged["commit_state"], "unmerged")
+        self.assertEqual(unmerged["cleanup_policy"], "review_unmerged_ref")
+        self.assertFalse(unmerged["deletable"])
+        self.assertIn("not merged into main", unmerged["delete_blockers"])
+
     def test_guarded_branch_ref_delete_rejects_advanced_ref(self) -> None:
         ensure_src_path()
         from gitwarp.application.use_cases.branches import delete_branch_ref

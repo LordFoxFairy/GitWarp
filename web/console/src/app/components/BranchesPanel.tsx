@@ -308,13 +308,15 @@ function statusLabel(row: MatrixRow) {
 function stateLine(row: MatrixRow) {
   const role = row.role || "unknown";
   const owner = row.agent_id ? ` · ${row.agent_id}` : "";
-  const base = row.category === "main" ? "" : row.git.merged_to_base ? " · merged" : "";
-  return `${role}${base}${owner}`;
+  const managed = row.managed_state || "unknown";
+  const commit = row.commit_state || (row.git.merged_to_base ? "merged" : "unknown");
+  const base = row.classification_basis?.base_branch ? ` · base ${row.classification_basis.base_branch}` : "";
+  return `${managed} · ${role} · ${commit}${base}${owner}`;
 }
 
 function meaningText(row: MatrixRow) {
   if (row.category === "merged_ref") {
-    return "Merged local ref with no worktree and no GitWarp ledger row.";
+    return "Merged unmanaged local ref with no worktree and no GitWarp ledger row; prune only after explicit confirmation.";
   }
   if (row.category === "merged_task") {
     return "Live GitWarp task worktree is merged; finish/collapse removes the worktree, ledger row, and dossier, not the branch ref.";
@@ -329,7 +331,7 @@ function meaningText(row: MatrixRow) {
     return "Dossier directory is not referenced by the ledger.";
   }
   if (row.category === "orphan_ref") {
-    return "Local branch is not merged into the cleanup base.";
+    return "Unmanaged local branch is not merged into the cleanup base; keep it for human review.";
   }
   if (row.category === "main") {
     return "Public root checkout for coordination and review.";
@@ -349,6 +351,12 @@ function actionText(row: MatrixRow) {
   }
   if (row.recommended_action === "create_base_worktree") {
     return "Create a base worktree before assigning agents.";
+  }
+  if (row.cleanup_policy === "user_confirmed_ref_prune") {
+    return "Delete only after branch-name confirmation.";
+  }
+  if (row.cleanup_policy === "review_unmerged_ref") {
+    return "No automatic cleanup; review branch history first.";
   }
   return "No destructive action.";
 }

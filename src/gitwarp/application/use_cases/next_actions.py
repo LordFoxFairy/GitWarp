@@ -140,6 +140,10 @@ def build_action_from_matrix_row(row: dict[str, Any]) -> dict[str, Any] | None:
             "row_id": row_id,
             "recommended_action": row.get("recommended_action"),
             "legacy_state": row.get("legacy_state"),
+            "managed_state": row.get("managed_state"),
+            "commit_state": row.get("commit_state"),
+            "cleanup_policy": row.get("cleanup_policy"),
+            "classification_basis": row.get("classification_basis"),
         },
     }
 

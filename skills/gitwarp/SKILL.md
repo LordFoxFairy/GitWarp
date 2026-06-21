@@ -54,7 +54,7 @@ Important matrix categories:
 - `untracked_worktree`: a live Git worktree exists outside the ledger. Ask before adopting it, then use the printed `gitwarp adopt ...` command.
 - `stale_ledger`: a ledger row points to a worktree Git no longer reports. This is GitWarp metadata repair, not Git branch deletion. Use the printed `gitwarp init` only when the user wants stale metadata cleaned.
 - `orphan_dossier`: a dossier directory is no longer referenced by the ledger. Treat it as legacy metadata; do not delete manually unless the user asks.
-- `merged_ref`: a local branch ref is merged and safe according to GitWarp blockers. It is marked `deprecated`; delete only after explicit user selection with `gitwarp prune-branch`.
+- `merged_ref`: an unmanaged local branch ref is merged into the selected baseline, usually `main`, and safe according to GitWarp blockers. It is marked `deprecated`; delete only after explicit user selection with `gitwarp prune-branch`.
 - `merged_task`: a live task worktree has already been merged into its parent base. It is a cleanup candidate, but `finish --collapse-merged` must still be explicitly run and will refuse dirty worktrees.
 
 If multiple rows share the same branch, use `row_id` to distinguish branch refs, live worktrees, stale ledger rows, and dossier-only legacy records.
@@ -164,7 +164,7 @@ gitwarp branches
 gitwarp prune-branch --branch feature/old-merged-task
 ```
 
-`matrix` marks legacy and merged candidates but does not clean them. `next` turns those candidates into an ordered action queue. `prune-branch` refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in the GitWarp ledger, and branches whose HEAD is not merged into the selected base. It deletes only the local Git ref; it does not delete worktrees or dossiers.
+`matrix` marks legacy and merged candidates but does not clean them. Unmanaged branch refs are classified against `main` by default and expose `managed_state`, `commit_state`, `cleanup_policy`, and `classification_basis` for agents and UI. `next` turns those candidates into an ordered action queue. `prune-branch` refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in the GitWarp ledger, and branches whose HEAD is not merged into the selected base. It deletes only the local Git ref; it does not delete worktrees or dossiers.
 
 ## Instructions
 

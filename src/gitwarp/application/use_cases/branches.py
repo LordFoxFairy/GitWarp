@@ -107,6 +107,16 @@ def build_branch_row(
     row["deletable"] = not blockers
     row["delete_blockers"] = blockers
     row["category"] = categorize_branch(row)
+    row["managed_state"] = resolve_managed_state(has_worktree=has_worktree, in_ledger=in_ledger)
+    row["commit_state"] = resolve_commit_state(row)
+    row["cleanup_policy"] = resolve_cleanup_policy(row)
+    row["classification_basis"] = {
+        "base_branch": base_branch,
+        "head": branch["head"],
+        "merged_to_base": merged_to_base,
+        "managed_by_gitwarp": in_ledger,
+        "has_worktree": has_worktree,
+    }
     return row
 
 
@@ -150,6 +160,36 @@ def categorize_branch(row: dict[str, Any]) -> str:
     if row["merged_to_base"]:
         return "merged"
     return "orphan"
+
+
+def resolve_managed_state(*, has_worktree: bool, in_ledger: bool) -> str:
+    if in_ledger:
+        return "gitwarp_managed"
+    if has_worktree:
+        return "unmanaged_worktree"
+    return "unmanaged"
+
+
+def resolve_commit_state(row: dict[str, Any]) -> str:
+    if row["is_default"] or row["branch_role"] == BASE_ROLE:
+        return "base"
+    if row["merged_to_base"]:
+        return "merged"
+    if row["has_worktree"] or row["in_ledger"]:
+        return "active"
+    return "unmerged"
+
+
+def resolve_cleanup_policy(row: dict[str, Any]) -> str:
+    if row["deletable"]:
+        return "user_confirmed_ref_prune"
+    if row["is_default"] or row["branch_role"] == BASE_ROLE:
+        return "preserve_base"
+    if row["has_worktree"] or row["in_ledger"]:
+        return "preserve_managed"
+    if row["base_branch"] and not row["merged_to_base"]:
+        return "review_unmerged_ref"
+    return "review"
 
 
 def build_branches_payload(ctx: RepoContext, *, base_branch: str | None = None) -> dict[str, Any]:

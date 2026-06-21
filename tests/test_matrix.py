@@ -213,3 +213,31 @@ class MatrixTests(GitWarpTestCase):
         self.assertEqual(feature_rows["feature/parent"]["category"], "base")
         self.assertEqual(feature_rows["feature/parent"]["recommended_action"], "create_base_worktree")
         self.assertIn("gitwarp create --role base", feature_rows["feature/parent"]["next_command"])
+
+    def test_matrix_exposes_unmanaged_branch_classification_without_cleanup(self) -> None:
+        run_git(self.repo, "branch", "feature/legacy-merged")
+        run_git(self.repo, "checkout", "-b", "feature/legacy-unmerged")
+        (self.repo / "legacy.txt").write_text("legacy\n", encoding="utf-8")
+        run_git(self.repo, "add", "legacy.txt")
+        run_git(self.repo, "commit", "-m", "legacy unmerged work")
+        run_git(self.repo, "checkout", "main")
+
+        matrix = run_gitwarp(self.repo, "matrix", "--cwd", str(self.repo))
+        rows = {row["branch"]: row for row in matrix["rows"]}  # type: ignore[index]
+
+        merged = rows["feature/legacy-merged"]
+        self.assertEqual(merged["category"], "merged_ref")
+        self.assertEqual(merged["managed_state"], "unmanaged")
+        self.assertEqual(merged["commit_state"], "merged")
+        self.assertEqual(merged["cleanup_policy"], "user_confirmed_ref_prune")
+        self.assertEqual(merged["classification_basis"]["base_branch"], "main")
+        self.assertFalse(merged["classification_basis"]["managed_by_gitwarp"])
+        self.assertEqual(merged["legacy_state"], "deprecated")
+
+        unmerged = rows["feature/legacy-unmerged"]
+        self.assertEqual(unmerged["category"], "orphan_ref")
+        self.assertEqual(unmerged["managed_state"], "unmanaged")
+        self.assertEqual(unmerged["commit_state"], "unmerged")
+        self.assertEqual(unmerged["cleanup_policy"], "review_unmerged_ref")
+        self.assertEqual(unmerged["recommended_action"], "inspect")
+        self.assertIsNone(unmerged["next_command"])

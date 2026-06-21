@@ -93,6 +93,10 @@ export interface NextAction {
     row_id?: string;
     recommended_action?: string;
     legacy_state?: string;
+    managed_state?: string;
+    commit_state?: string;
+    cleanup_policy?: string;
+    classification_basis?: ClassificationBasis;
   };
 }
 
@@ -169,6 +173,10 @@ export interface BranchRow {
   deletable: boolean;
   delete_blockers: string[];
   category: "base" | "active" | "merged" | "orphan" | string;
+  managed_state?: string;
+  commit_state?: string;
+  cleanup_policy?: string;
+  classification_basis?: ClassificationBasis;
 }
 
 export interface BranchesPayload {
@@ -201,6 +209,14 @@ export interface MatrixGitWarpState {
   lessons_md?: string | null;
 }
 
+export interface ClassificationBasis {
+  base_branch?: string | null;
+  head?: string | null;
+  merged_to_base?: boolean | null;
+  managed_by_gitwarp?: boolean;
+  has_worktree?: boolean;
+}
+
 export interface MatrixRow {
   row_id: string;
   branch: string;
@@ -211,6 +227,10 @@ export interface MatrixRow {
   path?: string | null;
   head?: string | null;
   role?: "base" | "task" | string | null;
+  managed_state?: string;
+  commit_state?: string;
+  cleanup_policy?: string;
+  classification_basis?: ClassificationBasis;
   agent_id?: string | null;
   status?: string | null;
   purpose?: string | null;

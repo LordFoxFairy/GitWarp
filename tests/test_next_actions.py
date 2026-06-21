@@ -138,3 +138,22 @@ class NextActionTests(GitWarpTestCase):
         self.assertEqual(child_action["category"], "merged_ref")
         self.assertEqual(child_action["safety"], "confirm_destructive")
         self.assertIn("feature/child", child_action["command"])
+
+    def test_next_carries_unmanaged_branch_ref_classification(self) -> None:
+        run_git(self.repo, "branch", "feature/legacy-merged")
+        run_git(self.repo, "checkout", "-b", "feature/legacy-unmerged")
+        (self.repo / "legacy.txt").write_text("legacy\n", encoding="utf-8")
+        run_git(self.repo, "add", "legacy.txt")
+        run_git(self.repo, "commit", "-m", "legacy unmerged work")
+        run_git(self.repo, "checkout", "main")
+
+        payload = run_gitwarp(self.repo, "next", "--cwd", str(self.repo))
+        actions = payload["actions"]
+
+        merged_action = next(action for action in actions if action.get("branch") == "feature/legacy-merged")
+        self.assertEqual(merged_action["category"], "merged_ref")
+        self.assertEqual(merged_action["safety"], "confirm_destructive")
+        self.assertEqual(merged_action["source"]["managed_state"], "unmanaged")
+        self.assertEqual(merged_action["source"]["commit_state"], "merged")
+        self.assertEqual(merged_action["source"]["cleanup_policy"], "user_confirmed_ref_prune")
+        self.assertNotIn("feature/legacy-unmerged", [action.get("branch") for action in actions])

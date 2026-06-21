@@ -198,7 +198,7 @@ gitwarp branches
 gitwarp prune-branch --branch feature/old-merged-task
 ```
 
-`matrix` marks merged legacy refs as `deprecated` and prints the explicit cleanup command. Use `gitwarp matrix --base feature/user-request` when judging cleanup against a feature base instead of the default branch. `prune-branch` deletes only the local branch ref after the user selects it. It refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in GitWarp, and branches whose HEAD is not merged into the selected base.
+`matrix` marks merged legacy refs as `deprecated` and prints the explicit cleanup command. Unmanaged historical refs are evaluated against `main` by default and include `managed_state`, `commit_state`, `cleanup_policy`, and `classification_basis` so agents can see the HEAD hash, merge base, and whether GitWarp owns the row. Use `gitwarp matrix --base feature/user-request` when judging cleanup against a feature base instead of the default branch. `prune-branch` deletes only the local branch ref after the user selects it. It refuses the default branch, base branches, branches checked out in any worktree, branches still tracked in GitWarp, and branches whose HEAD is not merged into the selected base.
 
 ## Usage Modes
 
@@ -249,7 +249,7 @@ gitwarp adopt --cwd /absolute/path/to/repo \
   --purpose "Continue existing sandbox"
 ```
 
-Use `matrix` first when onboarding an existing repository. Rows marked `untracked_worktree` should be adopted only when the user wants GitWarp to manage them. Rows marked `merged_ref`, `orphan_ref`, or `stale_ledger` are legacy cleanup candidates; GitWarp reports the state and suggested command, but the user decides whether to remove them.
+Use `matrix` first when onboarding an existing repository. Rows marked `untracked_worktree` should be adopted only when the user wants GitWarp to manage them. Rows marked `merged_ref`, `orphan_ref`, or `stale_ledger` are legacy cleanup candidates; GitWarp reports the state and suggested command, but the user decides whether to remove them. For unmanaged branch refs, `main` is the default classification baseline: `merged_ref` means the ref HEAD is contained in the baseline and can be pruned only with confirmation, while `orphan_ref` means the ref is not merged and should be reviewed.
 
 The matrix may contain multiple rows for the same branch when `.git` and `.gitwarp` disagree, for example a live branch ref plus a stale ledger row for an old worktree path. Use `row_id` as the stable identity in tools and UI instead of assuming branch names are unique.
 
