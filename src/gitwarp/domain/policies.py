@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 from .errors import GitWarpError
+
+
+TARGET_AGENTS = {"codex", "claude", "generic"}
 
 
 def path_contains(parent: str, child: Path) -> bool:
@@ -19,6 +23,39 @@ def build_head_drift(last_seen_head: str | None, current_head: str | None) -> di
         "last_seen_head": last_seen_head,
         "current_head": current_head,
     }
+
+
+def normalize_task_slug(title: str) -> str:
+    if not title.strip():
+        raise GitWarpError("title must not be blank")
+    slug = re.sub(r"[^a-z0-9]+", "-", title.strip().lower())
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")
+    slug = slug[:64].rstrip("-")
+    if not slug:
+        raise GitWarpError("title normalizes to an empty slug")
+    return slug
+
+
+def derive_task_branch(title: str) -> str:
+    return f"agent/{normalize_task_slug(title)}"
+
+
+def derive_task_agent_id(title: str) -> str:
+    return f"agent-{normalize_task_slug(title)}"
+
+
+def first_non_empty(*values: str | None) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def normalize_target_agent(value: str | None) -> str:
+    target = first_non_empty(value) or "generic"
+    if target not in TARGET_AGENTS:
+        raise GitWarpError("target_agent must be one of: codex, claude, generic")
+    return target
 
 
 def find_worktree_for_cwd(cwd: Path, worktrees: list[dict[str, Any]]) -> dict[str, Any] | None:

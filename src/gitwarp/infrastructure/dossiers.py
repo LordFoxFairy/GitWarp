@@ -27,6 +27,34 @@ def dossier_paths(ctx: RepoContext, branch: str, worktree_path: Path) -> dict[st
     }
 
 
+def checkbox_lines(values: list[str] | None, fallback: str) -> list[str]:
+    items = [item.strip() for item in (values or []) if isinstance(item, str) and item.strip()]
+    if not items:
+        return [f"- [ ] {fallback}"]
+    return [f"- [ ] {item}" for item in items]
+
+
+def command_checkbox_lines(values: list[str] | None) -> list[str]:
+    items = [item.strip() for item in (values or []) if isinstance(item, str) and item.strip()]
+    if not items:
+        return ["- [ ] Define concrete verification before finishing"]
+    return [f"- [ ] `{item}`" for item in items]
+
+
+def mounted_instruction_lines(
+    instructions: list[dict[str, Any]] | None,
+    instruction_profile: str | None,
+) -> list[str]:
+    lines: list[str] = []
+    if instruction_profile:
+        lines.append(f"- Profile: {instruction_profile}")
+    if instructions:
+        lines.extend(f"- `{item['target']}` from `{item['source']}` ({item['mode']})" for item in instructions)
+    if not lines:
+        return ["- No mounted instructions."]
+    return lines
+
+
 def create_dossier_files(
     paths: dict[str, str],
     *,
@@ -40,6 +68,11 @@ def create_dossier_files(
     base_branch: str | None = None,
     instructions: list[dict[str, Any]] | None = None,
     instruction_profile: str | None = None,
+    task_title: str | None = None,
+    task_description: str | None = None,
+    target_agent: str | None = None,
+    acceptance_criteria: list[str] | None = None,
+    verification_commands: list[str] | None = None,
 ) -> None:
     dossier_path = Path(paths["dossier_path"])
     dossier_path.mkdir(parents=True, exist_ok=True)
@@ -47,7 +80,52 @@ def create_dossier_files(
     progress = Path(paths["progress_md"])
     lessons = Path(paths["lessons_md"])
 
-    if not task.exists():
+    if not task.exists() and task_title:
+        task.write_text(
+            "\n".join(
+                [
+                    "# Task",
+                    "",
+                    "## Objective",
+                    "",
+                    task_title,
+                    "",
+                    "## User Request",
+                    "",
+                    task_description or purpose or "No additional request provided.",
+                    "",
+                    "## Scope",
+                    "",
+                    f"- Branch: {branch or 'detached'}",
+                    f"- Parent Base: {base_branch or 'none'}",
+                    f"- Worktree: {worktree_path}",
+                    f"- Agent: {agent_id or 'unassigned'}",
+                    f"- Target Agent: {target_agent or 'generic'}",
+                    "",
+                    "## Acceptance Criteria",
+                    "",
+                    *checkbox_lines(acceptance_criteria, "Define concrete acceptance criteria before finishing"),
+                    "",
+                    "## Verification",
+                    "",
+                    *command_checkbox_lines(verification_commands),
+                    "",
+                    "## Mounted Instructions",
+                    "",
+                    *mounted_instruction_lines(instructions, instruction_profile),
+                    "",
+                    "## Finish Policy",
+                    "",
+                    (
+                        "Leave the task worktree for human review after verification unless the user explicitly "
+                        "requests merge, remove, or collapse."
+                    ),
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+    elif not task.exists():
         instruction_lines: list[str] = []
         if instructions:
             instruction_lines.extend(["", "## Mounted Instructions", ""])
@@ -81,7 +159,23 @@ def create_dossier_files(
             ),
             encoding="utf-8",
         )
-    if not progress.exists():
+    if not progress.exists() and task_title:
+        progress.write_text(
+            "\n".join(
+                [
+                    "# Progress",
+                    "",
+                    f"## {created_at}",
+                    "",
+                    f"- Status: {status or 'active'}",
+                    f"- Note: Task created: {task_title}",
+                    f"- Parent base: {base_branch or 'none'}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+    elif not progress.exists():
         progress.write_text(
             "\n".join(
                 [
@@ -178,6 +272,11 @@ def ensure_dossier_for_entry(ctx: RepoContext, entry: dict[str, Any], target: di
         base_branch=entry.get("base_branch") if isinstance(entry.get("base_branch"), str) else None,
         instructions=entry.get("instructions") if isinstance(entry.get("instructions"), list) else None,
         instruction_profile=entry.get("instruction_profile") if isinstance(entry.get("instruction_profile"), str) else None,
+        task_title=entry.get("task_title") if isinstance(entry.get("task_title"), str) else None,
+        task_description=entry.get("task_description") if isinstance(entry.get("task_description"), str) else None,
+        target_agent=entry.get("target_agent") if isinstance(entry.get("target_agent"), str) else None,
+        acceptance_criteria=entry.get("acceptance_criteria") if isinstance(entry.get("acceptance_criteria"), list) else None,
+        verification_commands=entry.get("verification_commands") if isinstance(entry.get("verification_commands"), list) else None,
     )
     return concrete_paths
 

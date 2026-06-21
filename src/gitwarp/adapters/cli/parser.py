@@ -31,6 +31,7 @@ from .workspaces import (
     cmd_start,
     cmd_summon,
     cmd_switch,
+    cmd_task_create,
 )
 
 
@@ -76,6 +77,29 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
     create.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
     create.set_defaults(func=cmd_create)
+
+    task = subparsers.add_parser("task", help="High-level task intake for agent work")
+    task_subparsers = task.add_subparsers(dest="task_command", required=True)
+    task_create = task_subparsers.add_parser("create", help="Create a task worktree from a human task request")
+    task_create.add_argument("--cwd")
+    task_create.add_argument("--title", required=True)
+    task_create.add_argument("--description")
+    task_create.add_argument("--base")
+    task_create.add_argument("--branch")
+    task_create.add_argument("--agent", default="generic", help="Target-agent metadata: codex, claude, or generic")
+    task_create.add_argument("--agent-id")
+    task_create.add_argument("--purpose")
+    task_create.add_argument("--acceptance", action="append", default=[])
+    task_create.add_argument("--verify", action="append", default=[])
+    task_create.add_argument(
+        "--instruction",
+        action="append",
+        default=[],
+        help="Mount instruction file into the worktree; use TARGET=SOURCE to rename",
+    )
+    task_create.add_argument("--instruction-profile")
+    task_create.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
+    task_create.set_defaults(func=cmd_task_create)
 
     switch = subparsers.add_parser("switch", help="Return the path or shell cd command for an existing worktree")
     switch.add_argument("--cwd")

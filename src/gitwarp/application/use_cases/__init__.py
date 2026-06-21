@@ -10,8 +10,10 @@ from .metadata import build_adopt_payload, build_annotate_payload
 from .navigation import build_switch_payload, shell_cd_command
 from .provisioning import build_base_payload, build_dispatch_payload, build_start_payload, build_summon_payload
 from .repository_browser import build_repository_file_payload, build_repository_tree_payload
+from .tasks import TaskCreateRequest, build_task_create_payload
 
 __all__ = [
+    "TaskCreateRequest",
     "build_adopt_payload",
     "build_annotate_payload",
     "build_base_payload",
@@ -28,6 +30,7 @@ __all__ = [
     "build_start_payload",
     "build_switch_payload",
     "build_summon_payload",
+    "build_task_create_payload",
     "build_web_state_payload",
     "collapse_worktree",
     "inspect_destructive_target",

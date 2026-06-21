@@ -4,6 +4,7 @@ import argparse
 import os
 
 from ...application.use_cases import (
+    TaskCreateRequest,
     build_adopt_payload,
     build_annotate_payload,
     build_base_payload,
@@ -15,6 +16,7 @@ from ...application.use_cases import (
     build_start_payload,
     build_switch_payload,
     build_summon_payload,
+    build_task_create_payload,
     inspect_destructive_target,
     shell_cd_command,
 )
@@ -61,6 +63,29 @@ def cmd_create(args: argparse.Namespace) -> None:
     )
     payload["shell_command"] = shell_cd_command(str(payload["path"]))
     emit_json(payload)
+
+
+def cmd_task_create(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    emit_json(
+        build_task_create_payload(
+            ctx,
+            TaskCreateRequest(
+                title=args.title,
+                description=args.description,
+                base_branch=args.base,
+                branch=args.branch,
+                target_agent=args.agent,
+                agent_id=args.agent_id,
+                purpose=args.purpose,
+                acceptance_criteria=args.acceptance or [],
+                verification_commands=args.verify or [],
+                instructions=args.instruction or [],
+                instruction_profile=args.instruction_profile,
+                instruction_mode=args.instruction_mode,
+            ),
+        )
+    )
 
 
 def cmd_start(args: argparse.Namespace) -> None:

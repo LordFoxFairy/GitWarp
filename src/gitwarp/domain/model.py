@@ -90,6 +90,11 @@ class WorkspaceRecord:
     instructions: list[dict[str, Any]] | None = None
     instruction_profile: str | None = None
     instruction_mode: str | None = None
+    task_title: str | None = None
+    task_description: str | None = None
+    target_agent: str | None = None
+    acceptance_criteria: list[str] | None = None
+    verification_commands: list[str] | None = None
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> "WorkspaceRecord":
@@ -115,6 +120,11 @@ class WorkspaceRecord:
             instructions=value.get("instructions") if isinstance(value.get("instructions"), list) else None,
             instruction_profile=value.get("instruction_profile") if isinstance(value.get("instruction_profile"), str) else None,
             instruction_mode=value.get("instruction_mode") if isinstance(value.get("instruction_mode"), str) else None,
+            task_title=value.get("task_title") if isinstance(value.get("task_title"), str) else None,
+            task_description=value.get("task_description") if isinstance(value.get("task_description"), str) else None,
+            target_agent=value.get("target_agent") if isinstance(value.get("target_agent"), str) else None,
+            acceptance_criteria=value.get("acceptance_criteria") if isinstance(value.get("acceptance_criteria"), list) else None,
+            verification_commands=value.get("verification_commands") if isinstance(value.get("verification_commands"), list) else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -143,6 +153,16 @@ class WorkspaceRecord:
             payload["instruction_profile"] = self.instruction_profile
         if self.instruction_mode is not None:
             payload["instruction_mode"] = self.instruction_mode
+        if self.task_title is not None:
+            payload["task_title"] = self.task_title
+        if self.task_description is not None:
+            payload["task_description"] = self.task_description
+        if self.target_agent is not None:
+            payload["target_agent"] = self.target_agent
+        if self.acceptance_criteria is not None:
+            payload["acceptance_criteria"] = self.acceptance_criteria
+        if self.verification_commands is not None:
+            payload["verification_commands"] = self.verification_commands
         return payload
 
 

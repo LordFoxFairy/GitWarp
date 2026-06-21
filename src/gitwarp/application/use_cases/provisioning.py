@@ -121,10 +121,17 @@ def build_start_payload(
     instructions: list[str] | None = None,
     instruction_profile: str | None = None,
     instruction_mode: str = "copy",
+    task_title: str | None = None,
+    task_description: str | None = None,
+    target_agent: str | None = None,
+    acceptance_criteria: list[str] | None = None,
+    verification_commands: list[str] | None = None,
 ) -> dict[str, Any]:
     _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
     ensure_branch_available(worktrees, branch)
     resolved_base_branch = infer_base_branch(ctx, worktrees, base_branch)
+    resolved_acceptance_criteria = acceptance_criteria or []
+    resolved_verification_commands = verification_commands or []
     instruction_plan = build_instruction_plan(
         ctx,
         raw_instructions=instructions,
@@ -157,6 +164,11 @@ def build_start_payload(
         instructions=mounted_instructions or None,
         instruction_profile=instruction_profile,
         instruction_mode=instruction_mode,
+        task_title=task_title,
+        task_description=task_description,
+        target_agent=target_agent,
+        acceptance_criteria=resolved_acceptance_criteria if task_title is not None else None,
+        verification_commands=resolved_verification_commands if task_title is not None else None,
     ).to_dict()
     try:
         create_dossier_files(
@@ -171,6 +183,11 @@ def build_start_payload(
             base_branch=resolved_base_branch,
             instructions=mounted_instructions,
             instruction_profile=instruction_profile,
+            task_title=task_title,
+            task_description=task_description,
+            target_agent=target_agent,
+            acceptance_criteria=resolved_acceptance_criteria,
+            verification_commands=resolved_verification_commands,
         )
     except Exception:
         cleanup_created_worktree(ctx, target_dir, branch=branch, branch_created=branch_created, dossier_path=cleanup_dossier)
@@ -200,6 +217,11 @@ def build_start_payload(
         "branch_created": not existing_branch,
         "last_seen_head": head,
         "latest_progress": "Workspace created.",
+        "task_title": task_title,
+        "task_description": task_description,
+        "target_agent": target_agent,
+        "acceptance_criteria": resolved_acceptance_criteria,
+        "verification_commands": resolved_verification_commands,
         "instructions": mounted_instructions,
         "instruction_profile": instruction_profile,
         "instruction_mode": instruction_mode,
