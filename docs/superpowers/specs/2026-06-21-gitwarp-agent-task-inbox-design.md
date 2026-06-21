@@ -96,7 +96,7 @@ Supported options:
 - `--purpose <text>`: optional compatibility alias; defaults from title/description.
 - `--acceptance <text>`: repeatable acceptance criteria.
 - `--verify <command>`: repeatable verification commands.
-- `--instruction <source[=target]>`: repeatable instruction mount, same semantics as `create`.
+- `--instruction <source>` or `--instruction <target=source>`: repeatable instruction mount, same semantics as `create`.
 - `--instruction-profile <name>`: existing profile support.
 - `--instruction-mode <copy|symlink>`: existing instruction mount mode.
 
@@ -125,7 +125,7 @@ It accepts these JSON fields and delegates to the same application use case. The
 | `purpose` | string | no | resolved | Uses purpose resolution order above. |
 | `acceptance_criteria` | string list | no | `[]` | Repeatable CLI `--acceptance` maps here. |
 | `verification_commands` | string list | no | `[]` | Repeatable CLI `--verify` maps here. |
-| `instructions` | string list | no | `[]` | Same syntax as existing web endpoints. |
+| `instructions` | string list | no | `[]` | Same string syntax as CLI: `<source>` or `<target=source>`. |
 | `instruction_profile` | string | no | null | Existing instruction profile. |
 | `instruction_mode` | string | no | `copy` | One of `copy`, `symlink`. |
 
