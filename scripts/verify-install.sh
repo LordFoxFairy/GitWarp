@@ -235,7 +235,7 @@ assert payload["mode"] == "print"
 assert payload["agent"] == "local"
 assert payload["status"] == "dispatched"
 assert payload["branch"] == "feature/verify-dispatch"
-assert payload["path"].endswith("/.gitwarp/worktrees/feature-verify-dispatch")
+assert payload["path"].endswith("/.gitwarp/worktrees/feature/verify-dispatch")
 assert payload["launch_command"][0:2] == ["python3", "-c"]
 assert "gitwarp enter" in payload["launch_command"][2]
 assert "Record milestones with gitwarp handoff" in payload["launch_command"][2]
@@ -329,7 +329,7 @@ from pathlib import Path
 payload = json.loads(os.environ["EXECUTE_OUTPUT"])
 assert payload["ok"] is False
 assert "execute is not supported yet" in payload["error"]
-assert not (Path(os.environ["TMPDIR"]) / ".gitwarp" / "worktrees" / "feature-verify-execute").exists()
+assert not (Path(os.environ["TMPDIR"]) / ".gitwarp" / "worktrees" / "feature" / "verify-execute").exists()
 PY
 
 manual_path="$tmpdir/manual-adopt"
