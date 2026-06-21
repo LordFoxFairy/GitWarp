@@ -34,6 +34,8 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 | `gitwarp enter` | Return hook/session context and dossier snippets; not the main workflow command. |
 | `gitwarp board` | List active sandboxes. |
 | `gitwarp reconcile` | Read-only audit for dirty, stale, missing, merged, or drifted worktrees. |
+| `gitwarp upgrade --check` | Verify the installed launcher supports the current runtime commands without writing files. |
+| `gitwarp upgrade` | Explicitly rewrite the local launcher from the current checkout or plugin cache. |
 | `gitwarp doctor` | Check install, hook, plugin, and runtime health. |
 | `gitwarp web` | Open a local Web Console with Code, Metadata, and Health tabs. |
 
@@ -89,6 +91,8 @@ gitwarp enter
 ```
 
 Use `statusline` for automatic prompt hooks. Use `matrix` when the agent needs to understand historical Git state before creating or removing anything. Use `next` when the agent needs the safest prioritized maintenance action. Use `enter` manually when full dossier context is needed; do not wire full `enter` output into every session start.
+
+If `doctor` reports `gitwarp_launcher_capability`, run `gitwarp upgrade --check` to confirm drift, then run `gitwarp upgrade` only when the user or operator agrees to refresh the local launcher. Session hooks should not perform noisy repair loops.
 
 If work requires edits and you are in the main checkout:
 
@@ -184,5 +188,7 @@ Automation commands print deterministic single-line JSON. `statusline`, `enter -
 ## Installation Notes
 
 Use `gitwarp` from `PATH`. The skill `scripts/` directory contains bootstrap helpers only, primarily `scripts/install_cli.py`; it does not contain product runtime code. Runtime changes belong in `src/gitwarp/`.
+
+After installing or refreshing a plugin cache, run `gitwarp upgrade --check`. A `stale` result means the shell launcher still points at older runtime behavior; run `gitwarp upgrade` to rewrite it.
 
 Read `references/install.md` only when installing, packaging, or troubleshooting plugin discovery.

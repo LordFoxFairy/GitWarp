@@ -74,6 +74,19 @@ if [[ "$version" != "gitwarp 0.1.0" ]]; then
 fi
 
 gitwarp task create --help >/dev/null
+gitwarp next --help >/dev/null
+
+upgrade_check="$(gitwarp upgrade --check --dest "$GITWARP_BIN")"
+UPGRADE_CHECK="$upgrade_check" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["UPGRADE_CHECK"])
+assert payload["ok"] is True
+assert payload["status"] == "current"
+assert payload["upgrade_required"] is False
+assert all(probe["ok"] for probe in payload["probes"])
+PY
 
 banner="$(gitwarp statusline --cwd "$REPO_ROOT")"
 if [[ "$banner" != "GITWARP[main-repo]" && "$banner" != GITWARP\[*@*\] ]]; then

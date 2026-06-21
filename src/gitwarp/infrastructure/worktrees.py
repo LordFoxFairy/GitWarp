@@ -74,23 +74,29 @@ def sync_ledger(
     persist: bool = True,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     if persist:
+        current = load_ledger(ctx)
+        live_keys = {worktree_metadata_key(item) for item in live_worktrees}
+        has_stale_entries = any(worktree_metadata_key(entry) not in live_keys for entry in current["entries"])
+        has_orphan_dossiers = bool(unreferenced_dossier_paths(ctx, current))
 
-        def prune(locked_ledger: dict[str, Any]) -> None:
-            stale_entries = [
-                entry
-                for entry in locked_ledger["entries"]
-                if not any(ledger_entry_matches_worktree(entry, item) for item in live_worktrees)
-            ]
-            for entry in stale_entries:
-                purge_orphan_dossier(ctx, entry)
-            locked_ledger["entries"] = [
-                entry
-                for entry in locked_ledger["entries"]
-                if any(ledger_entry_matches_worktree(entry, item) for item in live_worktrees)
-            ]
-            purge_unreferenced_dossiers(ctx, locked_ledger)
+        if has_stale_entries or has_orphan_dossiers:
 
-        mutate_ledger(ctx, prune)
+            def prune(locked_ledger: dict[str, Any]) -> None:
+                stale_entries = [
+                    entry
+                    for entry in locked_ledger["entries"]
+                    if not any(ledger_entry_matches_worktree(entry, item) for item in live_worktrees)
+                ]
+                for entry in stale_entries:
+                    purge_orphan_dossier(ctx, entry)
+                locked_ledger["entries"] = [
+                    entry
+                    for entry in locked_ledger["entries"]
+                    if any(ledger_entry_matches_worktree(entry, item) for item in live_worktrees)
+                ]
+                purge_unreferenced_dossiers(ctx, locked_ledger)
+
+            mutate_ledger(ctx, prune)
     ledger = load_ledger(ctx)
 
     metadata_by_key = metadata_by_worktree_key(ledger)
@@ -193,6 +199,27 @@ def purge_unreferenced_dossiers(ctx: RepoContext, ledger: dict[str, Any]) -> lis
         shutil.rmtree(child_path, ignore_errors=True)
         removed.append(str(child_path))
     return removed
+
+
+def unreferenced_dossier_paths(ctx: RepoContext, ledger: dict[str, Any]) -> list[Path]:
+    dossier_root = ctx.dossier_root.resolve()
+    if not dossier_root.is_dir():
+        return []
+    referenced = referenced_dossier_paths(ctx, ledger)
+    candidates: list[Path] = []
+    for child in dossier_root.iterdir():
+        if child.is_symlink() or not child.is_dir():
+            continue
+        child_path = child.resolve()
+        if child_path in referenced:
+            continue
+        try:
+            child_path.relative_to(dossier_root)
+        except ValueError:
+            continue
+        if looks_like_gitwarp_dossier(child_path):
+            candidates.append(child_path)
+    return candidates
 
 
 def find_worktree_for_cwd(cwd: Path, worktrees: list[dict[str, Any]]) -> dict[str, Any] | None:

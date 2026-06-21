@@ -82,6 +82,7 @@ class PluginStructureTests(unittest.TestCase):
             "application/use_cases/next_actions.py",
             "application/use_cases/provisioning.py",
             "application/use_cases/repository_browser.py",
+            "application/use_cases/runtime_sync.py",
             "application/use_cases/web_state.py",
             "adapters/__init__.py",
             "adapters/cli/__init__.py",
@@ -472,3 +473,5 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("GITWARP_BIN", verify_script)
         self.assertIn("~/.local/bin", verify_script)
         self.assertIn("gitwarp task create --help", verify_script)
+        self.assertIn("gitwarp next --help", verify_script)
+        self.assertIn("gitwarp upgrade --check", verify_script)

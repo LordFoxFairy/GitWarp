@@ -27,6 +27,7 @@ From this checkout:
 ```bash
 scripts/install-codex-plugin.sh
 gitwarp init
+gitwarp upgrade --check
 gitwarp doctor
 ```
 
@@ -40,6 +41,7 @@ codex plugin marketplace add "$PWD" --json
 plugin_json="$(codex plugin add gitwarp@gitwarp-dev --json)"
 installed_path="$(PLUGIN_JSON="$plugin_json" python3 -c 'import json, os; print(json.loads(os.environ["PLUGIN_JSON"])["installedPath"])')"
 python3 "$installed_path/skills/gitwarp/scripts/install_cli.py"
+gitwarp upgrade --check
 ```
 
 ### Standard Skill Path
@@ -56,6 +58,7 @@ mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
 ln -s "$PWD/skills/gitwarp" "$HOME/.agents/skills/gitwarp"
 ln -s "$PWD/skills/gitwarp" "$HOME/.claude/skills/gitwarp"
 python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
+gitwarp upgrade --check
 ```
 
 For copy-only installs, copy the repository root or install the Python package first. Copying only `skills/gitwarp/` is not enough because the core implementation lives in `src/gitwarp/`.
@@ -68,12 +71,15 @@ Initialize each target repository once, then run a read-only diagnostic:
 gitwarp init
 gitwarp matrix
 gitwarp next
+gitwarp upgrade --check
 gitwarp doctor
 ```
 
 `matrix` is the control-plane view for repositories that already have Git worktrees or old local branches. It reads `.git`, `.gitwarp/ledger.json`, and `.gitwarp/dossiers/`, then marks each row as active, untracked, stale, merged, or legacy without deleting anything.
 
 `next` is the operator action queue. It turns matrix categories such as `merged_task`, `merged_ref`, `untracked_worktree`, `stale_ledger`, and `orphan_dossier` into prioritized JSON actions with safety labels and explicit recommended commands. It is read-only and never cleans up by itself.
+
+`upgrade --check` validates that the launcher on disk supports the current command set without writing files. If it reports `missing` or `stale`, run `gitwarp upgrade` explicitly to rewrite the local launcher from this checkout or plugin cache.
 
 Check repository context when a session starts:
 
@@ -206,11 +212,12 @@ gitwarp matrix
 gitwarp next
 gitwarp branches
 gitwarp reconcile --stale 4
+gitwarp upgrade --check
 gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active GitWarp-managed sandboxes. `matrix` is broader: it syncs the view across Git branch refs, live Git worktrees, ledger rows, and dossier directories, including worktrees that were created outside GitWarp. `next` is the concise action queue for humans and agents; it preserves the same safety rules but shows what to review first. `branches` shows local refs grouped as base, active, merged, or orphan with delete blockers. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons, agent actions, and the shared next-action queue; Refs & Worktrees shows the read-only matrix of Git refs, live worktrees, ledger rows, dossier dirs, and explicit local-ref cleanup; Health shows doctor/reconcile findings.
+`board` shows active GitWarp-managed sandboxes. `matrix` is broader: it syncs the view across Git branch refs, live Git worktrees, ledger rows, and dossier directories, including worktrees that were created outside GitWarp. `next` is the concise action queue for humans and agents; it preserves the same safety rules but shows what to review first. `branches` shows local refs grouped as base, active, merged, or orphan with delete blockers. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `upgrade --check` verifies that the installed launcher still supports the runtime command set; `upgrade` rewrites it only when explicitly run. `doctor` checks Git, Python, launcher availability and capabilities, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons, agent actions, and the shared next-action queue; Refs & Worktrees shows the read-only matrix of Git refs, live worktrees, ledger rows, dossier dirs, and explicit local-ref cleanup; Health shows doctor/reconcile findings.
 
 ### Automated Agent
 
@@ -285,7 +292,7 @@ Example `.gitwarp/agents.json`:
 
 - `src/gitwarp/`: the only canonical runtime package root. It contains package metadata only; implementation lives in the DDD subpackages below.
 - `src/gitwarp/domain/`: value objects and pure policies for worktree snapshots, workspace records, branch collisions, guarded paths, and head drift.
-- `src/gitwarp/application/use_cases/`: orchestration for init, create/switch/remove, dispatch/start/handoff/finish/collapse, read-only web state, and repository file browsing.
+- `src/gitwarp/application/use_cases/`: orchestration for init, create/switch/remove, dispatch/start/handoff/finish/collapse, runtime launcher sync, read-only web state, and repository file browsing.
 - `src/gitwarp/application/health/`: doctor/init health checks, findings, process probes, and recommendations.
 - `src/gitwarp/infrastructure/`: Git subprocess, ledger persistence, dossier files, agent registry, and repository discovery adapters.
 - `src/gitwarp/adapters/cli/`: argparse parser, entrypoint, read commands, system commands, and workspace commands.

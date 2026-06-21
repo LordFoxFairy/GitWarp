@@ -11,6 +11,7 @@ from .navigation import build_switch_payload, shell_cd_command
 from .next_actions import build_next_actions_payload
 from .provisioning import build_base_payload, build_dispatch_payload, build_start_payload, build_summon_payload
 from .repository_browser import build_repository_file_payload, build_repository_tree_payload
+from .runtime_sync import build_upgrade_payload
 from .tasks import TaskCreateRequest, build_task_create_payload
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "build_switch_payload",
     "build_summon_payload",
     "build_task_create_payload",
+    "build_upgrade_payload",
     "build_web_state_payload",
     "collapse_worktree",
     "inspect_destructive_target",

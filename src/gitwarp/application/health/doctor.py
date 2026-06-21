@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import time
+from pathlib import Path
 from typing import Any
 
 from ...infrastructure.runtime import RepoContext
@@ -33,6 +34,16 @@ def recommended_next_for_findings(ctx: RepoContext, findings: list[dict[str, Any
             recommendations.append(f"Fix or remove {ctx.agents_path}")
         elif code == "gitwarp_launcher" and severity in {"warning", "error"}:
             recommendations.append("Run the GitWarp CLI installer from the skill scripts directory.")
+        elif code == "gitwarp_launcher_capability" and severity in {"warning", "error"}:
+            failed_probes = {
+                probe.get("name")
+                for probe in details.get("probes", [])
+                if isinstance(probe, dict) and probe.get("ok") is not True
+            }
+            if "upgrade" in failed_probes and details.get("fallback_upgrade_command"):
+                recommendations.append(str(details["fallback_upgrade_command"]))
+            else:
+                recommendations.append("gitwarp upgrade")
         elif code == "codex_plugin_metadata" and severity == "warning" and details.get("codex"):
             recommendations.append("Install or enable gitwarp@gitwarp-dev in Codex.")
         elif code == "codex_plugin_cache" and severity == "warning":
@@ -103,6 +114,22 @@ def build_doctor_payload(
             launcher_severity = "error"
             launcher_message = "gitwarp launcher exists but --version failed."
     findings.append(doctor_check("gitwarp_launcher", launcher_severity, launcher_message, **launcher_details))
+    if launcher_path:
+        from ..use_cases.runtime_sync import inspect_launcher, module_upgrade_command
+
+        capability = inspect_launcher(Path(launcher_path))
+        capability["fallback_upgrade_command"] = module_upgrade_command(Path(launcher_path))
+        capability_severity = "warning" if capability["upgrade_required"] else "ok"
+        findings.append(
+            doctor_check(
+                "gitwarp_launcher_capability",
+                capability_severity,
+                "gitwarp launcher supports current commands."
+                if capability_severity == "ok"
+                else "gitwarp launcher is missing current commands.",
+                **capability,
+            )
+        )
 
     findings.append(gitwarp_initialized_check(ctx))
     findings.append(ledger_schema_check(ctx))
