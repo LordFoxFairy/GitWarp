@@ -52,8 +52,9 @@ export function RepositoryTitleBar({ project, readonly }: RepositoryTitleBarProp
         <Label variant={readonly ? "secondary" : "success"}>{readonly ? "Public" : "Writable"}</Label>
       </div>
       <div className="repo-facts">
-        <SummaryItem label="Worktrees" value={project.worktree_count} />
-        <SummaryItem label="Active" value={project.active_worktree_count} />
+        <SummaryItem label="Git refs" value={project.branch_ref_count} />
+        <SummaryItem label="Live worktrees" value={project.worktree_count} />
+        <SummaryItem label="Non-main" value={project.active_worktree_count} />
         <SummaryItem label="Agents" value={project.assigned_agent_count} />
         <SummaryItem label="Findings" value={findings} tone={findings > 0 ? "warning" : "ok"} />
       </div>

@@ -214,8 +214,8 @@ export function App({ token }: AppProps) {
             return result;
           })
         }
-        onRunPruneBranch={(branch, confirmBranch) =>
-          runCommand("Prune branch", () => api.pruneBranch(selectedProject.repo_root, branch, confirmBranch))
+        onRunPruneBranch={(branch, confirmBranch, baseBranch) =>
+          runCommand("Prune branch", () => api.pruneBranch(selectedProject.repo_root, branch, confirmBranch, baseBranch))
         }
         onViewMetadata={() => setActiveTab("metadata")}
       />
@@ -242,7 +242,7 @@ interface RepositorySectionProps {
   onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
   onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
   onRunFinish: (worktree: WorktreeRow, status: string, progress: string) => Promise<CommandResult>;
-  onRunPruneBranch: (branch: string, confirmBranch: string) => Promise<CommandResult>;
+  onRunPruneBranch: (branch: string, confirmBranch: string, baseBranch?: string) => Promise<CommandResult>;
   onViewMetadata: () => void;
 }
 

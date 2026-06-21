@@ -214,17 +214,44 @@ def branch_exists(ctx: RepoContext, branch: str) -> bool:
     return result.returncode == 0
 
 
+def managed_worktree_path(ctx: RepoContext, branch: str) -> Path:
+    parts = [sanitize_name(part) for part in branch.split("/") if part]
+    if not parts:
+        parts = ["workspace"]
+    return ctx.worktree_root.joinpath(*parts).resolve()
+
+
+def prune_empty_worktree_parents(ctx: RepoContext, target_dir: Path) -> None:
+    worktree_root = ctx.worktree_root.resolve()
+    parent = target_dir.resolve().parent
+    while parent != worktree_root:
+        try:
+            parent.relative_to(worktree_root)
+        except ValueError:
+            return
+        try:
+            parent.rmdir()
+        except OSError:
+            return
+        parent = parent.parent
+
+
 def create_worktree(ctx: RepoContext, branch: str, *, start_point: str = "HEAD") -> tuple[Path, bool, str]:
-    target_dir = (ctx.worktree_root / sanitize_name(branch)).resolve()
+    target_dir = managed_worktree_path(ctx, branch)
     if target_dir.exists():
         raise GitWarpError(f"target path already exists: {target_dir}")
 
     ctx.worktree_root.mkdir(parents=True, exist_ok=True)
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
     existing_branch = branch_exists(ctx, branch)
-    if existing_branch:
-        run_git(ctx.repo_root, "worktree", "add", str(target_dir), branch)
-    else:
-        run_git(ctx.repo_root, "worktree", "add", "-b", branch, str(target_dir), start_point)
+    try:
+        if existing_branch:
+            run_git(ctx.repo_root, "worktree", "add", str(target_dir), branch)
+        else:
+            run_git(ctx.repo_root, "worktree", "add", "-b", branch, str(target_dir), start_point)
+    except Exception:
+        prune_empty_worktree_parents(ctx, target_dir)
+        raise
 
     head = run_git(target_dir, "rev-parse", "HEAD")
     return target_dir, existing_branch, head

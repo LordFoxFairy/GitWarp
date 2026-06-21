@@ -202,7 +202,7 @@ gitwarp doctor
 gitwarp web
 ```
 
-`board` shows active GitWarp-managed sandboxes. `matrix` is broader: it syncs the view across Git branch refs, live Git worktrees, ledger rows, and dossier directories, including worktrees that were created outside GitWarp. `branches` shows local refs grouped as base, active, merged, or orphan with delete blockers. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons plus agent actions; Branches shows safe local ref cleanup; Health shows doctor/reconcile findings.
+`board` shows active GitWarp-managed sandboxes. `matrix` is broader: it syncs the view across Git branch refs, live Git worktrees, ledger rows, and dossier directories, including worktrees that were created outside GitWarp. `branches` shows local refs grouped as base, active, merged, or orphan with delete blockers. `reconcile` audits stale ledger rows, dirty worktrees, missing dossiers, merged task branches, and `head_drift` without mutating state. `head_drift` means the live worktree HEAD differs from the last GitWarp-recorded handoff point. `doctor` checks Git, Python, the launcher, plugin metadata, installed Codex plugin cache drift, hooks, ignored runtime files, and agent binaries. `web` starts the local React management console. Its first screen is a GitHub/GitLab-like Project Directory. Open a repository, choose a base branch, then choose a task worktree under that base. Code browses tracked files at the selected worktree `HEAD`; Metadata shows task/progress/lessons plus agent actions; Refs & Worktrees shows the read-only matrix of Git refs, live worktrees, ledger rows, dossier dirs, and explicit local-ref cleanup; Health shows doctor/reconcile findings.
 
 ### Automated Agent
 
@@ -241,7 +241,7 @@ The matrix may contain multiple rows for the same branch when `.git` and `.gitwa
 
 GitWarp stores runtime state under `.gitwarp/` in the target repository. Run `gitwarp init` to create this state safely before dispatching agents.
 
-- Worktrees: `.gitwarp/worktrees/<worktree-name>`
+- Worktrees: `.gitwarp/worktrees/<branch/path>` for new managed worktrees, matching Git branch hierarchy such as `feature/my-task -> .gitwarp/worktrees/feature/my-task`.
 - Ledger: `.gitwarp/ledger.json`
 - Agent launch config: `.gitwarp/agents.json`
 - Instruction mount profiles: `.gitwarp/instruction_profiles.json`

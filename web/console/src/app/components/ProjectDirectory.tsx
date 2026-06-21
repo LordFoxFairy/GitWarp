@@ -29,7 +29,8 @@ export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDi
           <>
             <div className="repo-list-header" role="row">
               <span role="columnheader">Repository</span>
-              <span role="columnheader">Worktrees</span>
+              <span role="columnheader">Git refs</span>
+              <span role="columnheader">Live worktrees</span>
               <span role="columnheader">Agents</span>
               <span role="columnheader">Health</span>
               <span role="columnheader" aria-label="Actions" />
@@ -57,7 +58,8 @@ function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOp
         <Label variant={project.readonly ? "secondary" : "success"}>{project.readonly ? "read-only" : "writable"}</Label>
       </div>
 
-      <Metric label="Worktrees" value={project.worktree_count} detail={`${project.active_worktree_count} active`} />
+      <Metric label="Git refs" value={project.branch_ref_count} detail="local branches" />
+      <Metric label="Live worktrees" value={project.worktree_count} detail={`${project.active_worktree_count} non-main`} />
       <Metric label="Agents" value={project.assigned_agent_count} detail="assigned" />
       <Metric label="Health" value={findings} detail={findings > 0 ? "findings" : "clean"} tone={findings > 0 ? "warning" : "ok"} />
 

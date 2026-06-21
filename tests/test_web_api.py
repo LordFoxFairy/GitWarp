@@ -120,6 +120,18 @@ class WebApiTests(GitWarpTestCase):
         )
         self.assertGreaterEqual(project["reconcile_finding_count"], 1)
 
+    def test_web_project_summary_distinguishes_branch_refs_from_worktrees(self) -> None:
+        services = load_gitwarp_services()
+        run_git(self.repo, "branch", "feature/web-summary-ref")
+        run_git(self.repo, "branch", "fix/web-summary-ref")
+
+        payload = services.build_web_state_payload(self.repo, readonly=True)
+        project = payload["projects"][0]
+
+        self.assertEqual(project["branch_ref_count"], 3)
+        self.assertEqual(project["worktree_count"], 1)
+        self.assertGreater(project["branch_ref_count"], project["worktree_count"])
+
     def test_web_parser_accepts_subcommand_and_global_alias(self) -> None:
         _, subcommand = self.start_web_server(
             self.repo,
@@ -223,10 +235,12 @@ class WebApiTests(GitWarpTestCase):
         self.assertGreater(len(str(session["token"])), 20)
         self.assertEqual(schema_status, 200)
         self.assertIn("/api/state", schema["endpoints"])
+        self.assertIn("/api/matrix", schema["endpoints"])
         self.assertIn("/api/branches", schema["endpoints"])
         self.assertIn("/api/prune-branch", schema["endpoints"])
         self.assertIn("/api/repository/tree", schema["endpoints"])
         self.assertIn("/api/repository/file", schema["endpoints"])
+        self.assertFalse(schema["endpoints"]["/api/matrix"]["mutates"])  # type: ignore[index]
         self.assertFalse(schema["endpoints"]["/api/branches"]["mutates"])  # type: ignore[index]
         self.assertTrue(schema["endpoints"]["/api/prune-branch"]["mutates"])  # type: ignore[index]
         self.assertFalse(schema["endpoints"]["/api/repository/tree"]["mutates"])  # type: ignore[index]
@@ -261,11 +275,13 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("Instruction Mounts", html)
         self.assertIn("copy snapshot", html)
         self.assertIn("symlink live file", html)
-        self.assertIn("Worktrees", html)
+        self.assertIn("Git refs", html)
+        self.assertIn("Live worktrees", html)
         self.assertIn("Base branch", html)
         self.assertIn("Task worktree", html)
-        self.assertIn("Branches", html)
-        self.assertIn("Prune Branch", html)
+        self.assertIn("Refs & Worktrees", html)
+        self.assertIn("Review prune", html)
+        self.assertIn("Delete local branch ref", html)
         self.assertIn("Doctor / Reconcile", html)
         self.assertIn("Finish Merged Task", html)
         self.assertIn("createRoot", html)
@@ -486,6 +502,45 @@ class WebApiTests(GitWarpTestCase):
         self.assertTrue(prune["deleted"])
         remaining = run_git(self.repo, "branch", "--format", "%(refname:short)")
         self.assertNotIn("feature/web-merged-ref", remaining.splitlines())
+
+    def test_web_matrix_exposes_git_and_gitwarp_control_plane_without_mutation(self) -> None:
+        run_git(self.repo, "branch", "feature/web-matrix-merged")
+        manual_path = self.repo / "web-matrix-manual"
+        run_git(self.repo, "worktree", "add", "-b", "feature/web-matrix-manual", str(manual_path), "HEAD")
+        ledger_path = self.repo / ".gitwarp" / "ledger.json"
+        run_gitwarp(self.repo, "init", "--cwd", str(self.repo))
+        before = ledger_path.read_bytes()
+
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        no_token_status, no_token = self.fetch_web_json(str(ready["url"]), "/api/matrix")
+        matrix_status, matrix = self.fetch_web_json(
+            str(ready["url"]),
+            f"/api/matrix?cwd={urllib.parse.quote(str(self.repo))}",
+            token=token,
+        )
+        after = ledger_path.read_bytes()
+        rows = {row["branch"]: row for row in matrix["rows"]}  # type: ignore[index]
+
+        self.assertEqual(no_token_status, 403)
+        self.assertEqual(no_token["code"], "bad_token")
+        self.assertEqual(matrix_status, 200, matrix)
+        self.assertEqual(before, after)
+        self.assertEqual(rows["feature/web-matrix-merged"]["category"], "merged_ref")
+        self.assertEqual(rows["feature/web-matrix-merged"]["legacy_state"], "deprecated")
+        self.assertEqual(rows["feature/web-matrix-manual"]["category"], "untracked_worktree")
+        self.assertEqual(rows["feature/web-matrix-manual"]["recommended_action"], "adopt")
+        self.assertGreaterEqual(matrix["summary"]["prunable_branch_refs"], 1)  # type: ignore[index]
 
     def test_web_mutations_require_csrf_and_json_content_type(self) -> None:
         _, ready = self.start_web_server(

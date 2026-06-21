@@ -61,6 +61,7 @@ export interface ProjectSummary {
   ledger_path: string;
   readonly: boolean;
   statusline: string;
+  branch_ref_count: number;
   worktree_count: number;
   active_worktree_count: number;
   assigned_agent_count: number;
@@ -152,6 +153,67 @@ export interface BranchesPayload {
     deletable: number;
     by_category: Record<string, number>;
   };
+}
+
+export interface MatrixGitState {
+  branch_ref: boolean;
+  worktree: boolean;
+  merged_to_base?: boolean | null;
+  prunable: boolean;
+}
+
+export interface MatrixGitWarpState {
+  ledger: boolean;
+  ledger_live: boolean;
+  dossier_state: "none" | "ok" | "missing" | "stale" | "orphan" | string;
+  dossier_path?: string | null;
+  task_md?: string | null;
+  progress_md?: string | null;
+  lessons_md?: string | null;
+}
+
+export interface MatrixRow {
+  row_id: string;
+  branch: string;
+  category: "main" | "base" | "active_task" | "merged_task" | "merged_ref" | "orphan_ref" | "untracked_worktree" | "stale_ledger" | "orphan_dossier" | "inspect" | string;
+  legacy_state: "current" | "deprecated" | "legacy" | string;
+  recommended_action: "use_main" | "switch" | "create_base_worktree" | "finish_collapse_merged" | "adopt" | "repair_metadata" | "prune_branch" | "inspect" | string;
+  next_command?: string | null;
+  path?: string | null;
+  head?: string | null;
+  role?: "base" | "task" | string | null;
+  agent_id?: string | null;
+  status?: string | null;
+  purpose?: string | null;
+  git: MatrixGitState;
+  gitwarp: MatrixGitWarpState;
+}
+
+export interface MatrixPayload {
+  ok: boolean;
+  repo_root: string;
+  ledger_path: string;
+  default_branch: string;
+  merge_base: string;
+  statusline: string;
+  sources: {
+    git_branch_refs: number;
+    git_worktrees: number;
+    ledger_entries: number;
+    dossier_dirs: number;
+    reconcile_findings: number;
+  };
+  summary: {
+    rows: number;
+    active_gitwarp_tasks: number;
+    untracked_worktrees: number;
+    stale_ledger_entries: number;
+    merged_gitwarp_tasks: number;
+    prunable_branch_refs: number;
+    orphan_branch_refs: number;
+    orphan_dossiers: number;
+  };
+  rows: MatrixRow[];
 }
 
 export interface CommandResult {

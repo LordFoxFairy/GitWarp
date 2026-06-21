@@ -1,4 +1,4 @@
-import type { BranchesPayload, CommandResult, DossierPayload, RepositoryFilePayload, RepositoryTreePayload, WebState } from "./types";
+import type { BranchesPayload, CommandResult, DossierPayload, MatrixPayload, RepositoryFilePayload, RepositoryTreePayload, WebState } from "./types";
 
 interface ApiErrorPayload {
   ok?: boolean;
@@ -58,6 +58,15 @@ export class GitWarpApi {
     }
     const query = params.toString();
     return this.request<BranchesPayload>(`/api/branches${query ? `?${query}` : ""}`);
+  }
+
+  getMatrix(cwd: string, base?: string): Promise<MatrixPayload> {
+    const params = new URLSearchParams({ cwd });
+    if (base) {
+      params.set("base", base);
+    }
+    const query = params.toString();
+    return this.request<MatrixPayload>(`/api/matrix${query ? `?${query}` : ""}`);
   }
 
   start(input: StartWorktreeInput): Promise<CommandResult> {

@@ -11,7 +11,7 @@ from ...infrastructure.dossiers import create_dossier_files, dossier_paths
 from ...infrastructure.instructions import build_instruction_plan, mount_instruction_files
 from ...infrastructure.ledger import mutate_ledger
 from ...infrastructure.runtime import GitWarpError, RepoContext, now_iso, run_git
-from ...infrastructure.worktrees import create_worktree, ensure_branch_available, find_worktree_for_cwd, parse_worktrees, sync_ledger
+from ...infrastructure.worktrees import create_worktree, ensure_branch_available, find_worktree_for_cwd, parse_worktrees, prune_empty_worktree_parents, sync_ledger
 
 
 def cleanup_created_dossier(ctx: RepoContext, raw_dossier_path: str | None) -> None:
@@ -42,6 +42,7 @@ def cleanup_created_worktree(
         run_git(ctx.repo_root, "worktree", "remove", "--force", str(target_dir))
     except GitWarpError:
         pass
+    prune_empty_worktree_parents(ctx, Path(target_dir))
     if branch_created:
         try:
             run_git(ctx.repo_root, "branch", "-D", branch)

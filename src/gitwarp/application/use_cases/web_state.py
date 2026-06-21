@@ -17,6 +17,7 @@ from ...infrastructure.worktrees import (
     parse_worktrees,
     worktree_metadata_key,
 )
+from .branches import list_local_branch_refs
 
 
 def safe_load_ledger_for_web(ctx: RepoContext) -> tuple[dict[str, Any], str | None]:
@@ -89,6 +90,7 @@ def build_project_summary(
     readonly: bool,
     statusline: str,
     worktree_rows: list[dict[str, Any]],
+    branch_ref_count: int,
     doctor: dict[str, Any],
     reconcile: dict[str, Any],
 ) -> dict[str, Any]:
@@ -105,6 +107,7 @@ def build_project_summary(
         "ledger_path": str(ctx.ledger_path),
         "readonly": readonly,
         "statusline": statusline,
+        "branch_ref_count": branch_ref_count,
         "worktree_count": len(worktree_rows),
         "active_worktree_count": len(active_worktrees),
         "assigned_agent_count": len(assigned_agents),
@@ -120,6 +123,7 @@ def build_web_state_payload(
 ) -> dict[str, Any]:
     ctx = discover_repo(resolve_path(str(cwd)))
     _, worktrees, ledger_error = sync_ledger_for_web(ctx, parse_worktrees(ctx))
+    branch_ref_count = len(list_local_branch_refs(ctx))
     target = find_worktree_for_cwd(ctx.cwd, worktrees)
     doctor = build_doctor_payload(ctx, web_safe=True, cache=doctor_cache)
     if ledger_error:
@@ -146,6 +150,7 @@ def build_web_state_payload(
         readonly=readonly,
         statusline=statusline,
         worktree_rows=worktree_rows,
+        branch_ref_count=branch_ref_count,
         doctor=doctor,
         reconcile=reconcile,
     )

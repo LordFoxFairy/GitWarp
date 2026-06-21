@@ -101,6 +101,7 @@ READ_ENDPOINTS: dict[str, EndpointSpec] = {
     "/api/session": EndpointSpec("GET", False),
     "/api/schema": EndpointSpec("GET", False),
     "/api/state": EndpointSpec("GET", False),
+    "/api/matrix": EndpointSpec("GET", False),
     "/api/dossier": EndpointSpec("GET", False, ("path",)),
     "/api/repository/tree": EndpointSpec("GET", False),
     "/api/repository/file": EndpointSpec("GET", False, ("path",)),

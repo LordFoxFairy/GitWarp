@@ -4,6 +4,27 @@ from helpers import *
 
 
 class WorktreeTests(GitWarpTestCase):
+    def test_managed_worktree_paths_follow_branch_hierarchy(self) -> None:
+        created = run_gitwarp(
+            self.repo,
+            "create",
+            "--branch",
+            "feature/nested-worktree-path",
+            "--purpose",
+            "Verify hierarchical worktree paths",
+        )
+        expected_path = self.repo / ".gitwarp" / "worktrees" / "feature" / "nested-worktree-path"
+        worktree_path = Path(str(created["path"]))
+
+        self.assertEqual(worktree_path, expected_path.resolve())
+        self.assertTrue(worktree_path.exists())
+
+        removed = run_gitwarp(self.repo, "remove", "--branch", "feature/nested-worktree-path")
+
+        self.assertEqual(removed["removed_path"], str(expected_path.resolve()))
+        self.assertFalse(worktree_path.exists())
+        self.assertFalse((self.repo / ".gitwarp" / "worktrees" / "feature").exists())
+
     def test_base_and_task_roles_group_work_to_parent_branch(self) -> None:
         base = run_gitwarp(
             self.repo,

@@ -11,6 +11,8 @@ GitWarp is the worktree isolation protocol for coding agents. It creates task sa
 
 Dossiers live in the root repository control plane under `.gitwarp/dossiers/`. They are not copied into business source trees. Agents read them through `gitwarp enter`, `gitwarp context`, `gitwarp board`, or the Web Console Metadata tab.
 
+Managed worktree directories follow Git branch hierarchy: `feature/my-task` maps to `.gitwarp/worktrees/feature/my-task`. Older flat paths remain readable because Git live worktrees are the source of truth.
+
 ## Core Rule
 
 Do not use `git switch`, `git checkout`, or direct `git worktree add` in the main checkout for agent task work. Use GitWarp commands so branch collisions, ledger state, and dossier files stay consistent.
@@ -35,7 +37,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 
 `start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `create`, `switch`, and `remove` unless you specifically need a rendered launch command from `dispatch`.
 
-The Web Console is for human supervision: open a project, choose a base branch, choose a task worktree under that base, browse tracked files in Code, inspect task/progress/lessons in Metadata, review safe local refs in Branches, and review doctor/reconcile findings in Health.
+The Web Console is for human supervision: open a project, choose a base branch, choose a task worktree under that base, browse tracked files in Code, inspect task/progress/lessons in Metadata, review Git refs/live worktrees/ledger rows/dossiers in Refs & Worktrees, and review doctor/reconcile findings in Health.
 
 ## Control Plane Matrix
 

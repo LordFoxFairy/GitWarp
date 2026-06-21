@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from ..application.use_cases import (
     build_branches_payload,
+    build_matrix_payload,
     build_repository_file_payload,
     build_repository_tree_payload,
     build_web_state_payload,
@@ -147,6 +148,20 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
             return
         self.send_json(200, payload)
 
+    def send_matrix(self, query: str) -> None:
+        values = parse_qs(query)
+        try:
+            cwd = values.get("cwd", [str(self.server.state.ctx.repo_root)])[0] or str(self.server.state.ctx.repo_root)
+            ctx = discover_repo(resolve_path(cwd))
+            payload = build_matrix_payload(
+                ctx,
+                base_branch=values.get("base", [None])[0],
+            )
+        except GitWarpError as exc:
+            self.send_json(400, {"ok": False, "error": str(exc), "code": "bad_matrix_query"})
+            return
+        self.send_json(200, payload)
+
     def do_GET(self) -> None:
         if not self.check_host():
             return
@@ -191,6 +206,11 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
             if not self.require_token():
                 return
             self.send_branches(parsed.query)
+            return
+        if parsed.path == "/api/matrix":
+            if not self.require_token():
+                return
+            self.send_matrix(parsed.query)
             return
         self.send_json(404, {"ok": False, "error": "unknown route", "code": "not_found"})
 

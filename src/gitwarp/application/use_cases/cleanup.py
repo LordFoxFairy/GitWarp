@@ -7,7 +7,7 @@ from typing import Any
 from ...infrastructure.dossiers import record_handoff
 from ...infrastructure.ledger import mutate_ledger
 from ...infrastructure.runtime import GitWarpError, RepoContext, resolve_path, run_git
-from ...infrastructure.worktrees import branch_merged_into_base, parse_worktrees, select_collapse_target, select_live_target, sync_ledger
+from ...infrastructure.worktrees import branch_merged_into_base, parse_worktrees, prune_empty_worktree_parents, select_collapse_target, select_live_target, sync_ledger
 
 
 def worktree_status_summary(path: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -86,6 +86,7 @@ def collapse_worktree(ctx: RepoContext, *, path: str | None, branch: str | None)
     target_dir = Path(target_path)
     if target_dir.exists():
         shutil.rmtree(target_dir)
+    prune_empty_worktree_parents(ctx, target_dir)
     if dossier_path is not None:
         shutil.rmtree(dossier_path, ignore_errors=True)
 
