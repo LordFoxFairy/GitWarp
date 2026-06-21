@@ -60,17 +60,20 @@ Normalization rules:
 
 - Trim whitespace.
 - Lowercase ASCII letters.
-- Replace every non-`[a-z0-9._-]` run with `-`.
+- Replace every non-`[a-z0-9]` run with `-`.
 - Collapse repeated `-`.
 - Strip leading and trailing `-`.
 - Reject if the result is empty after cleanup.
 - Limit the slug to 64 characters by cutting at a character boundary and stripping a trailing `-`.
+- Validate the final generated branch with `git check-ref-format --branch <branch>` before any mutation.
 
 Purpose resolution order:
 
-1. `--purpose` when provided.
-2. `--description` when provided.
+1. `--purpose` when provided as a non-empty trimmed value.
+2. `--description` when provided as a non-empty trimmed value.
 3. `--title`.
+
+Blank optional strings are treated as absent after trimming. The required title is rejected when blank or when it normalizes to an empty slug.
 
 `--agent` is target-agent metadata only. It must never start an external process. Store it as `target_agent` in the ledger entry, return it in the JSON payload, and render it in `task.md`. Allowed values for v1 are `codex`, `claude`, and `generic`; default is `generic`. `agent_id` remains the workspace owner identity and is independent from `target_agent`.
 
@@ -109,7 +112,7 @@ Add a web mutation endpoint:
 POST /api/task/create
 ```
 
-It accepts these JSON fields and delegates to the same application use case. The endpoint remains CSRF protected, appears in `/api/schema`, and is disabled in read-only web mode.
+It accepts these JSON fields and delegates to the same application use case. The endpoint remains CSRF protected, appears in `/api/schema`, and is disabled in read-only web mode. Successful responses return the same task-create payload keys as the CLI, including `target_agent`, `task_title`, `task_description`, `acceptance_criteria`, `verification_commands`, and `shell_command`.
 
 | Field | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
@@ -164,6 +167,7 @@ Task-created worktrees should initialize `task.md` with concrete sections:
 - Parent Base: <base>
 - Worktree: <absolute path>
 - Agent: <agent id>
+- Target Agent: <target_agent>
 
 ## Acceptance Criteria
 - [ ] <criterion>
@@ -203,6 +207,7 @@ After creation, the UI selects the new worktree, shows its dossier in Metadata, 
 - Branch collision checks stay strict. If the derived or explicit branch is already bound to a live worktree, abort before mutation.
 - Auto-generated branches also fail if the local branch ref already exists, even when no worktree currently uses it.
 - Explicit `--branch` may reuse an existing unbound local branch, but must still fail if that branch is checked out by any live worktree.
+- Both generated and explicit branches must pass `git check-ref-format --branch` before any mutation.
 - Generated branch collisions return a deterministic error. Do not append random suffixes in the first release.
 - Empty titles are rejected.
 - Titles that normalize to an empty slug are rejected.
@@ -231,14 +236,17 @@ This is the recommended path. It reuses existing worktree, ledger, instruction, 
 - CLI: `gitwarp task create --title ...` creates a task worktree with generated branch, generated agent ID, absolute paths, and a richer dossier.
 - CLI: explicit `--branch`, `--agent-id`, `--base`, `--acceptance`, `--verify`, and instruction options are preserved in output and dossier files.
 - CLI: generated branch fails when the local branch ref already exists; explicit branch may reuse an unbound local ref.
-- CLI: slug normalization covers whitespace, punctuation, Unicode-only titles, mixed ASCII/Unicode titles, maximum length, and empty-after-cleanup rejection.
+- CLI: slug normalization covers whitespace, punctuation, Unicode-only titles, mixed ASCII/Unicode titles, `.`, `foo..bar`, `foo.lock`, `foo.`, maximum length, Git ref-format validation, and empty-after-cleanup rejection.
+- CLI/API: blank optional `purpose` and `description` values are treated as absent; blank required `title` is rejected.
 - CLI: JSON payload includes `task_title`, `task_description`, `target_agent`, `acceptance_criteria`, `verification_commands`, and `shell_command`.
 - Safety: branch collision aborts before ledger or dossier mutation.
 - Safety: instruction mount failure rolls back created artifacts.
 - Web API: `/api/task/create` validates required fields, rejects unknown fields and wrong types, rejects read-only mode, requires CSRF, appears in `/api/schema`, and returns stable JSON.
+- Web API: successful `/api/task/create` returns the same task-create payload keys as CLI.
 - Web API: request field names are `base_branch`, `target_agent`, `acceptance_criteria`, and `verification_commands`; tests must reject CLI flag spellings such as `base` or `verify`.
 - Frontend: `gitwarp-api.ts` defines a typed `TaskCreateInput` and posts to `/api/task/create`.
 - Web UI: Create Task posts to the new endpoint and selects the created worktree without a full page reload.
+- Dossier: generated `task.md` includes separate `Agent` and `Target Agent` rows.
 - Compatibility: existing `create`, `start`, `dispatch`, `matrix`, `board`, `finish`, and `remove` tests continue passing.
 
 ## Rollout Plan
