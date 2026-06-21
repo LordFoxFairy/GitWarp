@@ -169,6 +169,78 @@ class WorktreeTests(GitWarpTestCase):
         self.assertFalse(task_path.exists())
         self.assertFalse(dossier_path.exists())
 
+    def test_sweep_merged_tasks_removes_only_clean_task_worktrees(self) -> None:
+        base = run_gitwarp(
+            self.repo,
+            "create",
+            "--role",
+            "base",
+            "--branch",
+            "feature/sweep-parent",
+            "--purpose",
+            "Parent feature line",
+        )
+        base_path = Path(str(base["path"]))
+        clean = run_gitwarp(
+            self.repo,
+            "create",
+            "--base",
+            "feature/sweep-parent",
+            "--branch",
+            "agent/sweep-clean",
+            "--purpose",
+            "Clean merged task",
+        )
+        dirty = run_gitwarp(
+            self.repo,
+            "create",
+            "--base",
+            "feature/sweep-parent",
+            "--branch",
+            "agent/sweep-dirty",
+            "--purpose",
+            "Dirty merged task",
+        )
+        clean_path = Path(str(clean["path"]))
+        clean_dossier = Path(str(clean["dossier_path"]))
+        dirty_path = Path(str(dirty["path"]))
+        dirty_dossier = Path(str(dirty["dossier_path"]))
+
+        (clean_path / "clean.txt").write_text("done\n", encoding="utf-8")
+        run_git(clean_path, "add", "clean.txt")
+        run_git(clean_path, "commit", "-m", "clean task")
+        (dirty_path / "dirty.txt").write_text("done\n", encoding="utf-8")
+        run_git(dirty_path, "add", "dirty.txt")
+        run_git(dirty_path, "commit", "-m", "dirty task")
+        run_git(base_path, "merge", "--no-ff", "agent/sweep-clean", "-m", "merge clean task")
+        run_git(base_path, "merge", "--no-ff", "agent/sweep-dirty", "-m", "merge dirty task")
+        (dirty_path / "untracked.txt").write_text("keep me\n", encoding="utf-8")
+
+        preview = run_gitwarp(self.repo, "sweep", "--merged-tasks", "--dry-run")
+        self.assertTrue(preview["dry_run"])
+        self.assertEqual(preview["summary"]["removable"], 1)  # type: ignore[index]
+        self.assertEqual(preview["summary"]["skipped"], 1)  # type: ignore[index]
+        self.assertTrue(clean_path.exists())
+        self.assertTrue(clean_dossier.exists())
+
+        swept = run_gitwarp(self.repo, "sweep", "--merged-tasks")
+
+        self.assertFalse(swept["dry_run"])
+        self.assertEqual(swept["summary"]["removed"], 1)  # type: ignore[index]
+        self.assertEqual(swept["summary"]["skipped"], 1)  # type: ignore[index]
+        self.assertEqual(swept["removed"][0]["branch"], "agent/sweep-clean")  # type: ignore[index]
+        self.assertFalse(clean_path.exists())
+        self.assertFalse(clean_dossier.exists())
+        self.assertTrue(dirty_path.exists())
+        self.assertTrue(dirty_dossier.exists())
+        self.assertTrue(base_path.exists())
+        self.assertIn("agent/sweep-clean", run_git(self.repo, "branch", "--list", "agent/sweep-clean"))
+
+    def test_sweep_requires_explicit_selector(self) -> None:
+        refused = run_gitwarp(self.repo, "sweep", expect_ok=False)
+
+        self.assertIn("--merged-tasks", str(refused["error"]))
+
     def test_sync_prunes_dead_worktree_entries_and_orphan_dossiers(self) -> None:
         task = run_gitwarp(
             self.repo,

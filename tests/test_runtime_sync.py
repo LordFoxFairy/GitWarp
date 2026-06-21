@@ -4,7 +4,7 @@ from helpers import *
 from unittest import mock
 
 
-def write_fake_launcher(path: Path, *, supports_next: bool = False, supports_upgrade: bool = True) -> None:
+def write_fake_launcher(path: Path, *, supports_next: bool = False, supports_sweep: bool = True, supports_upgrade: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     next_case = """
 if args[:2] == ["next", "--help"]:
@@ -18,6 +18,14 @@ if args[:2] == ["next", "--help"]:
 if args[:2] == ["upgrade", "--help"]:
     sys.exit(0)
 """ if supports_upgrade else ""
+    sweep_case = """
+if args[:2] == ["sweep", "--help"]:
+    sys.exit(0)
+""" if supports_sweep else """
+if args[:2] == ["sweep", "--help"]:
+    print("usage: gitwarp [-h] {init,scan}", file=sys.stderr)
+    sys.exit(2)
+"""
     path.write_text(
         f"""#!/usr/bin/env python3
 import sys
@@ -29,6 +37,7 @@ if args[:3] == ["task", "create", "--help"]:
     sys.exit(0)
 {upgrade_case}
 {next_case}
+{sweep_case}
 sys.exit(2)
 """,
         encoding="utf-8",
@@ -60,6 +69,17 @@ class RuntimeSyncTests(GitWarpTestCase):
         failed = [probe for probe in payload["probes"] if not probe["ok"]]  # type: ignore[index]
         self.assertEqual(["next"], [probe["name"] for probe in failed])
 
+    def test_upgrade_check_reports_launcher_missing_sweep_command(self) -> None:
+        destination = self.repo / "bin" / "gitwarp"
+        write_fake_launcher(destination, supports_next=True, supports_sweep=False)
+
+        payload = run_gitwarp(self.repo, "upgrade", "--cwd", str(self.repo), "--check", "--dest", str(destination))
+
+        self.assertEqual(payload["status"], "stale")
+        self.assertTrue(payload["upgrade_required"])
+        failed = [probe for probe in payload["probes"] if not probe["ok"]]  # type: ignore[index]
+        self.assertEqual(["sweep"], [probe["name"] for probe in failed])
+
     def test_upgrade_writes_current_launcher_and_validates_capabilities(self) -> None:
         destination = self.repo / "bin" / "gitwarp"
 
@@ -86,8 +106,16 @@ class RuntimeSyncTests(GitWarpTestCase):
             text=True,
             check=False,
         )
+        sweep_help = subprocess.run(
+            [str(destination), "sweep", "--help"],
+            cwd=str(self.repo),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         self.assertEqual(version.stdout.strip(), "gitwarp 0.1.0")
         self.assertEqual(next_help.returncode, 0)
+        self.assertEqual(sweep_help.returncode, 0)
 
     def test_doctor_recommends_upgrade_when_launcher_lacks_current_commands(self) -> None:
         fake_bin = self.repo / "fake-bin"

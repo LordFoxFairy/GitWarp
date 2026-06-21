@@ -75,6 +75,7 @@ fi
 
 gitwarp task create --help >/dev/null
 gitwarp next --help >/dev/null
+gitwarp sweep --help >/dev/null
 
 upgrade_check="$(gitwarp upgrade --check --dest "$GITWARP_BIN")"
 UPGRADE_CHECK="$upgrade_check" python3 - <<'PY'

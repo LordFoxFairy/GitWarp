@@ -13,6 +13,7 @@ The project follows the common Agent Skills layout while keeping product code in
 - Explain `.git` branch refs, live worktrees, GitWarp ledger rows, and dossiers in one read-only matrix.
 - Convert matrix findings into a prioritized, read-only next-action queue.
 - Detect unmanaged worktree commits with non-mutating `head_drift` audit findings.
+- Sweep clean merged task worktrees without deleting branch refs.
 - List and prune safe merged local branch refs separately from sandbox removal.
 - Mark blocked work with `pause` and resume cleanly with `resume`.
 - Emit strict one-line JSON for automation and a raw `statusline` banner for prompts.
@@ -78,6 +79,8 @@ gitwarp doctor
 `matrix` is the control-plane view for repositories that already have Git worktrees or old local branches. It reads `.git`, `.gitwarp/ledger.json`, and `.gitwarp/dossiers/`, then marks each row as active, untracked, stale, merged, or legacy without deleting anything.
 
 `next` is the operator action queue. It turns matrix categories such as `merged_task`, `merged_ref`, `untracked_worktree`, `stale_ledger`, and `orphan_dossier` into prioritized JSON actions with safety labels and explicit recommended commands. It is read-only and never cleans up by itself.
+
+`sweep --merged-tasks --dry-run` previews clean GitWarp-managed task worktrees whose branch HEAD is already merged into their parent `base_branch`. Running without `--dry-run` removes only those task worktrees, their ledger rows, and matching dossiers. It preserves base worktrees, unmanaged worktrees, dirty worktrees, unmerged tasks, and all local branch refs.
 
 `upgrade --check` validates that the launcher on disk supports the current command set without writing files. If it reports `missing` or `stale`, run `gitwarp upgrade` explicitly to rewrite the local launcher from this checkout or plugin cache.
 
@@ -180,6 +183,15 @@ gitwarp finish --status merged \
 
 `--collapse-merged` refuses to run unless the target is a clean task worktree and Git proves its branch HEAD is already merged into `base_branch`. Base worktrees, including `main`, are not auto-collapsed.
 
+To clean multiple already-merged task sandboxes after reviewing `gitwarp next`, preview first:
+
+```bash
+gitwarp sweep --merged-tasks --dry-run
+gitwarp sweep --merged-tasks
+```
+
+`sweep` uses the same safety model as `finish --collapse-merged`: it only removes clean GitWarp-managed task worktrees merged into their parent base. It deletes the worktree, ledger row, and dossier, but leaves the branch ref for separate user-confirmed cleanup.
+
 Only force-collapse when the user explicitly wants a sandbox destroyed regardless of merge state:
 
 ```bash
@@ -235,7 +247,7 @@ gitwarp handoff --status implementing --progress "Short milestone"
 Session hooks should not print full `enter` output by default; they should inject the banner and remind the agent that `enter` is available when full context is needed.
 If the user explicitly assigns an existing worktree, complete the work in that worktree and stop there after verification. Do not push, merge, remove, or collapse unless the user asked for that action.
 
-For new user requests, prefer `gitwarp task create`. If the request needs a long-lived feature branch, create that branch with `gitwarp create --role base` first, then run `gitwarp task create --base <feature-branch>` for agent implementation. Agent-created task branches may be collapsed with `finish --collapse-merged` only after they are merged back into their parent base. Do not auto-collapse base branches.
+For new user requests, prefer `gitwarp task create`. If the request needs a long-lived feature branch, create that branch with `gitwarp create --role base` first, then run `gitwarp task create --base <feature-branch>` for agent implementation. Agent-created task branches may be collapsed with `finish --collapse-merged` after they are merged back into their parent base, or swept in batches with `gitwarp sweep --merged-tasks` after preview. Do not auto-collapse base branches.
 
 ### Existing Worktree
 
@@ -265,7 +277,7 @@ GitWarp stores runtime state under `.gitwarp/` in the target repository. Run `gi
 
 By default, `init` writes `/.gitwarp/` to `.git/info/exclude`, which keeps runtime files local to one checkout. Use `gitwarp init --write-gitignore` when the team wants the ignore rule committed to `.gitignore`.
 
-Dossiers are lifecycle files for active task sandboxes, not long-term archives. `handoff` keeps them current while a worktree exists. `remove`, `collapse`, `finish --collapse`, and `finish --collapse-merged` delete the matching dossier directory together with the worktree and ledger row while leaving the branch untouched. `init` repairs GitWarp-owned dead ledger entries and unreferenced GitWarp dossier directories, but it does not delete Git branch refs or Git worktrees discovered from `.git`.
+Dossiers are lifecycle files for active task sandboxes, not long-term archives. `handoff` keeps them current while a worktree exists. `remove`, `collapse`, `finish --collapse`, `finish --collapse-merged`, and `sweep --merged-tasks` delete the matching dossier directory together with the worktree and ledger row while leaving the branch untouched. `init` repairs GitWarp-owned dead ledger entries and unreferenced GitWarp dossier directories, but it does not delete Git branch refs or Git worktrees discovered from `.git`.
 
 Dossiers are stored in the root repository control plane, not inside each task worktree's source tree. Agents should read them through `gitwarp enter`, `gitwarp context`, `gitwarp board --verbose`, or the Web Console Metadata tab. This keeps task memory centralized for human review without polluting project files.
 
@@ -292,7 +304,7 @@ Example `.gitwarp/agents.json`:
 
 - `src/gitwarp/`: the only canonical runtime package root. It contains package metadata only; implementation lives in the DDD subpackages below.
 - `src/gitwarp/domain/`: value objects and pure policies for worktree snapshots, workspace records, branch collisions, guarded paths, and head drift.
-- `src/gitwarp/application/use_cases/`: orchestration for init, create/switch/remove, dispatch/start/handoff/finish/collapse, runtime launcher sync, read-only web state, and repository file browsing.
+- `src/gitwarp/application/use_cases/`: orchestration for init, create/switch/remove, dispatch/start/handoff/finish/collapse/sweep, runtime launcher sync, read-only web state, and repository file browsing.
 - `src/gitwarp/application/health/`: doctor/init health checks, findings, process probes, and recommendations.
 - `src/gitwarp/infrastructure/`: Git subprocess, ledger persistence, dossier files, agent registry, and repository discovery adapters.
 - `src/gitwarp/adapters/cli/`: argparse parser, entrypoint, read commands, system commands, and workspace commands.

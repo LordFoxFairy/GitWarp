@@ -27,6 +27,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 | `gitwarp remove` | Destroy a sandbox and its dossier when explicitly requested; add `--force` only for dirty targets. |
 | `gitwarp matrix` | Read-only control-plane view across Git refs, live worktrees, ledger rows, and dossiers. |
 | `gitwarp next` | Read-only prioritized action queue derived from matrix categories; shows safety and recommended commands. |
+| `gitwarp sweep` | Explicitly clean already-merged, clean, GitWarp-managed task worktrees in batches; preserves branch refs. |
 | `gitwarp branches` | List local branch refs with cleanup safety metadata. |
 | `gitwarp prune-branch` | Delete only a safe merged local branch ref after explicit selection. |
 | `gitwarp handoff` | Record progress and optional lessons during work. |
@@ -55,7 +56,7 @@ Important matrix categories:
 - `stale_ledger`: a ledger row points to a worktree Git no longer reports. This is GitWarp metadata repair, not Git branch deletion. Use the printed `gitwarp init` only when the user wants stale metadata cleaned.
 - `orphan_dossier`: a dossier directory is no longer referenced by the ledger. Treat it as legacy metadata; do not delete manually unless the user asks.
 - `merged_ref`: an unmanaged local branch ref is merged into the selected baseline, usually `main`, and safe according to GitWarp blockers. It is marked `deprecated`; delete only after explicit user selection with `gitwarp prune-branch`.
-- `merged_task`: a live task worktree has already been merged into its parent base. It is a cleanup candidate, but `finish --collapse-merged` must still be explicitly run and will refuse dirty worktrees.
+- `merged_task`: a live task worktree has already been merged into its parent base. It is a cleanup candidate, but `finish --collapse-merged` or `sweep --merged-tasks` must still be explicitly run and will refuse dirty worktrees.
 
 If multiple rows share the same branch, use `row_id` to distinguish branch refs, live worktrees, stale ledger rows, and dossier-only legacy records.
 
@@ -143,6 +144,15 @@ gitwarp finish --status merged \
 
 `--collapse-merged` refuses base worktrees, dirty worktrees, and task branches whose HEAD is not merged into `base_branch`.
 
+When multiple merged task sandboxes are ready for cleanup, preview and then sweep them:
+
+```bash
+gitwarp sweep --merged-tasks --dry-run
+gitwarp sweep --merged-tasks
+```
+
+`sweep --merged-tasks` removes only clean GitWarp-managed task worktrees whose branch HEAD is merged into their parent `base_branch`. It deletes the worktree, ledger row, and matching dossier. It does not delete local branch refs, base worktrees, unmanaged worktrees, dirty worktrees, or unmerged task worktrees.
+
 When the user explicitly wants the sandbox destroyed regardless of merge state:
 
 ```bash
@@ -153,7 +163,7 @@ gitwarp finish --status pushed \
 
 Use `gitwarp remove` inside a sandbox only when it should be destroyed without a final handoff. From the main checkout, target one explicitly with `gitwarp remove --branch <branch>`. If the target has uncommitted or untracked files, `remove` refuses to proceed until you rerun with `--force`.
 
-`remove`, `collapse`, `finish --collapse`, and `finish --collapse-merged` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They do not merge, push, or delete the Git branch. If the user assigns an existing worktree, finish the requested work there and stop after verification unless the user explicitly asks for push, merge, remove, or collapse.
+`remove`, `collapse`, `finish --collapse`, `finish --collapse-merged`, and `sweep --merged-tasks` delete the worktree, its ledger row, and the matching `.gitwarp/dossiers/...` directory. They do not merge, push, or delete the Git branch. If the user assigns an existing worktree, finish the requested work there and stop after verification unless the user explicitly asks for push, merge, remove, or collapse.
 
 For local branch cleanup, use the separate ref commands:
 

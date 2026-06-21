@@ -14,6 +14,7 @@ from ...application.use_cases import (
     build_handoff_payload,
     build_prune_branch_payload,
     build_start_payload,
+    build_sweep_payload,
     build_switch_payload,
     build_summon_payload,
     build_task_create_payload,
@@ -258,6 +259,11 @@ def cmd_remove(args: argparse.Namespace) -> None:
 def cmd_prune_branch(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     emit_json(build_prune_branch_payload(ctx, branch=args.branch, base_branch=args.base))
+
+
+def cmd_sweep(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.cwd))
+    emit_json(build_sweep_payload(ctx, merged_tasks=args.merged_tasks, dry_run=args.dry_run))
 
 
 def cmd_switch(args: argparse.Namespace) -> None:

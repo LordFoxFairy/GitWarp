@@ -31,6 +31,7 @@ from .workspaces import (
     cmd_resume,
     cmd_start,
     cmd_summon,
+    cmd_sweep,
     cmd_switch,
     cmd_task_create,
 )
@@ -127,6 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
     prune_branch.add_argument("--branch", required=True)
     prune_branch.add_argument("--base", help="Branch that must contain the target branch HEAD; defaults to origin HEAD or main")
     prune_branch.set_defaults(func=cmd_prune_branch)
+
+    sweep = subparsers.add_parser("sweep", help="Safely clean selected GitWarp-managed task worktrees")
+    sweep.add_argument("--cwd")
+    sweep.add_argument("--merged-tasks", action="store_true", help="Remove clean task worktrees already merged into their base branch")
+    sweep.add_argument("--dry-run", action="store_true", help="Preview candidates without removing worktrees, ledger rows, or dossiers")
+    sweep.set_defaults(func=cmd_sweep)
 
     summon = subparsers.add_parser("summon", help="Create an isolated worktree for an agent")
     summon.add_argument("--cwd")

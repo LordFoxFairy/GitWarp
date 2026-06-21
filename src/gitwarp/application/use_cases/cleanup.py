@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from ...domain.branch_roles import TASK_ROLE
 from ...infrastructure.dossiers import record_handoff
 from ...infrastructure.ledger import mutate_ledger
 from ...infrastructure.runtime import GitWarpError, RepoContext, resolve_path, run_git
@@ -167,4 +168,105 @@ def build_collapse_payload(ctx: RepoContext, *, path: str | None, branch: str | 
         "removed_branch": removed_branch,
         "dossier_path": dossier_path,
         "purged_dossier": purged_dossier,
+    }
+
+
+def build_sweep_payload(ctx: RepoContext, *, merged_tasks: bool, dry_run: bool) -> dict[str, Any]:
+    if not merged_tasks:
+        raise GitWarpError("sweep requires an explicit target selector such as --merged-tasks")
+
+    _, worktrees = sync_ledger(ctx, parse_worktrees(ctx))
+    candidates: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    removed: list[dict[str, Any]] = []
+
+    for worktree in sorted(worktrees, key=lambda item: str(item.get("path") or "")):
+        row = build_sweep_row(ctx, worktree)
+        if row["decision"] == "remove":
+            candidates.append(row)
+        elif row["decision"] == "skip" and row["reason"] in {"dirty_worktree", "unmerged_task"}:
+            skipped.append(row)
+
+    if not dry_run:
+        for candidate in candidates:
+            removed_path, removed_branch, dossier_path, purged_dossier = collapse_worktree(
+                ctx,
+                path=str(candidate["path"]),
+                branch=None,
+            )
+            removed.append(
+                {
+                    **candidate,
+                    "removed_path": removed_path,
+                    "removed_branch": removed_branch,
+                    "dossier_path": dossier_path,
+                    "purged_dossier": purged_dossier,
+                }
+            )
+
+    return {
+        "ok": True,
+        "repo_root": str(ctx.repo_root),
+        "ledger_path": str(ctx.ledger_path),
+        "dry_run": dry_run,
+        "mode": "merged_tasks",
+        "summary": {
+            "candidates": len(candidates) + len(skipped),
+            "removable": len(candidates),
+            "removed": len(removed),
+            "skipped": len(skipped),
+        },
+        "removable": candidates,
+        "removed": removed,
+        "skipped": skipped,
+        "preserved": {
+            "branch_refs": True,
+            "base_worktrees": True,
+            "unmanaged_worktrees": True,
+        },
+    }
+
+
+def build_sweep_row(ctx: RepoContext, worktree: dict[str, Any]) -> dict[str, Any]:
+    branch = worktree.get("branch")
+    path = worktree.get("path")
+    branch_role = worktree.get("branch_role")
+    base_branch = worktree.get("base_branch")
+    base = {
+        "path": path,
+        "branch": branch,
+        "branch_role": branch_role,
+        "base_branch": base_branch,
+        "agent_id": worktree.get("agent_id"),
+        "purpose": worktree.get("purpose"),
+        "dossier_path": worktree.get("dossier_path"),
+    }
+    if worktree.get("is_main"):
+        return {**base, "decision": "preserve", "reason": "main_checkout"}
+    if worktree.get("agent_id") is None:
+        return {**base, "decision": "preserve", "reason": "unmanaged_worktree"}
+    if branch_role != TASK_ROLE:
+        return {**base, "decision": "preserve", "reason": "base_worktree"}
+    if not isinstance(path, str) or not path:
+        return {**base, "decision": "skip", "reason": "missing_worktree_path"}
+    checked_branch = branch if isinstance(branch, str) else None
+    checked_base = base_branch if isinstance(base_branch, str) else None
+    if not branch_merged_into_base(ctx, checked_branch, checked_base):
+        return {**base, "decision": "skip", "reason": "unmerged_task"}
+
+    dirty_summary, untracked_summary = worktree_status_summary(str(path))
+    if dirty_summary["count"]:
+        return {
+            **base,
+            "decision": "skip",
+            "reason": "dirty_worktree",
+            "dirty_summary": dirty_summary,
+            "untracked_summary": untracked_summary,
+        }
+    return {
+        **base,
+        "decision": "remove",
+        "reason": "merged_clean_task",
+        "dirty_summary": dirty_summary,
+        "untracked_summary": untracked_summary,
     }

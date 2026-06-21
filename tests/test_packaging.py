@@ -478,4 +478,5 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("~/.local/bin", verify_script)
         self.assertIn("gitwarp task create --help", verify_script)
         self.assertIn("gitwarp next --help", verify_script)
+        self.assertIn("gitwarp sweep --help", verify_script)
         self.assertIn("gitwarp upgrade --check", verify_script)

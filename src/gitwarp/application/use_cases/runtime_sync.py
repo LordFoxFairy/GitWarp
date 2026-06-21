@@ -21,6 +21,7 @@ REQUIRED_LAUNCHER_PROBES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("upgrade", ("upgrade", "--help")),
     ("task_create", ("task", "create", "--help")),
     ("next", ("next", "--help")),
+    ("sweep", ("sweep", "--help")),
 )
 
 
