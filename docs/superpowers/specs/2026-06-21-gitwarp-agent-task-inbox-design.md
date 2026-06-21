@@ -42,9 +42,37 @@ If the caller omits branch and agent ID, GitWarp derives them:
 - Agent ID: `agent-<slugified-title>`.
 - Base branch: inferred from the current GitWarp context with the existing `infer_base_branch` rule.
 
-If the user supplies `--branch`, GitWarp must use it exactly after existing branch validation. User-provided branch names are intent, not hints.
+If the user supplies `--branch`, GitWarp must use it exactly after existing branch validation. User-provided branch names are intent, not hints. Explicit branches may bind to an existing unbound local branch, matching the existing `create` behavior. Auto-generated branches are stricter: if `refs/heads/<generated-branch>` already exists or any live worktree is already bound to that branch, task creation fails before mutation. GitWarp must not silently attach a generated task to stale local branch history.
 
 The command returns the same kind of payload as `gitwarp create`: repository root, absolute worktree path, branch, base branch, dossier paths, mounted instructions, and a shell navigation command when requested.
+
+## Naming And Metadata Rules
+
+Task intake must use one deterministic normalization path:
+
+| Input title | Slug | Generated branch | Generated agent ID |
+| --- | --- | --- | --- |
+| `Polish matrix web UX` | `polish-matrix-web-ux` | `agent/polish-matrix-web-ux` | `agent-polish-matrix-web-ux` |
+| `修复 Web 闪动` | `web` | `agent/web` | `agent-web` |
+| `!!!` | invalid | rejected | rejected |
+
+Normalization rules:
+
+- Trim whitespace.
+- Lowercase ASCII letters.
+- Replace every non-`[a-z0-9._-]` run with `-`.
+- Collapse repeated `-`.
+- Strip leading and trailing `-`.
+- Reject if the result is empty after cleanup.
+- Limit the slug to 64 characters by cutting at a character boundary and stripping a trailing `-`.
+
+Purpose resolution order:
+
+1. `--purpose` when provided.
+2. `--description` when provided.
+3. `--title`.
+
+`--agent` is target-agent metadata only. It must never start an external process. Store it as `target_agent` in the ledger entry, return it in the JSON payload, and render it in `task.md`. Allowed values for v1 are `codex`, `claude`, and `generic`; default is `generic`. `agent_id` remains the workspace owner identity and is independent from `target_agent`.
 
 ## CLI And API Contract
 
@@ -60,7 +88,7 @@ Supported options:
 - `--description <text>`: optional full user request or problem statement.
 - `--base <branch>`: optional parent base branch.
 - `--branch <branch>`: optional explicit task branch.
-- `--agent <codex|claude|generic>`: optional launch target metadata.
+- `--agent <codex|claude|generic>`: optional target-agent metadata; default `generic`.
 - `--agent-id <id>`: optional explicit owner ID.
 - `--purpose <text>`: optional compatibility alias; defaults from title/description.
 - `--acceptance <text>`: repeatable acceptance criteria.
@@ -68,7 +96,12 @@ Supported options:
 - `--instruction <source[=target]>`: repeatable instruction mount, same semantics as `create`.
 - `--instruction-profile <name>`: existing profile support.
 - `--instruction-mode <copy|symlink>`: existing instruction mount mode.
-- `--format <json|shell>`: JSON by default; `shell` prints a `cd` command after creation.
+
+CLI output is deterministic single-line JSON. It must include at least:
+
+```json
+{"ok":true,"repo_root":"/abs/repo","path":"/abs/worktree","branch":"agent/example","base_branch":"main","agent_id":"agent-example","target_agent":"generic","purpose":"Example","task_title":"Example","task_description":null,"acceptance_criteria":[],"verification_commands":[],"branch_created":true,"head":"...","dossier_path":"/abs/.gitwarp/dossiers/...","task_md":"/abs/.../task.md","progress_md":"/abs/.../progress.md","lessons_md":"/abs/.../lessons.md","instructions":[],"shell_command":"cd /abs/worktree"}
+```
 
 Add a web mutation endpoint:
 
@@ -76,7 +109,22 @@ Add a web mutation endpoint:
 POST /api/task/create
 ```
 
-It accepts the same fields as the CLI request and delegates to the same application use case. The endpoint remains CSRF protected and disabled in read-only web mode.
+It accepts these JSON fields and delegates to the same application use case. The endpoint remains CSRF protected, appears in `/api/schema`, and is disabled in read-only web mode.
+
+| Field | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `title` | string | yes | none | Must not normalize to an empty slug. |
+| `description` | string | no | null | Full user request. |
+| `base_branch` | string | no | inferred | API uses `base_branch`, not CLI-only `--base`. |
+| `branch` | string | no | generated | Explicit branch may reuse an unbound local ref. |
+| `target_agent` | string | no | `generic` | One of `codex`, `claude`, `generic`. |
+| `agent_id` | string | no | generated | Workspace owner identity. |
+| `purpose` | string | no | resolved | Uses purpose resolution order above. |
+| `acceptance_criteria` | string list | no | `[]` | Repeatable CLI `--acceptance` maps here. |
+| `verification_commands` | string list | no | `[]` | Repeatable CLI `--verify` maps here. |
+| `instructions` | string list | no | `[]` | Same syntax as existing web endpoints. |
+| `instruction_profile` | string | no | null | Existing instruction profile. |
+| `instruction_mode` | string | no | `copy` | One of `copy`, `symlink`. |
 
 ## Application Architecture
 
@@ -153,8 +201,12 @@ After creation, the UI selects the new worktree, shows its dossier in Metadata, 
 ## Safety Rules
 
 - Branch collision checks stay strict. If the derived or explicit branch is already bound to a live worktree, abort before mutation.
+- Auto-generated branches also fail if the local branch ref already exists, even when no worktree currently uses it.
+- Explicit `--branch` may reuse an existing unbound local branch, but must still fail if that branch is checked out by any live worktree.
 - Generated branch collisions return a deterministic error. Do not append random suffixes in the first release.
 - Empty titles are rejected.
+- Titles that normalize to an empty slug are rejected.
+- `target_agent` validation happens before any Git or filesystem mutation.
 - Instruction mount failure must roll back the created worktree, branch, and dossier using existing cleanup paths.
 - Task-created worktrees always use `branch_role=task`.
 - Base worktrees remain explicit through `gitwarp create --role base`; the task inbox does not create long-lived base branches in its first release.
@@ -178,9 +230,14 @@ This is the recommended path. It reuses existing worktree, ledger, instruction, 
 
 - CLI: `gitwarp task create --title ...` creates a task worktree with generated branch, generated agent ID, absolute paths, and a richer dossier.
 - CLI: explicit `--branch`, `--agent-id`, `--base`, `--acceptance`, `--verify`, and instruction options are preserved in output and dossier files.
+- CLI: generated branch fails when the local branch ref already exists; explicit branch may reuse an unbound local ref.
+- CLI: slug normalization covers whitespace, punctuation, Unicode-only titles, mixed ASCII/Unicode titles, maximum length, and empty-after-cleanup rejection.
+- CLI: JSON payload includes `task_title`, `task_description`, `target_agent`, `acceptance_criteria`, `verification_commands`, and `shell_command`.
 - Safety: branch collision aborts before ledger or dossier mutation.
 - Safety: instruction mount failure rolls back created artifacts.
-- Web API: `/api/task/create` validates required fields, rejects read-only mode, requires CSRF, and returns stable JSON.
+- Web API: `/api/task/create` validates required fields, rejects unknown fields and wrong types, rejects read-only mode, requires CSRF, appears in `/api/schema`, and returns stable JSON.
+- Web API: request field names are `base_branch`, `target_agent`, `acceptance_criteria`, and `verification_commands`; tests must reject CLI flag spellings such as `base` or `verify`.
+- Frontend: `gitwarp-api.ts` defines a typed `TaskCreateInput` and posts to `/api/task/create`.
 - Web UI: Create Task posts to the new endpoint and selects the created worktree without a full page reload.
 - Compatibility: existing `create`, `start`, `dispatch`, `matrix`, `board`, `finish`, and `remove` tests continue passing.
 
