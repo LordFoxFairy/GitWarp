@@ -76,6 +76,7 @@ class PluginStructureTests(unittest.TestCase):
             "application/use_cases/__init__.py",
             "application/use_cases/cleanup.py",
             "application/use_cases/handoff.py",
+            "application/use_cases/host_install.py",
             "application/use_cases/init.py",
             "application/use_cases/navigation.py",
             "application/use_cases/metadata.py",
@@ -486,6 +487,10 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("GITWARP_BIN", verify_script)
         self.assertIn("~/.local/bin", verify_script)
         self.assertIn("gitwarp task create --help", verify_script)
+        self.assertIn("gitwarp install --help", verify_script)
+        self.assertIn("gitwarp install self --dry-run", verify_script)
+        self.assertIn('gitwarp install codex --source "$REPO_ROOT" --dry-run', verify_script)
+        self.assertIn('gitwarp install claude-code --source "$REPO_ROOT" --dry-run', verify_script)
         self.assertIn("gitwarp next --help", verify_script)
         self.assertIn("gitwarp sweep --help", verify_script)
         self.assertIn("gitwarp upgrade --check", verify_script)
@@ -496,6 +501,9 @@ class PluginStructureTests(unittest.TestCase):
 
         for content in (readme, install_notes):
             with self.subTest(path="install-doc"):
+                self.assertIn("gitwarp install self", content)
+                self.assertIn("gitwarp install codex", content)
+                self.assertIn("gitwarp install claude-code", content)
                 self.assertIn("scripts/install-claude-plugin.sh", content)
                 self.assertIn("claude plugin marketplace add", content)
                 self.assertIn("claude plugin install gitwarp@gitwarp-dev", content)

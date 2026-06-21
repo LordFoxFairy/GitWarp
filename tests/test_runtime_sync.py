@@ -4,7 +4,14 @@ from helpers import *
 from unittest import mock
 
 
-def write_fake_launcher(path: Path, *, supports_next: bool = False, supports_sweep: bool = True, supports_upgrade: bool = True) -> None:
+def write_fake_launcher(
+    path: Path,
+    *,
+    supports_install: bool = True,
+    supports_next: bool = False,
+    supports_sweep: bool = True,
+    supports_upgrade: bool = True,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     next_case = """
 if args[:2] == ["next", "--help"]:
@@ -18,6 +25,14 @@ if args[:2] == ["next", "--help"]:
 if args[:2] == ["upgrade", "--help"]:
     sys.exit(0)
 """ if supports_upgrade else ""
+    install_case = """
+if args[:2] == ["install", "--help"]:
+    sys.exit(0)
+""" if supports_install else """
+if args[:2] == ["install", "--help"]:
+    print("usage: gitwarp [-h] {init,scan}", file=sys.stderr)
+    sys.exit(2)
+"""
     sweep_case = """
 if args[:2] == ["sweep", "--help"]:
     sys.exit(0)
@@ -36,6 +51,7 @@ if args == ["--version"]:
 if args[:3] == ["task", "create", "--help"]:
     sys.exit(0)
 {upgrade_case}
+{install_case}
 {next_case}
 {sweep_case}
 sys.exit(2)
@@ -46,6 +62,66 @@ sys.exit(2)
 
 
 class RuntimeSyncTests(GitWarpTestCase):
+    def test_install_self_dry_run_recommends_pipx_without_mutating(self) -> None:
+        payload = run_gitwarp(
+            self.repo,
+            "install",
+            "self",
+            "--method",
+            "pipx",
+            "--source",
+            str(REPO_ROOT),
+            "--dry-run",
+        )
+
+        self.assertTrue(payload["dry_run"])
+        self.assertEqual(payload["target"], "self")
+        self.assertEqual(payload["method"], "pipx")
+        self.assertEqual(payload["command"], ["python3", "-m", "pipx", "install", str(REPO_ROOT)])
+        self.assertIn("pipx", payload["shell_command"])
+
+    def test_install_gitwarp_alias_does_not_resolve_package_url_as_path(self) -> None:
+        package_source = "git+https://github.com/LordFoxFairy/GitWarp.git"
+
+        payload = run_gitwarp(
+            self.repo,
+            "install",
+            "gitwarp",
+            "--method",
+            "pipx",
+            "--source",
+            package_source,
+            "--dry-run",
+        )
+
+        self.assertEqual(payload["target"], "self")
+        self.assertEqual(payload["command"], ["python3", "-m", "pipx", "install", package_source])
+
+    def test_install_self_launcher_writes_current_launcher(self) -> None:
+        destination = self.repo / "bin" / "gitwarp"
+
+        payload = run_gitwarp(self.repo, "install", "self", "--method", "launcher", "--dest", str(destination))
+
+        self.assertEqual(payload["target"], "self")
+        self.assertEqual(payload["method"], "launcher")
+        self.assertFalse(payload["dry_run"])
+        self.assertTrue(destination.exists())
+        result = payload["result"]  # type: ignore[assignment]
+        self.assertEqual(result["status"], "written")  # type: ignore[index]
+        self.assertFalse(result["upgrade_required"])  # type: ignore[index]
+
+    def test_install_host_dry_run_targets_native_plugin_scripts(self) -> None:
+        codex = run_gitwarp(self.repo, "install", "codex", "--source", str(REPO_ROOT), "--dry-run")
+        claude = run_gitwarp(self.repo, "install", "claude", "--source", str(REPO_ROOT), "--dry-run")
+        claudecode = run_gitwarp(self.repo, "install", "claudecode", "--source", str(REPO_ROOT), "--dry-run")
+
+        self.assertEqual(codex["target"], "codex")
+        self.assertTrue(str(codex["script"]).endswith("scripts/install-codex-plugin.sh"))
+        self.assertEqual(claude["target"], "claude-code")
+        self.assertEqual(claudecode["target"], "claude-code")
+        self.assertTrue(str(claude["script"]).endswith("scripts/install-claude-plugin.sh"))
+        self.assertIn("install-claude-plugin.sh", claude["shell_command"])
+
     def test_upgrade_check_reports_missing_launcher_without_writing(self) -> None:
         destination = self.repo / "bin" / "gitwarp"
 
@@ -80,6 +156,17 @@ class RuntimeSyncTests(GitWarpTestCase):
         failed = [probe for probe in payload["probes"] if not probe["ok"]]  # type: ignore[index]
         self.assertEqual(["sweep"], [probe["name"] for probe in failed])
 
+    def test_upgrade_check_reports_launcher_missing_install_command(self) -> None:
+        destination = self.repo / "bin" / "gitwarp"
+        write_fake_launcher(destination, supports_install=False, supports_next=True)
+
+        payload = run_gitwarp(self.repo, "upgrade", "--cwd", str(self.repo), "--check", "--dest", str(destination))
+
+        self.assertEqual(payload["status"], "stale")
+        self.assertTrue(payload["upgrade_required"])
+        failed = [probe for probe in payload["probes"] if not probe["ok"]]  # type: ignore[index]
+        self.assertEqual(["install"], [probe["name"] for probe in failed])
+
     def test_upgrade_writes_current_launcher_and_validates_capabilities(self) -> None:
         destination = self.repo / "bin" / "gitwarp"
 
@@ -113,9 +200,17 @@ class RuntimeSyncTests(GitWarpTestCase):
             text=True,
             check=False,
         )
+        install_help = subprocess.run(
+            [str(destination), "install", "--help"],
+            cwd=str(self.repo),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         self.assertEqual(version.stdout.strip(), "gitwarp 0.1.0")
         self.assertEqual(next_help.returncode, 0)
         self.assertEqual(sweep_help.returncode, 0)
+        self.assertEqual(install_help.returncode, 0)
 
     def test_doctor_recommends_upgrade_when_launcher_lacks_current_commands(self) -> None:
         fake_bin = self.repo / "fake-bin"

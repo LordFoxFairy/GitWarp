@@ -12,6 +12,7 @@ from .cleanup import (
     worktree_status_summary,
 )
 from .handoff import build_handoff_payload
+from .host_install import build_install_payload
 from .matrix import build_matrix_payload
 from .metadata import build_adopt_payload, build_annotate_payload
 from .navigation import build_switch_payload, shell_cd_command
@@ -32,6 +33,7 @@ __all__ = [
     "build_finish_payload",
     "build_handoff_payload",
     "build_init_payload",
+    "build_install_payload",
     "build_matrix_payload",
     "build_next_actions_payload",
     "build_prune_branch_payload",

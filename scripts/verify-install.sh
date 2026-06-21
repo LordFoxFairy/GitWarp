@@ -74,6 +74,10 @@ if [[ "$version" != "gitwarp 0.1.0" ]]; then
 fi
 
 gitwarp task create --help >/dev/null
+gitwarp install --help >/dev/null
+gitwarp install self --dry-run >/dev/null
+gitwarp install codex --source "$REPO_ROOT" --dry-run >/dev/null
+gitwarp install claude-code --source "$REPO_ROOT" --dry-run >/dev/null
 gitwarp next --help >/dev/null
 gitwarp sweep --help >/dev/null
 

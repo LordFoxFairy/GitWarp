@@ -18,6 +18,7 @@ ENTRYPOINT_MODULE = ".".join(("gitwarp", "adapters", "cli", "entrypoint"))
 PROBE_TIMEOUT_SECONDS = 5.0
 REQUIRED_LAUNCHER_PROBES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("version", ("--version",)),
+    ("install", ("install", "--help")),
     ("upgrade", ("upgrade", "--help")),
     ("task_create", ("task", "create", "--help")),
     ("next", ("next", "--help")),

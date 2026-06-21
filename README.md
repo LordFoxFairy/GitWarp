@@ -21,12 +21,36 @@ The project follows the common Agent Skills layout while keeping product code in
 
 ## Install
 
-### Claude Code Plugin Path
+### Bootstrap GitWarp
+
+If `gitwarp` is not on `PATH` yet, bootstrap the launcher from this checkout:
+
+```bash
+python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
+hash -r
+```
+
+After the launcher exists, use GitWarp's own installer facade:
+
+```bash
+gitwarp install self
+gitwarp upgrade --check
+gitwarp doctor
+```
+
+`gitwarp install self` refreshes the `~/.local/bin/gitwarp` launcher from the current checkout or plugin cache. For package-style installs, use one of these explicit methods:
+
+```bash
+gitwarp install self --method pipx --source "$PWD"
+gitwarp install self --method pip --source "$PWD"
+```
+
+### Claude Code Plugin
 
 From this checkout:
 
 ```bash
-scripts/install-claude-plugin.sh
+gitwarp install claude-code
 gitwarp init
 gitwarp upgrade --check
 gitwarp doctor
@@ -38,29 +62,30 @@ If the installer reports `on_path:false`, add `~/.local/bin` to `PATH` or run th
 Manual equivalent:
 
 ```bash
+scripts/install-claude-plugin.sh
 claude plugin marketplace add "$PWD" --scope user
 claude plugin install gitwarp@gitwarp-dev --scope user
 python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
 gitwarp upgrade --check
 ```
 
-### Codex Plugin Path
+### Codex Plugin
 
 From this checkout:
 
 ```bash
-scripts/install-codex-plugin.sh
+gitwarp install codex
 gitwarp init
 gitwarp upgrade --check
 gitwarp doctor
 ```
 
-This registers or rebinds the local marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
-If the installer reports `on_path:false`, add `~/.local/bin` to `PATH` or run the returned absolute launcher path.
+This registers or rebinds the local Codex marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
 
 Manual equivalent:
 
 ```bash
+scripts/install-codex-plugin.sh
 codex plugin marketplace add "$PWD" --json
 plugin_json="$(codex plugin add gitwarp@gitwarp-dev --json)"
 installed_path="$(PLUGIN_JSON="$plugin_json" python3 -c 'import json, os; print(json.loads(os.environ["PLUGIN_JSON"])["installedPath"])')"
@@ -68,7 +93,7 @@ python3 "$installed_path/skills/gitwarp/scripts/install_cli.py"
 gitwarp upgrade --check
 ```
 
-### Standard Skill Path
+### Standard Skill Discovery
 
 GitWarp also exposes repo-local standard skill locations:
 
@@ -81,7 +106,7 @@ For source checkout installs, symlink the canonical skill folder and install the
 mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
 ln -s "$PWD/skills/gitwarp" "$HOME/.agents/skills/gitwarp"
 ln -s "$PWD/skills/gitwarp" "$HOME/.claude/skills/gitwarp"
-python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
+gitwarp install self
 gitwarp upgrade --check
 ```
 

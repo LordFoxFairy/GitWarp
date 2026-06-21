@@ -114,6 +114,23 @@ def scenario_skill_preserves_engineering_discipline() -> list[str]:
     return [item for item in checks if item]
 
 
+def scenario_install_commands_are_first_class() -> list[str]:
+    skill = read("skills/gitwarp/SKILL.md")
+    readme = read("README.md")
+    parser = read("src/gitwarp/adapters/cli/parser.py")
+    checks = [
+        require_contains(skill, "`gitwarp install`", "SKILL.md"),
+        require_contains(skill, "gitwarp install self", "SKILL.md"),
+        require_contains(skill, "gitwarp install codex", "SKILL.md"),
+        require_contains(skill, "gitwarp install claude-code", "SKILL.md"),
+        require_contains(readme, "gitwarp install self", "README.md"),
+        require_contains(readme, "gitwarp install codex", "README.md"),
+        require_contains(readme, "gitwarp install claude-code", "README.md"),
+        require_contains(parser, 'add_parser("install"', "CLI parser"),
+    ]
+    return [item for item in checks if item]
+
+
 SCENARIOS: tuple[tuple[str, Callable[[], list[str]]], ...] = (
     ("new_task_prefers_task_create", scenario_new_task_prefers_task_create),
     ("existing_worktree_preserved", scenario_existing_worktree_preserved),
@@ -121,6 +138,7 @@ SCENARIOS: tuple[tuple[str, Callable[[], list[str]]], ...] = (
     ("session_hook_is_low_noise", scenario_session_hook_is_low_noise),
     ("plugin_prompt_matches_skill", scenario_plugin_prompt_matches_skill),
     ("skill_preserves_engineering_discipline", scenario_skill_preserves_engineering_discipline),
+    ("install_commands_are_first_class", scenario_install_commands_are_first_class),
 )
 
 

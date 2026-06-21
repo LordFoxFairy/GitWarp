@@ -22,6 +22,7 @@ Use GitWarp instead of `git switch`, `git checkout`, or direct `git worktree add
 
 | Command | Use |
 | --- | --- |
+| `gitwarp install` | First-class installer for GitWarp itself and host integrations such as Codex and Claude Code. |
 | `gitwarp task create` | Preferred intake for new user work; creates a task worktree and richer dossier from title, description, acceptance, and verification notes. |
 | `gitwarp create` | Lower-level creation for explicit base worktrees or manually specified sandboxes. |
 | `gitwarp switch` | Locate an existing worktree and print its path or a shell `cd` command. |
@@ -235,7 +236,15 @@ Use `--readonly` when supervising without mutations. Use `--host` and `--port` o
 
 ## Installation Notes
 
-Use `gitwarp` from `PATH`. The skill `scripts/` directory contains bootstrap helpers only, primarily `scripts/install_cli.py`; product runtime code belongs in `src/gitwarp/`.
+Use `gitwarp` from `PATH`. If the launcher is missing, bootstrap once with `python3 skills/gitwarp/scripts/install_cli.py`, then use the first-class installer commands:
+
+```bash
+gitwarp install self
+gitwarp install codex
+gitwarp install claude-code
+```
+
+`gitwarp install self` refreshes the local launcher. `gitwarp install codex` and `gitwarp install claude-code` call the host-specific plugin installers from the full repository/plugin package. The skill `scripts/` directory contains bootstrap helpers only; product runtime code belongs in `src/gitwarp/`.
 
 After installing or refreshing a plugin cache, run `gitwarp upgrade --check`. A `stale` result means the shell launcher still points at older runtime behavior; run `gitwarp upgrade` only when the user or operator agrees to refresh it.
 

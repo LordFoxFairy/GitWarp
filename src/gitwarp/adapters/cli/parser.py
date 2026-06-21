@@ -16,7 +16,7 @@ from .read import (
     cmd_scan,
     cmd_statusline,
 )
-from .system import cmd_init, cmd_upgrade, cmd_web
+from .system import cmd_init, cmd_install, cmd_upgrade, cmd_web
 from .workspaces import (
     cmd_adopt,
     cmd_annotate,
@@ -49,6 +49,15 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--cwd")
     init.add_argument("--write-gitignore", action="store_true")
     init.set_defaults(func=cmd_init)
+
+    install = subparsers.add_parser("install", help="Install GitWarp itself or host integrations")
+    install.add_argument("target", choices=["self", "gitwarp", "codex", "claude-code", "claude", "claudecode", "cc"])
+    install.add_argument("--method", choices=["launcher", "pipx", "pip"], default="launcher", help="Installation method for target self")
+    install.add_argument("--source", help="Source checkout for host plugins, or package source for self pip/pipx installs")
+    install.add_argument("--dest", help="Launcher path when using --method launcher; defaults to ~/.local/bin/gitwarp")
+    install.add_argument("--scope", choices=["user", "project", "local"], default="user", help="Host plugin installation scope")
+    install.add_argument("--dry-run", action="store_true", help="Print planned commands without executing them")
+    install.set_defaults(func=cmd_install)
 
     scan = subparsers.add_parser("scan", help="List live worktrees with GitWarp metadata")
     scan.add_argument("--cwd")

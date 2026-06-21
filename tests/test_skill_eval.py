@@ -24,6 +24,7 @@ class SkillEvaluationTests(unittest.TestCase):
                 "session_hook_is_low_noise",
                 "plugin_prompt_matches_skill",
                 "skill_preserves_engineering_discipline",
+                "install_commands_are_first_class",
             },
             scenario_ids,
         )
