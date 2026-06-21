@@ -24,6 +24,7 @@ class PayloadValidationError(ValueError):
 
 MUTATION_ENDPOINTS: dict[str, EndpointSpec] = {
     "/api/init": EndpointSpec("POST", True, ("write_gitignore",)),
+    "/api/task/create": EndpointSpec("POST", True, ("title",)),
     "/api/dispatch": EndpointSpec("POST", True, ("branch", "purpose")),
     "/api/start": EndpointSpec("POST", True, ("agent_id", "branch", "purpose")),
     "/api/handoff": EndpointSpec("POST", True, ("cwd", "status", "progress")),
@@ -37,6 +38,20 @@ MUTATION_ENDPOINTS: dict[str, EndpointSpec] = {
 MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
     "/api/init": {
         "write_gitignore": FieldSpec("boolean", required=True),
+    },
+    "/api/task/create": {
+        "title": FieldSpec("string", required=True),
+        "description": FieldSpec("string"),
+        "base_branch": FieldSpec("string"),
+        "branch": FieldSpec("string"),
+        "target_agent": FieldSpec("string", choices=("codex", "claude", "generic")),
+        "agent_id": FieldSpec("string"),
+        "purpose": FieldSpec("string"),
+        "acceptance_criteria": FieldSpec("string_list"),
+        "verification_commands": FieldSpec("string_list"),
+        "instructions": FieldSpec("string_list"),
+        "instruction_profile": FieldSpec("string"),
+        "instruction_mode": FieldSpec("string", choices=("copy", "symlink")),
     },
     "/api/dispatch": {
         "agent": FieldSpec("string"),
@@ -159,6 +174,8 @@ def validate_field(name: str, value: Any, spec: FieldSpec) -> None:
             raise PayloadValidationError(f"{name} must be a string")
         if spec.required and not value.strip():
             raise PayloadValidationError(f"{name} must not be empty")
+        if not spec.required and not value.strip():
+            return
         if spec.choices and value not in spec.choices:
             raise PayloadValidationError(f"{name} must be one of: {', '.join(spec.choices)}")
         return

@@ -6,6 +6,7 @@ from ..domain.errors import GitWarpError
 from ..infrastructure.ledger import discover_repo
 from ..infrastructure.runtime import RepoContext, resolve_path
 from ..application.use_cases import (
+    TaskCreateRequest,
     build_collapse_payload,
     build_dispatch_payload,
     build_finish_payload,
@@ -13,6 +14,7 @@ from ..application.use_cases import (
     build_init_payload,
     build_prune_branch_payload,
     build_start_payload,
+    build_task_create_payload,
     inspect_destructive_target,
 )
 from .security import decode_confirmation, encode_confirmation
@@ -31,11 +33,15 @@ class StaleConfirmation(RuntimeError):
 
 
 def optional_instruction_list(payload: dict[str, Any]) -> list[str] | None:
-    value = payload.get("instructions")
+    return optional_string_list(payload, "instructions")
+
+
+def optional_string_list(payload: dict[str, Any], field: str) -> list[str] | None:
+    value = payload.get(field)
     if value is None:
         return None
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise GitWarpError("instructions must be a list of strings")
+        raise GitWarpError(f"{field} must be a list of strings")
     return value
 
 
@@ -119,6 +125,24 @@ def require_confirmation(
 def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, confirmation_secret: bytes) -> dict[str, Any]:
     if path == "/api/init":
         return build_init_payload(ctx, write_gitignore=bool_field(payload, "write_gitignore"))
+    if path == "/api/task/create":
+        return build_task_create_payload(
+            ctx,
+            TaskCreateRequest(
+                title=string_field(payload, "title"),
+                description=optional_string_field(payload, "description"),
+                base_branch=optional_string_field(payload, "base_branch"),
+                branch=optional_string_field(payload, "branch"),
+                target_agent=optional_string_field(payload, "target_agent"),
+                agent_id=optional_string_field(payload, "agent_id"),
+                purpose=optional_string_field(payload, "purpose"),
+                acceptance_criteria=optional_string_list(payload, "acceptance_criteria") or [],
+                verification_commands=optional_string_list(payload, "verification_commands") or [],
+                instructions=optional_instruction_list(payload) or [],
+                instruction_profile=optional_instruction_profile(payload),
+                instruction_mode=optional_instruction_mode(payload),
+            ),
+        )
     if path == "/api/dispatch":
         return build_dispatch_payload(
             ctx,

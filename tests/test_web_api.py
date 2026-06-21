@@ -229,6 +229,19 @@ class WebApiTests(GitWarpTestCase):
             token=str(session["token"]),
             data={"write_gitignore": False},
         )
+        task_no_token_status, task_no_token = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/task/create",
+            method="POST",
+            data={"title": "Missing token task"},
+        )
+        task_readonly_status, task_readonly = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/task/create",
+            method="POST",
+            token=str(session["token"]),
+            data={"title": "Readonly task"},
+        )
 
         self.assertEqual(session_status, 200)
         self.assertIsInstance(session["token"], str)
@@ -238,17 +251,30 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("/api/matrix", schema["endpoints"])
         self.assertIn("/api/branches", schema["endpoints"])
         self.assertIn("/api/prune-branch", schema["endpoints"])
+        self.assertIn("/api/task/create", schema["endpoints"])
         self.assertIn("/api/repository/tree", schema["endpoints"])
         self.assertIn("/api/repository/file", schema["endpoints"])
         self.assertFalse(schema["endpoints"]["/api/matrix"]["mutates"])  # type: ignore[index]
         self.assertFalse(schema["endpoints"]["/api/branches"]["mutates"])  # type: ignore[index]
         self.assertTrue(schema["endpoints"]["/api/prune-branch"]["mutates"])  # type: ignore[index]
+        self.assertTrue(schema["endpoints"]["/api/task/create"]["mutates"])  # type: ignore[index]
+        task_fields = schema["endpoints"]["/api/task/create"]["fields"]  # type: ignore[index]
+        self.assertTrue(task_fields["title"]["required"])
+        self.assertEqual(task_fields["target_agent"]["choices"], ["codex", "claude", "generic"])
+        self.assertEqual(task_fields["acceptance_criteria"]["type"], "string_list")
+        self.assertEqual(task_fields["verification_commands"]["type"], "string_list")
         self.assertFalse(schema["endpoints"]["/api/repository/tree"]["mutates"])  # type: ignore[index]
         self.assertFalse(schema["endpoints"]["/api/repository/file"]["mutates"])  # type: ignore[index]
         self.assertTrue(schema["endpoints"]["/api/init"]["mutates"])  # type: ignore[index]
         self.assertEqual(init_status, 403)
         self.assertFalse(init_payload["ok"])
         self.assertEqual(init_payload["code"], "readonly")
+        self.assertEqual(task_no_token_status, 403)
+        self.assertFalse(task_no_token["ok"])
+        self.assertEqual(task_no_token["code"], "bad_token")
+        self.assertEqual(task_readonly_status, 403)
+        self.assertFalse(task_readonly["ok"])
+        self.assertEqual(task_readonly["code"], "readonly")
 
     def test_web_root_serves_console_html(self) -> None:
         _, ready = self.start_web_server(
@@ -691,6 +717,78 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(board_row["base_branch"], "main")
         self.assertEqual(board_row["latest_progress"], "Web handoff recorded")
 
+    def test_web_task_create_mutation_returns_task_payload(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        status, payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/task/create",
+            method="POST",
+            token=token,
+            data={
+                "title": "Web Task Intake",
+                "description": "Create task from web API",
+                "purpose": "   ",
+                "target_agent": "codex",
+                "acceptance_criteria": ["Task endpoint returns stable payload"],
+                "verification_commands": ["python3 -m unittest tests.test_web_api -v"],
+            },
+        )
+        blank_optional_status, blank_optional = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/task/create",
+            method="POST",
+            token=token,
+            data={
+                "title": "Blank Optional Web Task",
+                "target_agent": "",
+                "instruction_mode": "",
+            },
+        )
+
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(payload["branch"], "agent/web-task-intake")
+        self.assertEqual(payload["target_agent"], "codex")
+        self.assertEqual(payload["task_title"], "Web Task Intake")
+        self.assertEqual(payload["task_description"], "Create task from web API")
+        self.assertEqual(payload["acceptance_criteria"], ["Task endpoint returns stable payload"])
+        self.assertEqual(payload["verification_commands"], ["python3 -m unittest tests.test_web_api -v"])
+        self.assertIn("shell_command", payload)
+        for key in (
+            "repo_root",
+            "path",
+            "branch",
+            "base_branch",
+            "agent_id",
+            "target_agent",
+            "purpose",
+            "task_title",
+            "task_description",
+            "acceptance_criteria",
+            "verification_commands",
+            "branch_created",
+            "head",
+            "dossier_path",
+            "task_md",
+            "progress_md",
+            "lessons_md",
+            "instructions",
+            "shell_command",
+        ):
+            self.assertIn(key, payload)
+        self.assertEqual(blank_optional_status, 200, blank_optional)
+        self.assertEqual(blank_optional["target_agent"], "generic")
+
     def test_web_instruction_payload_validation_is_strict(self) -> None:
         _, ready = self.start_web_server(
             self.repo,
@@ -803,6 +901,26 @@ class WebApiTests(GitWarpTestCase):
                 "/api/prune-branch",
                 {"branch": "feature/web-schema", "confirm_branch": 42},
                 "confirm_branch must be a string",
+            ),
+            (
+                "/api/task/create",
+                {"title": "Bad field", "verify": ["wrong spelling"]},
+                "unknown field(s): verify",
+            ),
+            (
+                "/api/task/create",
+                {"title": "Bad base", "base": "main"},
+                "unknown field(s): base",
+            ),
+            (
+                "/api/task/create",
+                {"title": 42},
+                "title must be a string",
+            ),
+            (
+                "/api/task/create",
+                {"title": "Bad criteria", "acceptance_criteria": "one"},
+                "acceptance_criteria must be a list of strings",
             ),
         ]
 
