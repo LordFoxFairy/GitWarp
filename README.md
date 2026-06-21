@@ -80,11 +80,13 @@ gitwarp enter
 
 `statusline` is the low-noise automatic anchor for prompts and hooks. Run `enter` manually only when an agent needs the full dossier pointers and snippets.
 
-Create a task sandbox. By default it is a short-lived task branch based on `main`:
+Create a task from a user request. This is the preferred path for agent work: it creates a short-lived task branch, writes the task dossier, and returns an absolute `path` plus a shell `cd` command.
 
 ```bash
-gitwarp create --branch feature/my-task \
-  --purpose "Implement isolated task"
+gitwarp task create --title "Implement isolated task" \
+  --description "Build the requested change in an isolated worktree" \
+  --acceptance "Tests cover the new behavior" \
+  --verify "python3 -m unittest discover -s tests -p 'test_*.py' -v"
 ```
 
 When the user asks for a dedicated feature branch, create it as a long-lived base first, then create agent tasks under it:
@@ -93,23 +95,24 @@ When the user asks for a dedicated feature branch, create it as a long-lived bas
 gitwarp create --role base --branch feature/user-request \
   --purpose "Coordinate user-request work"
 
-gitwarp create --branch agent/user-request-impl \
-  --base feature/user-request \
-  --purpose "Implement first pass"
+gitwarp task create --base feature/user-request \
+  --title "Implement user-request first pass" \
+  --branch agent/user-request-impl \
+  --description "Implement the first pass for the requested feature"
 ```
 
-Move into an existing sandbox:
+Move into an existing sandbox only when returning to it later; new task responses already include a `shell_command`:
 
 ```bash
-gitwarp switch --branch feature/my-task
-eval "$(gitwarp switch --branch feature/my-task --format shell)"
+gitwarp switch --branch agent/user-request-impl
+eval "$(gitwarp switch --branch agent/user-request-impl --format shell)"
 ```
 
 If the worker needs local instruction files such as `AGENTS.md` or `CLAUDE.md`, mount them explicitly:
 
 ```bash
-gitwarp create --branch feature/my-task \
-  --purpose "Implement isolated task" \
+gitwarp task create --title "Implement isolated task" \
+  --branch agent/isolated-task \
   --instruction AGENTS.md \
   --instruction CLAUDE.md=docs/claude-code.md
 ```
@@ -219,7 +222,7 @@ gitwarp handoff --status implementing --progress "Short milestone"
 Session hooks should not print full `enter` output by default; they should inject the banner and remind the agent that `enter` is available when full context is needed.
 If the user explicitly assigns an existing worktree, complete the work in that worktree and stop there after verification. Do not push, merge, remove, or collapse unless the user asked for that action.
 
-For new user requests, prefer creating a base branch for the requested feature and separate task branches for agent implementation. Agent-created task branches may be collapsed with `finish --collapse-merged` only after they are merged back into their parent base. Do not auto-collapse base branches.
+For new user requests, prefer `gitwarp task create`. If the request needs a long-lived feature branch, create that branch with `gitwarp create --role base` first, then run `gitwarp task create --base <feature-branch>` for agent implementation. Agent-created task branches may be collapsed with `finish --collapse-merged` only after they are merged back into their parent base. Do not auto-collapse base branches.
 
 ### Existing Worktree
 

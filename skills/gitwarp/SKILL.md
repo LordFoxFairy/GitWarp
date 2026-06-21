@@ -21,7 +21,8 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 
 | Command | Use |
 | --- | --- |
-| `gitwarp create` | Create a base or task worktree. Task worktrees are dossier-backed. |
+| `gitwarp task create` | Preferred intake for new user work; creates a task worktree and richer dossier from title, description, acceptance, and verification notes. |
+| `gitwarp create` | Lower-level creation for explicit base worktrees or manually specified task sandboxes. |
 | `gitwarp switch` | Locate an existing worktree and print its absolute path or `cd` command. |
 | `gitwarp remove` | Destroy a sandbox and its dossier when explicitly requested; add `--force` only for dirty targets. |
 | `gitwarp matrix` | Read-only control-plane view across Git refs, live worktrees, ledger rows, and dossiers. |
@@ -35,7 +36,7 @@ Do not use `git switch`, `git checkout`, or direct `git worktree add` in the mai
 | `gitwarp doctor` | Check install, hook, plugin, and runtime health. |
 | `gitwarp web` | Open a local Web Console with Code, Metadata, and Health tabs. |
 
-`start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `create`, `switch`, and `remove` unless you specifically need a rendered launch command from `dispatch`.
+`start`, `summon`, `collapse`, and `dispatch` remain lower-level commands. Prefer `task create` for new work, `create --role base` for long-lived user feature branches, and `switch` or `remove` for existing sandboxes unless you specifically need a rendered launch command from `dispatch`.
 
 The Web Console is for human supervision: open a project, choose a base branch, choose a task worktree under that base, browse tracked files in Code, inspect task/progress/lessons in Metadata, review Git refs/live worktrees/ledger rows/dossiers in Refs & Worktrees, and review doctor/reconcile findings in Health.
 
@@ -66,9 +67,10 @@ For a new user feature, prefer:
 gitwarp create --role base --branch feature/user-request \
   --purpose "Coordinate user-request work"
 
-gitwarp create --branch agent/user-request-impl \
-  --base feature/user-request \
-  --purpose "Implement user-request task"
+gitwarp task create --base feature/user-request \
+  --title "Implement user-request task" \
+  --branch agent/user-request-impl \
+  --description "Implement the requested feature in an agent task worktree"
 ```
 
 ## Agent Workflow
@@ -87,17 +89,19 @@ Use `statusline` for automatic prompt hooks. Use `matrix` when the agent needs t
 If work requires edits and you are in the main checkout:
 
 ```bash
-gitwarp create --branch feature/my-task \
-  --purpose "Implement isolated task"
+gitwarp task create --title "Implement isolated task" \
+  --description "Build the requested change in an isolated worktree" \
+  --acceptance "Tests cover the new behavior" \
+  --verify "python3 -m unittest discover -s tests -p 'test_*.py' -v"
 ```
 
-If the user asked for a dedicated feature branch, create that branch as `--role base` first, then create your implementation branch as a task with `--base <feature-branch>`.
+If the user asked for a dedicated feature branch, create that branch as `--role base` first, then run `gitwarp task create --base <feature-branch> ...` for implementation work.
 
-Move into the returned `path`, or print a shell navigation command:
+Move into the returned `path`. When returning to a known branch later, print a shell navigation command:
 
 ```bash
-gitwarp switch --branch feature/my-task
-gitwarp switch --branch feature/my-task --format shell
+gitwarp switch --branch agent/user-request-impl
+gitwarp switch --branch agent/user-request-impl --format shell
 ```
 
 Inside the sandbox, read the returned dossier files before editing. Record milestones:
@@ -158,8 +162,8 @@ gitwarp prune-branch --branch feature/old-merged-task
 Local instruction files are not mounted automatically. Pass them explicitly when creating a sandbox:
 
 ```bash
-gitwarp create --branch feature/my-task \
-  --purpose "Implement isolated task" \
+gitwarp task create --title "Implement isolated task" \
+  --branch agent/isolated-task \
   --instruction AGENTS.md \
   --instruction CLAUDE.md=docs/claude-code.md
 ```
