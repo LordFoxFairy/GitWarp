@@ -8,7 +8,7 @@ import { OutputPanel } from "./components/OutputPanel";
 import { ProjectDirectory } from "./components/ProjectDirectory";
 import { RepositoryHeader, RepositoryTitleBar } from "./components/RepositoryHeader";
 import { RepositoryTabs } from "./components/RepositoryTabs";
-import { GitWarpApi, type DispatchInput, type HandoffInput, type StartWorktreeInput } from "./gitwarp-api";
+import { GitWarpApi, type DispatchInput, type HandoffInput, type StartWorktreeInput, type TaskCreateInput } from "./gitwarp-api";
 import type { CommandResult, DossierKind, ProjectSummary, RepositoryTab, WebState, WorktreeRow } from "./types";
 
 interface AppProps {
@@ -201,6 +201,7 @@ export function App({ token }: AppProps) {
         dossierContent={dossierContent}
         onDossierKindChange={setDossierKind}
         onSelectWorktree={selectWorktree}
+        onRunTaskCreate={(input) => runCommand("Create task", () => api.createTask(input))}
         onRunStart={(input) => runCommand("Create sandbox", () => api.start(input))}
         onRunDispatch={(input) => runCommand("Prepare agent launch", () => api.dispatch(input))}
         onRunHandoff={(input) => runCommand("Record handoff", () => api.handoff(input))}
@@ -238,6 +239,7 @@ interface RepositorySectionProps {
   dossierContent: string;
   onDossierKindChange: (kind: DossierKind) => void;
   onSelectWorktree: (worktree: WorktreeRow) => void;
+  onRunTaskCreate: (input: TaskCreateInput) => Promise<CommandResult>;
   onRunStart: (input: StartWorktreeInput) => Promise<CommandResult>;
   onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
   onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
@@ -259,6 +261,7 @@ function RepositorySection({
   dossierContent,
   onDossierKindChange,
   onSelectWorktree,
+  onRunTaskCreate,
   onRunStart,
   onRunDispatch,
   onRunHandoff,
@@ -287,6 +290,7 @@ function RepositorySection({
           dossierContent={dossierContent}
           onSelectWorktree={onSelectWorktree}
           onDossierKindChange={onDossierKindChange}
+          onRunTaskCreate={onRunTaskCreate}
           onRunStart={onRunStart}
           onRunDispatch={onRunDispatch}
           onRunHandoff={onRunHandoff}

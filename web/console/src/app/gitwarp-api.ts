@@ -15,6 +15,21 @@ export interface StartWorktreeInput {
   instruction_mode?: "copy" | "symlink";
 }
 
+export interface TaskCreateInput {
+  title: string;
+  description?: string;
+  base_branch?: string;
+  branch?: string;
+  target_agent?: "codex" | "claude" | "generic";
+  agent_id?: string;
+  purpose?: string;
+  acceptance_criteria?: string[];
+  verification_commands?: string[];
+  instructions?: string[];
+  instruction_profile?: string;
+  instruction_mode?: "copy" | "symlink";
+}
+
 export interface DispatchInput {
   agent: "codex" | "claude";
   branch: string;
@@ -71,6 +86,10 @@ export class GitWarpApi {
 
   start(input: StartWorktreeInput): Promise<CommandResult> {
     return this.post("/api/start", input);
+  }
+
+  createTask(input: TaskCreateInput): Promise<CommandResult> {
+    return this.post("/api/task/create", input);
   }
 
   dispatch(input: DispatchInput): Promise<CommandResult> {

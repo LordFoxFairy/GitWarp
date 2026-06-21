@@ -1,5 +1,5 @@
 import { Label } from "@primer/react";
-import type { DispatchInput, HandoffInput, StartWorktreeInput } from "../gitwarp-api";
+import type { DispatchInput, HandoffInput, StartWorktreeInput, TaskCreateInput } from "../gitwarp-api";
 import type { CommandResult, DossierKind, WebState, WorktreeRow } from "../types";
 import { ActionPanel } from "./ActionPanel";
 import { DossierPanel } from "./DossierPanel";
@@ -14,6 +14,7 @@ interface MetadataPanelProps {
   dossierContent: string;
   onSelectWorktree: (worktree: WorktreeRow) => void;
   onDossierKindChange: (kind: DossierKind) => void;
+  onRunTaskCreate: (input: TaskCreateInput) => Promise<CommandResult>;
   onRunStart: (input: StartWorktreeInput) => Promise<CommandResult>;
   onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
   onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
@@ -29,6 +30,7 @@ export function MetadataPanel({
   dossierContent,
   onSelectWorktree,
   onDossierKindChange,
+  onRunTaskCreate,
   onRunStart,
   onRunDispatch,
   onRunHandoff,
@@ -58,7 +60,14 @@ export function MetadataPanel({
 
         <aside className="workspace-side" aria-label="Agent management">
           <SelectedWorktreeSummary worktree={selectedWorktree} />
-          <ActionPanel readonly={readonly} busy={busy} baseBranch={selectedBase?.branch} onStart={onRunStart} onDispatch={onRunDispatch} />
+          <ActionPanel
+            readonly={readonly}
+            busy={busy}
+            baseBranch={selectedBase?.branch}
+            onTaskCreate={onRunTaskCreate}
+            onStart={onRunStart}
+            onDispatch={onRunDispatch}
+          />
         </aside>
       </div>
     </section>

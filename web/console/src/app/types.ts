@@ -44,6 +44,11 @@ export interface WorktreeRow {
   agent_id?: string;
   status?: string;
   purpose?: string;
+  task_title?: string;
+  task_description?: string | null;
+  target_agent?: "codex" | "claude" | "generic" | string;
+  acceptance_criteria?: string[];
+  verification_commands?: string[];
   latest_progress?: string;
   task_md?: string;
   progress_md?: string;
