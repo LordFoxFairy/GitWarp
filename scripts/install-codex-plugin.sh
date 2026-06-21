@@ -71,29 +71,46 @@ PY
 else
   marketplace_output="$(codex plugin marketplace add "$REPO_ROOT" --json 2>&1)"
 fi
-plugin_output="$(codex plugin add "$PLUGIN_ID" --json 2>&1)"
 
-installed_path="$(
-  PLUGIN_OUTPUT="$plugin_output" python3 - <<'PY'
+plugin_list="$(codex plugin list --json 2>&1)"
+plugin_installed="$(
+  PLUGIN_LIST="$plugin_list" PLUGIN_ID="$PLUGIN_ID" python3 - <<'PY'
 import json
 import os
 import sys
 
-raw = os.environ["PLUGIN_OUTPUT"]
+raw = os.environ["PLUGIN_LIST"]
 start = raw.find("{")
 if start < 0:
     print(raw, file=sys.stderr)
     raise SystemExit(1)
 payload = json.loads(raw[start:])
-print(payload["installedPath"])
+for plugin in payload.get("installed", []):
+    if plugin.get("pluginId") == os.environ["PLUGIN_ID"]:
+        print("true")
+        break
+else:
+    print("false")
 PY
 )"
 
-cli_output="$(python3 "$installed_path/skills/gitwarp/scripts/install_cli.py")"
+plugin_remove_output=""
+plugin_removed=false
+if [[ "$plugin_installed" == "true" ]]; then
+  plugin_remove_output="$(codex plugin remove "$PLUGIN_ID" --json 2>&1)"
+  plugin_removed=true
+fi
+
+plugin_output="$(codex plugin add "$PLUGIN_ID" --json 2>&1)"
+
+install_cli="$REPO_ROOT/skills/gitwarp/scripts/install_cli.py"
+cli_output="$(python3 "$install_cli")"
 
 MARKETPLACE_OUTPUT="$marketplace_output" \
 MARKETPLACE_REMOVE_OUTPUT="$marketplace_remove_output" \
 MARKETPLACE_REBOUND="$marketplace_rebound" \
+PLUGIN_REMOVE_OUTPUT="$plugin_remove_output" \
+PLUGIN_REMOVED="$plugin_removed" \
 PLUGIN_OUTPUT="$plugin_output" \
 CLI_OUTPUT="$cli_output" \
 python3 - <<'PY'
@@ -120,6 +137,8 @@ print(
             "marketplace": parse(os.environ["MARKETPLACE_OUTPUT"]),
             "marketplace_rebound": os.environ["MARKETPLACE_REBOUND"] == "true",
             "marketplace_remove": parse(os.environ["MARKETPLACE_REMOVE_OUTPUT"]) if os.environ["MARKETPLACE_REMOVE_OUTPUT"] else None,
+            "plugin_removed": os.environ["PLUGIN_REMOVED"] == "true",
+            "plugin_remove": parse(os.environ["PLUGIN_REMOVE_OUTPUT"]) if os.environ["PLUGIN_REMOVE_OUTPUT"] else None,
             "plugin": parse(os.environ["PLUGIN_OUTPUT"]),
             "cli": cli,
             "recommended_next": recommended_next,

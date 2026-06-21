@@ -46,7 +46,7 @@ gitwarp init
 gitwarp doctor
 ```
 
-The installer registers or rebinds the Claude Code marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev` with `claude plugin install gitwarp@gitwarp-dev --scope user`, and writes a `gitwarp` launcher to `~/.local/bin/gitwarp`.
+The installer registers or rebinds the Claude Code marketplace `gitwarp-dev`, installs or updates `gitwarp@gitwarp-dev` with native Claude plugin commands, and writes a `gitwarp` launcher to `~/.local/bin/gitwarp` from the current checkout.
 
 Manual equivalent:
 
@@ -69,7 +69,7 @@ gitwarp init
 gitwarp doctor
 ```
 
-The installer registers or rebinds the local marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev`, and writes a `gitwarp` launcher to `~/.local/bin/gitwarp`.
+The installer registers or rebinds the local marketplace `gitwarp-dev`, refreshes any existing `gitwarp@gitwarp-dev` cache, installs it again, and writes a `gitwarp` launcher to `~/.local/bin/gitwarp` from the current checkout.
 
 Manual equivalent:
 

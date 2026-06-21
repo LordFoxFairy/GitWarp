@@ -56,7 +56,7 @@ gitwarp upgrade --check
 gitwarp doctor
 ```
 
-This registers or rebinds the Claude Code marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev` with `claude plugin install gitwarp@gitwarp-dev --scope user`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
+This registers or rebinds the Claude Code marketplace `gitwarp-dev`, installs or updates `gitwarp@gitwarp-dev` with the native Claude plugin commands, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp` from this checkout.
 If the installer reports `on_path:false`, add `~/.local/bin` to `PATH` or run the returned absolute launcher path.
 
 Manual equivalent:
@@ -80,7 +80,7 @@ gitwarp upgrade --check
 gitwarp doctor
 ```
 
-This registers or rebinds the local Codex marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
+This registers or rebinds the local Codex marketplace `gitwarp-dev`, refreshes any existing `gitwarp@gitwarp-dev` cache, installs it again, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp` from this checkout.
 
 Manual equivalent:
 

@@ -81,6 +81,12 @@ if ! plugin_install_output="$(claude plugin install "$PLUGIN_ID" --scope "$SCOPE
   plugin_install_ok=false
 fi
 
+plugin_update_output=""
+plugin_update_ok=true
+if ! plugin_update_output="$(claude plugin update "$PLUGIN_ID" --scope "$SCOPE" 2>&1)"; then
+  plugin_update_ok=false
+fi
+
 plugin_list="$(claude plugin list --json 2>&1)"
 plugin_json="$(
   PLUGIN_LIST="$plugin_list" PLUGIN_ID="$PLUGIN_ID" python3 - <<'PY'
@@ -107,21 +113,7 @@ PY
   exit 1
 }
 
-installed_path="$(
-  PLUGIN_JSON="$plugin_json" python3 - <<'PY'
-import json
-import os
-
-payload = json.loads(os.environ["PLUGIN_JSON"])
-print(payload.get("installPath") or "")
-PY
-)"
-
 install_cli="$REPO_ROOT/skills/gitwarp/scripts/install_cli.py"
-if [[ -n "$installed_path" && -f "$installed_path/skills/gitwarp/scripts/install_cli.py" ]]; then
-  install_cli="$installed_path/skills/gitwarp/scripts/install_cli.py"
-fi
-
 cli_output="$(python3 "$install_cli")"
 
 MARKETPLACE_OUTPUT="$marketplace_output" \
@@ -130,6 +122,8 @@ MARKETPLACE_REBOUND="$marketplace_rebound" \
 PLUGIN_ID="$PLUGIN_ID" \
 PLUGIN_INSTALL_OK="$plugin_install_ok" \
 PLUGIN_INSTALL_OUTPUT="$plugin_install_output" \
+PLUGIN_UPDATE_OK="$plugin_update_ok" \
+PLUGIN_UPDATE_OUTPUT="$plugin_update_output" \
 PLUGIN_JSON="$plugin_json" \
 CLI_OUTPUT="$cli_output" \
 python3 - <<'PY'
@@ -167,6 +161,11 @@ payload = {
         "ok": os.environ["PLUGIN_INSTALL_OK"] == "true",
         "plugin_id": os.environ["PLUGIN_ID"],
         "output": os.environ["PLUGIN_INSTALL_OUTPUT"].strip(),
+    },
+    "plugin_update": {
+        "ok": os.environ["PLUGIN_UPDATE_OK"] == "true",
+        "plugin_id": os.environ["PLUGIN_ID"],
+        "output": os.environ["PLUGIN_UPDATE_OUTPUT"].strip(),
     },
     "cli": cli,
     "recommended_next": recommended_next,
