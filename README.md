@@ -21,6 +21,29 @@ The project follows the common Agent Skills layout while keeping product code in
 
 ## Install
 
+### Claude Code Plugin Path
+
+From this checkout:
+
+```bash
+scripts/install-claude-plugin.sh
+gitwarp init
+gitwarp upgrade --check
+gitwarp doctor
+```
+
+This registers or rebinds the Claude Code marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev` with `claude plugin install gitwarp@gitwarp-dev --scope user`, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`.
+If the installer reports `on_path:false`, add `~/.local/bin` to `PATH` or run the returned absolute launcher path.
+
+Manual equivalent:
+
+```bash
+claude plugin marketplace add "$PWD" --scope user
+claude plugin install gitwarp@gitwarp-dev --scope user
+python3 "$PWD/skills/gitwarp/scripts/install_cli.py"
+gitwarp upgrade --check
+```
+
 ### Codex Plugin Path
 
 From this checkout:

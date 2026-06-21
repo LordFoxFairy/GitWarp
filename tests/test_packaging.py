@@ -460,6 +460,7 @@ class PluginStructureTests(unittest.TestCase):
     def test_install_scripts_have_version_and_path_guards(self) -> None:
         installer = (REPO_ROOT / "skills" / "gitwarp" / "scripts" / "install_cli.py").read_text(encoding="utf-8")
         install_script = (REPO_ROOT / "scripts" / "install-codex-plugin.sh").read_text(encoding="utf-8")
+        claude_install_script = (REPO_ROOT / "scripts" / "install-claude-plugin.sh").read_text(encoding="utf-8")
         verify_script = (REPO_ROOT / "scripts" / "verify-install.sh").read_text(encoding="utf-8")
 
         self.assertIn("MIN_PYTHON = (3, 10)", installer)
@@ -474,9 +475,27 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("marketplace_rebound", install_script)
         self.assertIn("codex plugin marketplace remove", install_script)
         self.assertIn("recommended_next", install_script)
+        self.assertIn("claude plugin marketplace list --json", claude_install_script)
+        self.assertIn("claude plugin marketplace add", claude_install_script)
+        self.assertIn("claude plugin marketplace remove", claude_install_script)
+        self.assertIn("claude plugin install", claude_install_script)
+        self.assertIn("claude plugin list --json", claude_install_script)
+        self.assertIn("gitwarp@gitwarp-dev", claude_install_script)
+        self.assertIn("skills/gitwarp/scripts/install_cli.py", claude_install_script)
+        self.assertIn("recommended_next", claude_install_script)
         self.assertIn("GITWARP_BIN", verify_script)
         self.assertIn("~/.local/bin", verify_script)
         self.assertIn("gitwarp task create --help", verify_script)
         self.assertIn("gitwarp next --help", verify_script)
         self.assertIn("gitwarp sweep --help", verify_script)
         self.assertIn("gitwarp upgrade --check", verify_script)
+
+    def test_docs_include_claude_code_native_install_path(self) -> None:
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        install_notes = (REPO_ROOT / "skills" / "gitwarp" / "references" / "install.md").read_text(encoding="utf-8")
+
+        for content in (readme, install_notes):
+            with self.subTest(path="install-doc"):
+                self.assertIn("scripts/install-claude-plugin.sh", content)
+                self.assertIn("claude plugin marketplace add", content)
+                self.assertIn("claude plugin install gitwarp@gitwarp-dev", content)

@@ -12,6 +12,28 @@ GitWarp is distributed as a repository-root plugin package plus a standard Agent
 
 Do not copy only `skills/gitwarp/` unless the `gitwarp` Python package is already installed or available beside it in the full repository/plugin checkout. Skill scripts are bootstrap helpers, not the product runtime.
 
+## Claude Code Plugin Install
+
+From the GitWarp repository root:
+
+```bash
+scripts/install-claude-plugin.sh
+gitwarp init
+gitwarp doctor
+```
+
+The installer registers or rebinds the Claude Code marketplace `gitwarp-dev`, installs `gitwarp@gitwarp-dev` with `claude plugin install gitwarp@gitwarp-dev --scope user`, and writes a `gitwarp` launcher to `~/.local/bin/gitwarp`.
+
+Manual equivalent:
+
+```bash
+claude plugin marketplace add /absolute/path/to/GitWarp --scope user
+claude plugin install gitwarp@gitwarp-dev --scope user
+python3 /absolute/path/to/GitWarp/skills/gitwarp/scripts/install_cli.py
+```
+
+If installer output contains `"on_path":false`, add `~/.local/bin` to `PATH` or call the returned absolute `command`.
+
 ## Codex Plugin Install
 
 From the GitWarp repository root:
