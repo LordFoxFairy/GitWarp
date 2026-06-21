@@ -16,6 +16,8 @@ fi
 if [[ "$needs_install" == "true" ]]; then
   if ! install_output="$(python3 "${PLUGIN_ROOT}/skills/gitwarp/scripts/install_cli.py" 2>&1)"; then
     diagnostics+=("install_cli failed: ${install_output}")
+  else
+    hash -r
   fi
 fi
 

@@ -260,6 +260,7 @@ class PluginStructureTests(unittest.TestCase):
         self.assertNotIn("Current GitWarp Context:", session_hook)
         self.assertIn("gitwarp task create", session_hook)
         self.assertIn("gitwarp task create --help", session_hook)
+        self.assertIn("hash -r", session_hook)
         self.assertNotIn("Use gitwarp create for isolated edits", session_hook)
         self.assertIn("gitwarp switch", session_hook)
         self.assertTrue(codex_skill_link.is_symlink())
@@ -274,6 +275,44 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("gitwarp task create", prompt_text)
         self.assertIn("gitwarp create --role base", prompt_text)
         self.assertNotIn("with gitwarp create", prompt_text)
+
+    def test_session_hook_rehashes_after_refreshing_stale_launcher(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            home = Path(tempdir) / "home"
+            stale_bin = Path(tempdir) / "stale-bin"
+            repo = Path(tempdir) / "repo"
+            home.mkdir()
+            stale_bin.mkdir()
+            repo.mkdir()
+            stale_launcher = stale_bin / "gitwarp"
+            stale_launcher.write_text(
+                "#!/usr/bin/env bash\n"
+                "if [[ \"$1 $2 $3\" == \"task create --help\" ]]; then exit 2; fi\n"
+                "if [[ \"$1\" == \"statusline\" ]]; then echo STALE-STATUSLINE; exit 0; fi\n"
+                "echo stale gitwarp >&2\n"
+                "exit 2\n",
+                encoding="utf-8",
+            )
+            stale_launcher.chmod(0o755)
+            env = os.environ.copy()
+            env["HOME"] = str(home)
+            env["PATH"] = f"{stale_bin}{os.pathsep}{env.get('PATH', '')}"
+
+            result = subprocess.run(
+                ["bash", str(REPO_ROOT / "hooks" / "session-start-codex")],
+                cwd=str(repo),
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            payload = json.loads(result.stdout)
+            context = payload["hookSpecificOutput"]["additionalContext"]
+            self.assertNotIn("STALE-STATUSLINE", context)
+            self.assertIn("GITWARP[outside]", context)
+            self.assertIn("gitwarp task create", context)
+            self.assertTrue((home / ".local" / "bin" / "gitwarp").is_file())
 
     def test_marketplace_uses_root_package_sources(self) -> None:
         relative_paths = [
