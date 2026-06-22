@@ -147,8 +147,15 @@ class GitWarpTestCase(unittest.TestCase):
             proc.stderr.close()
 
     def start_web_server(self, repo: Path, *args: str) -> tuple[subprocess.Popen[str], dict[str, object]]:
+        cli_args = list(args)
+        if cli_args and cli_args[0] == "web" and (len(cli_args) == 1 or cli_args[1].startswith("--")):
+            cli_args.insert(1, "start")
+            cli_args.append("--serve-internal")
+        if cli_args and cli_args[0] == "--web":
+            cli_args.append("--serve-internal")
+        command = [*gitwarp_command(), *cli_args]
         proc = subprocess.Popen(
-            [*gitwarp_command(), *args],
+            command,
             cwd=str(repo),
             env=gitwarp_env(),
             stdout=subprocess.PIPE,

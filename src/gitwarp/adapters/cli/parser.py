@@ -280,13 +280,15 @@ def build_parser() -> argparse.ArgumentParser:
     statusline.add_argument("--cwd")
     statusline.set_defaults(func=cmd_statusline)
 
-    web = subparsers.add_parser("web", help="Start the local GitWarp Web Console")
+    web = subparsers.add_parser("web", help="Start or manage the local GitWarp Web Console")
+    web.add_argument("web_command", nargs="?", choices=["start", "status", "stop"], default=None)
     web.add_argument("--cwd")
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=0)
     web.add_argument("--no-open", action="store_true")
     web.add_argument("--readonly", action="store_true")
     web.add_argument("--unsafe-host", action="store_true")
+    web.add_argument("--serve-internal", action="store_true", help=argparse.SUPPRESS)
     web.set_defaults(func=cmd_web)
 
     return parser
