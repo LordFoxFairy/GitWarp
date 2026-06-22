@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -110,3 +111,14 @@ def sanitize_name(value: str) -> str:
 
 def short_hash(value: str) -> str:
     return hashlib.sha1(value.encode("utf-8")).hexdigest()[:6]
+
+
+def gitwarp_home_path() -> Path:
+    raw = os.environ.get("GITWARP_HOME")
+    if raw:
+        return Path(raw).expanduser()
+    return Path.home() / ".gitwarp"
+
+
+def project_registry_path() -> Path:
+    return gitwarp_home_path() / "projects.json"

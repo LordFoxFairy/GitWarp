@@ -10,10 +10,12 @@ interface CodePanelProps {
   state: WebState | null;
   selected: WorktreeRow | null;
   onSelectWorktree: (worktree: WorktreeRow) => void;
+  onSelectTaskCandidate: (branch: string, baseBranch: string) => void;
+  onCreateBaseCheckout: (branch: string) => Promise<void>;
   onViewMetadata: () => void;
 }
 
-export function CodePanel({ api, state, selected, onSelectWorktree, onViewMetadata }: CodePanelProps) {
+export function CodePanel({ api, state, selected, onSelectWorktree, onSelectTaskCandidate, onCreateBaseCheckout, onViewMetadata }: CodePanelProps) {
   const worktrees = state?.worktrees ?? [];
   const selectedWorktree = selected && worktrees.some((worktree) => worktree.path === selected.path) ? selected : defaultWorktree(worktrees);
   const [currentPath, setCurrentPath] = useState("");
@@ -94,9 +96,19 @@ export function CodePanel({ api, state, selected, onSelectWorktree, onViewMetada
   return (
     <section className="tab-panel code-console" aria-label="Repository code browser" aria-busy={loading}>
       <div className="repository-content-grid">
+        {!selectedWorktree ? (
+          <p className="status-note">Select or create a base checkout before browsing repository files.</p>
+        ) : null}
         <div className="repository-main-column">
           <div className="repo-toolbar" aria-label="Worktree selection">
-            <WorktreePicker worktrees={worktrees} selected={selectedWorktree} onSelectWorktree={onSelectWorktree} />
+            <WorktreePicker
+              worktrees={worktrees}
+              matrixRows={state?.matrix?.rows ?? []}
+              selected={selectedWorktree}
+              onSelectWorktree={onSelectWorktree}
+              onSelectTaskCandidate={onSelectTaskCandidate}
+              onCreateBaseCheckout={onCreateBaseCheckout}
+            />
             <div className="repo-toolbar-status">
               <Label variant={selectedWorktree?.is_main ? "secondary" : "accent"}>
                 {selectedWorktree?.is_main ? "main checkout" : selectedWorktree?.status || "active"}
@@ -112,7 +124,7 @@ export function CodePanel({ api, state, selected, onSelectWorktree, onViewMetada
                 <strong>{selectedWorktree?.branch || "Repository files"}</strong>
                 <span>{tree?.commit ? `HEAD ${tree.commit.slice(0, 7)}` : "Tracked files at selected HEAD"}</span>
               </div>
-              <Label variant="secondary">{loading ? "loading" : `${tree?.entries.length ?? 0} items`}</Label>
+              <Label variant="secondary">{loading ? "loading" : formatLineCount(tree?.entries.length ?? 0, "item")}</Label>
             </div>
 
             {loading ? <p className="status-note" role="status">Loading repository contents...</p> : null}
@@ -278,12 +290,11 @@ function FileList({
             key={entry.path}
             onClick={() => (isDirectory ? onOpenDirectory(entry.path) : onOpenFile(entry))}
           >
-            <span className="file-name">
+            <span className="file-row-main">
               {isDirectory ? <FileDirectoryIcon size={16} /> : <FileIcon size={16} />}
-              {entry.name}
+              <span>{entry.name}</span>
             </span>
-            <span className="file-kind">{isDirectory ? "Directory" : "File"}</span>
-            <span className="file-sha">{entry.object.slice(0, 7)}</span>
+            <span className="file-row-type">{isDirectory ? "dir" : "file"}</span>
           </button>
         );
       })}
@@ -302,67 +313,40 @@ function FileViewer({
   onBackToDirectory: () => void;
   onOpenPath: (path: string) => void;
 }) {
-  const isText = file.encoding === "utf-8";
   const lines = splitFileLines(file.content);
   return (
-    <section className="file-viewer" aria-label="Repository file viewer">
-      <FileBreadcrumbs file={file} tree={tree} onOpenPath={onOpenPath} />
+    <article className="file-viewer" aria-label="Repository file viewer">
       <div className="file-viewer-head">
         <div>
-          <h2>{file.name}</h2>
-          <p className="subtle">
-            {formatBytes(file.size)} {file.truncated ? "· truncated" : ""}
+          <FileBreadcrumbs file={file} tree={tree} onOpenPath={onOpenPath} />
+          <p className="form-hint">
+            {file.encoding === "utf-8" ? `${file.size} bytes · contents with line numbers` : `${file.size} bytes · ${file.encoding} encoded preview`}
           </p>
         </div>
-        <div className="file-viewer-actions">
-          {isText ? <Label variant="secondary">{formatLineCount(lines.length)}</Label> : null}
-          <Label variant={isText ? "success" : "attention"}>{file.encoding}</Label>
-          <Button type="button" onClick={onBackToDirectory}>
-            Back to directory
-          </Button>
-        </div>
+        <Button type="button" onClick={onBackToDirectory}>
+          Back to directory
+        </Button>
       </div>
-      {isText ? (
-        <div className="file-readout code-lines" role="table" aria-label={`${file.name} contents with line numbers`}>
+      {file.encoding === "utf-8" ? (
+        <ol className="code-lines">
           {lines.map((line, index) => (
-            <div className="code-line" role="row" key={`${file.path}:${index}`}>
-              <span className="line-number" role="rowheader" aria-label={`Line ${index + 1}`}>
-                {index + 1}
-              </span>
-              <code className="line-content" role="cell">
-                {line}
-              </code>
-            </div>
+            <li key={`${index}:${line}`}>
+              <span className="line-number">{index + 1}</span>
+              <code>{line || " "}</code>
+            </li>
           ))}
-        </div>
+        </ol>
       ) : (
-        <p className="empty-state">Binary content is not rendered inline. The API returns a base64 preview for automation.</p>
+        <pre className="readout">{file.content}</pre>
       )}
-    </section>
+    </article>
   );
 }
 
-function splitFileLines(content: string) {
-  if (content.length === 0) {
-    return [""];
-  }
-  const lines = content.split("\n");
-  if (lines[lines.length - 1] === "") {
-    lines.pop();
-  }
-  return lines;
+function splitFileLines(content: string): string[] {
+  return content.replace(/\r\n/g, "\n").split("\n");
 }
 
-function formatLineCount(lines: number) {
-  return lines === 1 ? "1 line" : `${lines} lines`;
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+function formatLineCount(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }

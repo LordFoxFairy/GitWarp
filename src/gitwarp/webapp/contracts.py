@@ -25,12 +25,14 @@ class PayloadValidationError(ValueError):
 MUTATION_ENDPOINTS: dict[str, EndpointSpec] = {
     "/api/init": EndpointSpec("POST", True, ("write_gitignore",)),
     "/api/task/create": EndpointSpec("POST", True, ("title",)),
+    "/api/base": EndpointSpec("POST", True, ("branch",)),
     "/api/dispatch": EndpointSpec("POST", True, ("branch", "purpose")),
     "/api/start": EndpointSpec("POST", True, ("agent_id", "branch", "purpose")),
     "/api/handoff": EndpointSpec("POST", True, ("cwd", "status", "progress")),
     "/api/confirmation": EndpointSpec("POST", True, ("action",)),
     "/api/finish": EndpointSpec("POST", True, ("cwd", "status", "progress")),
     "/api/collapse": EndpointSpec("POST", True, ("confirmation",)),
+    "/api/remove": EndpointSpec("POST", True, ("confirmation",)),
     "/api/prune-branch": EndpointSpec("POST", True, ("branch", "confirm_branch")),
 }
 
@@ -40,6 +42,7 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "write_gitignore": FieldSpec("boolean", required=True),
     },
     "/api/task/create": {
+        "cwd": FieldSpec("string"),
         "title": FieldSpec("string", required=True),
         "description": FieldSpec("string"),
         "base_branch": FieldSpec("string"),
@@ -53,7 +56,13 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "instruction_profile": FieldSpec("string"),
         "instruction_mode": FieldSpec("string", choices=("copy", "symlink")),
     },
+    "/api/base": {
+        "cwd": FieldSpec("string"),
+        "branch": FieldSpec("string", required=True),
+        "purpose": FieldSpec("string"),
+    },
     "/api/dispatch": {
+        "cwd": FieldSpec("string"),
         "agent": FieldSpec("string"),
         "agent_id": FieldSpec("string"),
         "branch": FieldSpec("string", required=True),
@@ -64,6 +73,7 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "instruction_mode": FieldSpec("string", choices=("copy", "symlink")),
     },
     "/api/start": {
+        "cwd": FieldSpec("string"),
         "agent_id": FieldSpec("string", required=True),
         "branch": FieldSpec("string", required=True),
         "base_branch": FieldSpec("string"),
@@ -81,7 +91,7 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "lesson": FieldSpec("string"),
     },
     "/api/confirmation": {
-        "action": FieldSpec("string", required=True, choices=("collapse", "finish-collapse")),
+        "action": FieldSpec("string", required=True, choices=("collapse", "finish-collapse", "remove")),
         "cwd": FieldSpec("string"),
         "path": FieldSpec("string"),
         "branch": FieldSpec("string"),
@@ -102,6 +112,12 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "path": FieldSpec("string"),
         "branch": FieldSpec("string"),
         "confirmation": FieldSpec("string", required=True),
+    },
+    "/api/remove": {
+        "cwd": FieldSpec("string"),
+        "path": FieldSpec("string"),
+        "branch": FieldSpec("string"),
+        "confirmation": FieldSpec("string"),
     },
     "/api/prune-branch": {
         "cwd": FieldSpec("string"),

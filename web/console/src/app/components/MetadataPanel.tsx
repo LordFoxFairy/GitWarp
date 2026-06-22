@@ -1,10 +1,15 @@
 import { Label } from "@primer/react";
 import type { DispatchInput, HandoffInput, StartWorktreeInput, TaskCreateInput } from "../gitwarp-api";
-import type { CommandResult, DossierKind, WebState, WorktreeRow } from "../types";
+import type { CommandResult, DossierKind, MatrixRow, WebState, WorktreeRow } from "../types";
 import { ActionQueuePanel } from "./ActionQueuePanel";
 import { ActionPanel } from "./ActionPanel";
 import { DossierPanel } from "./DossierPanel";
 import { WorktreePicker, baseForSelection, defaultWorktree } from "./WorktreePicker";
+
+interface PendingTaskCandidate {
+  baseBranch: string;
+  branch: string;
+}
 
 interface MetadataPanelProps {
   state: WebState | null;
@@ -13,13 +18,17 @@ interface MetadataPanelProps {
   selected: WorktreeRow | null;
   dossierKind: DossierKind;
   dossierContent: string;
+  pendingTaskBranch: PendingTaskCandidate | null;
   onSelectWorktree: (worktree: WorktreeRow) => void;
+  onSelectTaskCandidate: (branch: string, baseBranch: string) => void;
+  onCreateBaseCheckout: (branch: string) => Promise<void>;
   onDossierKindChange: (kind: DossierKind) => void;
   onRunTaskCreate: (input: TaskCreateInput) => Promise<CommandResult>;
   onRunStart: (input: StartWorktreeInput) => Promise<CommandResult>;
   onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
   onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
   onRunFinish: (worktree: WorktreeRow, status: string, progress: string) => Promise<CommandResult>;
+  onRunRemove: (worktree: WorktreeRow) => Promise<CommandResult>;
 }
 
 export function MetadataPanel({
@@ -29,21 +38,35 @@ export function MetadataPanel({
   selected,
   dossierKind,
   dossierContent,
+  pendingTaskBranch,
   onSelectWorktree,
+  onSelectTaskCandidate,
+  onCreateBaseCheckout,
   onDossierKindChange,
   onRunTaskCreate,
   onRunStart,
   onRunDispatch,
   onRunHandoff,
   onRunFinish,
+  onRunRemove,
 }: MetadataPanelProps) {
   const worktrees = state?.worktrees ?? [];
+  const matrixRows = state?.matrix?.rows ?? [];
   const selectedWorktree = selected && worktrees.some((worktree) => worktree.path === selected.path) ? selected : defaultWorktree(worktrees);
   const selectedBase = baseForSelection(worktrees, selectedWorktree);
+  const matrixRowsByBranch = new Map(matrixRows.map((row) => [row.branch, row] as const));
+  const selectedMatrixRow = selectedWorktree?.branch ? matrixRowsByBranch.get(selectedWorktree.branch) ?? null : null;
 
   return (
     <section className="tab-panel workspace-console" aria-label="Agent metadata console">
-      <WorktreePicker worktrees={worktrees} selected={selectedWorktree} onSelectWorktree={onSelectWorktree} />
+      <WorktreePicker
+        worktrees={worktrees}
+        matrixRows={matrixRows}
+        selected={selectedWorktree}
+        onSelectWorktree={onSelectWorktree}
+        onSelectTaskCandidate={onSelectTaskCandidate}
+        onCreateBaseCheckout={onCreateBaseCheckout}
+      />
 
       <div className="workspace-grid">
         <div className="workspace-main">
@@ -51,11 +74,13 @@ export function MetadataPanel({
             readonly={readonly}
             busy={busy}
             selected={selectedWorktree}
+            selectedMatrixRow={selectedMatrixRow}
             dossierKind={dossierKind}
             dossierContent={dossierContent}
             onDossierKindChange={onDossierKindChange}
             onHandoff={onRunHandoff}
             onFinish={onRunFinish}
+            onRunRemove={onRunRemove}
           />
         </div>
 
@@ -65,7 +90,9 @@ export function MetadataPanel({
           <ActionPanel
             readonly={readonly}
             busy={busy}
+            cwd={state?.repo_root}
             baseBranch={selectedBase?.branch}
+            pendingTaskBranch={pendingTaskBranch}
             onTaskCreate={onRunTaskCreate}
             onStart={onRunStart}
             onDispatch={onRunDispatch}

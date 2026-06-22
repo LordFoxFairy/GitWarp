@@ -6,6 +6,7 @@ interface ApiErrorPayload {
 }
 
 export interface StartWorktreeInput {
+  cwd?: string;
   agent_id: string;
   branch: string;
   base_branch?: string;
@@ -16,6 +17,7 @@ export interface StartWorktreeInput {
 }
 
 export interface TaskCreateInput {
+  cwd?: string;
   title: string;
   description?: string;
   base_branch?: string;
@@ -31,6 +33,7 @@ export interface TaskCreateInput {
 }
 
 export interface DispatchInput {
+  cwd?: string;
   agent: "codex" | "claude";
   branch: string;
   base_branch?: string;
@@ -50,12 +53,14 @@ export interface HandoffInput {
 export class GitWarpApi {
   constructor(private readonly token: string) {}
 
-  getState(): Promise<WebState> {
-    return this.request<WebState>("/api/state");
+  getState(cwd?: string): Promise<WebState> {
+    const query = cwd ? `?${new URLSearchParams({ cwd }).toString()}` : "";
+    return this.request<WebState>(`/api/state${query}`);
   }
 
-  readDossier(path: string): Promise<DossierPayload> {
-    return this.request<DossierPayload>(`/api/dossier?${new URLSearchParams({ path }).toString()}`);
+  readDossier(path: string, cwd?: string): Promise<DossierPayload> {
+    const params = new URLSearchParams({ path, ...(cwd ? { cwd } : {}) });
+    return this.request<DossierPayload>(`/api/dossier?${params.toString()}`);
   }
 
   getRepositoryTree(cwd: string, path = ""): Promise<RepositoryTreePayload> {
@@ -82,6 +87,14 @@ export class GitWarpApi {
     }
     const query = params.toString();
     return this.request<MatrixPayload>(`/api/matrix${query ? `?${query}` : ""}`);
+  }
+
+  createBaseCheckout(branch: string, purpose?: string, cwd?: string): Promise<CommandResult> {
+    return this.post("/api/base", {
+      ...(cwd ? { cwd } : {}),
+      branch,
+      ...(purpose ? { purpose } : {}),
+    });
   }
 
   start(input: StartWorktreeInput): Promise<CommandResult> {
@@ -117,6 +130,21 @@ export class GitWarpApi {
       status,
       progress,
       collapse_merged: true,
+    });
+  }
+
+  async removeWorktree(path: string, branch?: string | null, cwd?: string): Promise<CommandResult> {
+    const challenge = await this.post("/api/confirmation", {
+      action: "remove",
+      ...(cwd ? { cwd } : {}),
+      ...(path ? { path } : {}),
+      ...(branch ? { branch } : {}),
+    });
+    return this.post("/api/remove", {
+      ...(cwd ? { cwd } : {}),
+      ...(path ? { path } : {}),
+      ...(branch ? { branch } : {}),
+      confirmation: challenge.confirmation,
     });
   }
 

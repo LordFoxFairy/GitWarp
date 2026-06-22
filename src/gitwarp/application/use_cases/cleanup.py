@@ -171,6 +171,19 @@ def build_collapse_payload(ctx: RepoContext, *, path: str | None, branch: str | 
     }
 
 
+def build_remove_payload(ctx: RepoContext, *, path: str | None, branch: str | None) -> dict[str, Any]:
+    target_path, removed_branch, dossier_path, purged_dossier = collapse_worktree(ctx, path=path, branch=branch)
+    return {
+        "ok": True,
+        "repo_root": str(ctx.repo_root),
+        "ledger_path": str(ctx.ledger_path),
+        "removed_path": target_path,
+        "removed_branch": removed_branch,
+        "dossier_path": dossier_path,
+        "purged_dossier": purged_dossier,
+    }
+
+
 def build_sweep_payload(ctx: RepoContext, *, merged_tasks: bool, dry_run: bool) -> dict[str, Any]:
     if not merged_tasks:
         raise GitWarpError("sweep requires an explicit target selector such as --merged-tasks")

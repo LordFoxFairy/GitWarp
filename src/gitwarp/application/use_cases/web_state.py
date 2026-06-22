@@ -7,9 +7,10 @@ from typing import Any
 from ...application.diagnostics import build_doctor_payload, build_finding, summarize_findings
 from ...application.reconcile import build_reconcile_payload
 from ...application.views import board_row, statusline_banner
+from ...domain.errors import GitWarpError as DomainGitWarpError
 from ...domain.branch_roles import enrich_role_metadata
-from ...infrastructure.ledger import default_ledger, discover_repo, normalize_ledger_schema
-from ...infrastructure.runtime import GitWarpError, RepoContext, resolve_path
+from ...infrastructure.ledger import default_ledger, discover_repo, load_project_registry, normalize_ledger_schema
+from ...infrastructure.runtime import GitWarpError, RepoContext, project_registry_path, resolve_path
 from ...infrastructure.worktrees import (
     build_head_drift,
     find_worktree_for_cwd,
@@ -17,7 +18,8 @@ from ...infrastructure.worktrees import (
     parse_worktrees,
     worktree_metadata_key,
 )
-from .branches import list_local_branch_refs
+from .branches import list_local_branch_refs, resolve_default_branch
+from .matrix import build_matrix_payload
 from .next_actions import build_next_actions_payload
 
 
@@ -29,6 +31,7 @@ def safe_load_ledger_for_web(ctx: RepoContext) -> tuple[dict[str, Any], str | No
         return normalize_ledger_schema(data, ctx), None
     except (GitWarpError, json.JSONDecodeError) as exc:
         return default_ledger(ctx), str(exc)
+
 
 
 def sync_ledger_for_web(
@@ -74,6 +77,7 @@ def sync_ledger_for_web(
         enriched.append(enriched_item)
     return ledger, enriched, ledger_error
 
+
 def web_board_row(item: dict[str, Any]) -> dict[str, Any]:
     row = board_row(item, verbose=True)
     if item.get("dispatch") is not None:
@@ -81,8 +85,10 @@ def web_board_row(item: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
+
 def actionable_finding_count(group: dict[str, Any]) -> int:
     return sum(1 for finding in group.get("findings", []) if finding.get("severity") != "ok")
+
 
 
 def build_project_summary(
@@ -118,6 +124,47 @@ def build_project_summary(
         "next_action_count": len(next_actions),
         "destructive_action_count": sum(1 for action in next_actions if action.get("safety") == "confirm_destructive"),
     }
+
+
+
+def build_registry_project_summary(repo_root: str, *, readonly: bool) -> dict[str, Any]:
+    path = Path(repo_root).expanduser()
+    return {
+        "id": str(path.resolve()),
+        "name": path.name,
+        "repo_root": str(path.resolve()),
+        "ledger_path": str(path / ".gitwarp" / "ledger.json"),
+        "readonly": readonly,
+        "statusline": statusline_banner(None),
+        "branch_ref_count": 0,
+        "worktree_count": 0,
+        "active_worktree_count": 0,
+        "assigned_agent_count": 0,
+        "doctor_finding_count": 0,
+        "reconcile_finding_count": 0,
+        "next_action_count": 0,
+        "destructive_action_count": 0,
+    }
+
+
+
+def merge_projects(
+    selected_project: dict[str, Any],
+    *,
+    readonly: bool,
+    registry_projects: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    projects = [selected_project]
+    seen = {selected_project["repo_root"]}
+    for item in registry_projects:
+        repo_root = item.get("repo_root")
+        if not isinstance(repo_root, str) or repo_root in seen:
+            continue
+        projects.append(build_registry_project_summary(repo_root, readonly=readonly))
+        seen.add(repo_root)
+    return projects
+
+
 
 def build_web_state_payload(
     cwd: Path | str,
@@ -160,16 +207,74 @@ def build_web_state_payload(
         reconcile=reconcile,
         next_actions=next_actions,
     )
+    registry = load_project_registry(project_registry_path())
+    projects = merge_projects(project, readonly=readonly, registry_projects=registry["projects"])
+    try:
+        matrix = build_matrix_payload(ctx)
+    except DomainGitWarpError as exc:
+        if ledger_error:
+            default_branch = resolve_default_branch(ctx)
+            matrix = {
+                "ok": True,
+                "repo_root": str(ctx.repo_root),
+                "ledger_path": str(ctx.ledger_path),
+                "default_branch": default_branch,
+                "merge_base": default_branch,
+                "statusline": statusline,
+                "sources": {
+                    "git_branch_refs": branch_ref_count,
+                    "git_worktrees": len(worktree_rows),
+                    "ledger_entries": 0,
+                    "dossier_dirs": 0,
+                    "reconcile_findings": 1,
+                },
+                "summary": {
+                    "rows": 0,
+                    "active_gitwarp_tasks": 0,
+                    "untracked_worktrees": 0,
+                    "stale_ledger_entries": 0,
+                    "merged_gitwarp_tasks": 0,
+                    "prunable_branch_refs": 0,
+                    "orphan_branch_refs": 0,
+                    "orphan_dossiers": 0,
+                },
+                "rows": [],
+                "reconcile": {
+                    "ok": True,
+                    "repo_root": str(ctx.repo_root),
+                    "ledger_path": str(ctx.ledger_path),
+                    "findings": [
+                        build_finding(
+                            "ledger_schema",
+                            "error",
+                            f"GitWarp ledger is invalid: {ledger_error}",
+                            path=str(ctx.ledger_path),
+                        )
+                    ],
+                    "summary": summarize_findings([
+                        build_finding(
+                            "ledger_schema",
+                            "error",
+                            f"GitWarp ledger is invalid: {ledger_error}",
+                            path=str(ctx.ledger_path),
+                        )
+                    ]),
+                },
+                "warning": str(exc),
+            }
+        else:
+            raise
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),
         "ledger_path": str(ctx.ledger_path),
         "readonly": readonly,
         "statusline": statusline,
-        "projects": [project],
+        "projects": projects,
         "worktrees": worktree_rows,
         "doctor": doctor,
         "reconcile": reconcile,
+        "matrix": matrix,
         "next_actions": next_actions,
         "recommended_next": list(doctor.get("recommended_next", [])),
     }

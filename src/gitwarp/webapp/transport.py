@@ -28,6 +28,9 @@ from .security import normalize_host_header
 
 
 class GitWarpWebHandler(BaseHTTPRequestHandler):
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
     def send_json(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
         self.send_response(status)
@@ -94,8 +97,10 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
     def send_dossier(self, query: str) -> None:
         values = parse_qs(query)
         raw_path = values.get("path", [None])[0]
+        raw_cwd = values.get("cwd", [str(self.server.state.ctx.repo_root)])[0] or str(self.server.state.ctx.repo_root)
         try:
-            payload = read_dossier_file(raw_path, self.server.state.ctx.dossier_root)
+            ctx = discover_repo(resolve_path(raw_cwd))
+            payload = read_dossier_file(raw_path, ctx.dossier_root)
         except PermissionError:
             self.send_json(403, {"ok": False, "error": "path is outside GitWarp dossier root", "code": "outside_dossier_root"})
             return
@@ -110,9 +115,11 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
 
     def send_repository_tree(self, query: str) -> None:
         values = parse_qs(query)
+        raw_cwd = values.get("cwd", [str(self.server.state.ctx.repo_root)])[0] or str(self.server.state.ctx.repo_root)
         try:
+            ctx = discover_repo(resolve_path(raw_cwd))
             payload = build_repository_tree_payload(
-                self.server.state.ctx,
+                ctx,
                 cwd=values.get("cwd", [None])[0],
                 path=values.get("path", [None])[0],
             )
@@ -123,9 +130,11 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
 
     def send_repository_file(self, query: str) -> None:
         values = parse_qs(query)
+        raw_cwd = values.get("cwd", [str(self.server.state.ctx.repo_root)])[0] or str(self.server.state.ctx.repo_root)
         try:
+            ctx = discover_repo(resolve_path(raw_cwd))
             payload = build_repository_file_payload(
-                self.server.state.ctx,
+                ctx,
                 cwd=values.get("cwd", [None])[0],
                 path=values.get("path", [None])[0],
             )
@@ -180,14 +189,18 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/state":
             state = self.server.state
-            self.send_json(
-                200,
-                build_web_state_payload(
-                    state.ctx.cwd,
+            values = parse_qs(parsed.query)
+            cwd = values.get("cwd", [str(state.ctx.repo_root)])[0] or str(state.ctx.repo_root)
+            try:
+                payload = build_web_state_payload(
+                    cwd,
                     readonly=state.readonly,
                     doctor_cache=state.doctor_cache,
-                ),
-            )
+                )
+            except GitWarpError as exc:
+                self.send_json(400, {"ok": False, "error": str(exc), "code": "bad_state_query"})
+                return
+            self.send_json(200, payload)
             return
         if parsed.path == "/api/dossier":
             self.send_dossier(parsed.query)
@@ -235,9 +248,11 @@ class GitWarpWebHandler(BaseHTTPRequestHandler):
             self.send_json(400, {"ok": False, "error": str(exc), "code": "bad_payload"})
             return
         try:
+            mutation_cwd = payload.get("cwd") if isinstance(payload.get("cwd"), str) and payload.get("cwd") else str(self.server.state.ctx.repo_root)
+            mutation_ctx = discover_repo(resolve_path(str(mutation_cwd)))
             result = handle_mutation(
                 parsed.path,
-                self.server.state.ctx,
+                mutation_ctx,
                 payload,
                 confirmation_secret=self.server.state.confirmation_secret,
             )

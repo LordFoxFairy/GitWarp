@@ -1,13 +1,20 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Button, Select, Textarea, TextInput } from "@primer/react";
 import { RepoForkedIcon, RocketIcon } from "@primer/octicons-react";
 import type { DispatchInput, StartWorktreeInput, TaskCreateInput } from "../gitwarp-api";
 import type { CommandResult } from "../types";
 
+interface PendingTaskCandidate {
+  baseBranch: string;
+  branch: string;
+}
+
 interface ActionPanelProps {
   readonly: boolean;
   busy: boolean;
+  cwd?: string;
   baseBranch?: string;
+  pendingTaskBranch?: PendingTaskCandidate | null;
   onTaskCreate: (input: TaskCreateInput) => Promise<CommandResult>;
   onStart: (input: StartWorktreeInput) => Promise<CommandResult>;
   onDispatch: (input: DispatchInput) => Promise<CommandResult>;
@@ -38,15 +45,21 @@ function instructionOptions(form: HTMLFormElement): Pick<TaskCreateInput, "instr
   };
 }
 
-export function ActionPanel({ readonly, busy, baseBranch, onTaskCreate, onStart, onDispatch }: ActionPanelProps) {
+export function ActionPanel({ readonly, busy, cwd, baseBranch, pendingTaskBranch, onTaskCreate, onStart, onDispatch }: ActionPanelProps) {
   const [mode, setMode] = useState<ActionMode>(null);
   const [lastShellCommand, setLastShellCommand] = useState("");
+
+  useEffect(() => {
+    if (pendingTaskBranch) {
+      setMode("task");
+    }
+  }, [pendingTaskBranch]);
 
   const submitTaskCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const description = value(form, "description");
-    const branch = value(form, "branch");
+    const branch = value(form, "branch") || pendingTaskBranch?.branch || "";
     const targetAgentValue = value(form, "target_agent");
     const targetAgent = targetAgentValue === "codex" || targetAgentValue === "claude" ? targetAgentValue : "generic";
     const acceptanceCriteria = lines(form, "acceptance_criteria");
@@ -54,9 +67,10 @@ export function ActionPanel({ readonly, busy, baseBranch, onTaskCreate, onStart,
 
     try {
       const result = await onTaskCreate({
-        title: value(form, "title"),
+        ...(cwd ? { cwd } : {}),
+        title: value(form, "title") || `Follow up ${branch}`,
         ...(description ? { description } : {}),
-        ...(baseBranch ? { base_branch: baseBranch } : {}),
+        ...((pendingTaskBranch?.baseBranch || baseBranch) ? { base_branch: pendingTaskBranch?.baseBranch || baseBranch } : {}),
         ...(branch ? { branch } : {}),
         target_agent: targetAgent,
         ...(acceptanceCriteria.length > 0 ? { acceptance_criteria: acceptanceCriteria } : {}),
@@ -76,6 +90,7 @@ export function ActionPanel({ readonly, busy, baseBranch, onTaskCreate, onStart,
     const form = event.currentTarget;
     try {
       await onStart({
+        ...(cwd ? { cwd } : {}),
         agent_id: value(form, "agent_id"),
         branch: value(form, "branch"),
         ...(baseBranch ? { base_branch: baseBranch } : {}),
@@ -95,6 +110,7 @@ export function ActionPanel({ readonly, busy, baseBranch, onTaskCreate, onStart,
     const agent = value(form, "agent") === "claude" ? "claude" : "codex";
     try {
       await onDispatch({
+        ...(cwd ? { cwd } : {}),
         agent,
         branch: value(form, "branch"),
         ...(baseBranch ? { base_branch: baseBranch } : {}),
@@ -130,6 +146,14 @@ export function ActionPanel({ readonly, busy, baseBranch, onTaskCreate, onStart,
         <p className="empty-state">Read-only mode is enabled. Start GitWarp Web without `--readonly` to create tasks, sandboxes, or launch plans.</p>
       ) : (
         <>
+          {pendingTaskBranch ? (
+            <div className="form-stack action-form" aria-label="Pending task candidate">
+              <strong>Pending task candidate</strong>
+              <p className="form-hint">
+                `{pendingTaskBranch.branch}` is a checkout/create candidate via base `{pendingTaskBranch.baseBranch}`. Review the suggested branch below, then create a real task worktree.
+              </p>
+            </div>
+          ) : null}
           <div className="agent-tool-buttons">
             <Button
               variant="primary"
@@ -148,7 +172,7 @@ export function ActionPanel({ readonly, busy, baseBranch, onTaskCreate, onStart,
             </Button>
           </div>
 
-          {mode === "task" ? <CreateTaskForm busy={busy} baseBranch={baseBranch} onSubmit={submitTaskCreate} onCancel={() => setMode(null)} /> : null}
+          {mode === "task" ? <CreateTaskForm busy={busy} baseBranch={pendingTaskBranch?.baseBranch || baseBranch} pendingTaskBranch={pendingTaskBranch?.branch} onSubmit={submitTaskCreate} onCancel={() => setMode(null)} /> : null}
           {mode === "create" ? <CreateSandboxForm busy={busy} baseBranch={baseBranch} onSubmit={submitStart} onCancel={() => setMode(null)} /> : null}
           {mode === "launch" ? <PrepareLaunchForm busy={busy} baseBranch={baseBranch} onSubmit={submitDispatch} onCancel={() => setMode(null)} /> : null}
           {lastShellCommand ? (
@@ -173,11 +197,13 @@ export function ActionPanel({ readonly, busy, baseBranch, onTaskCreate, onStart,
 function CreateTaskForm({
   busy,
   baseBranch,
+  pendingTaskBranch,
   onSubmit,
   onCancel,
 }: {
   busy: boolean;
   baseBranch?: string;
+  pendingTaskBranch?: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
@@ -185,7 +211,7 @@ function CreateTaskForm({
     <form className="form-stack action-form" onSubmit={onSubmit} aria-busy={busy}>
       <label>
         Title
-        <TextInput name="title" placeholder="Polish matrix web UX" required disabled={busy} block />
+        <TextInput name="title" placeholder="Polish matrix web UX" defaultValue={pendingTaskBranch ? `Create ${pendingTaskBranch}` : undefined} required disabled={busy} block />
       </label>
       <label>
         Description
@@ -202,7 +228,7 @@ function CreateTaskForm({
       </label>
       <label>
         Explicit branch
-        <TextInput name="branch" placeholder="agent/polish-matrix-web-ux" disabled={busy} block />
+        <TextInput name="branch" placeholder="agent/polish-matrix-web-ux" defaultValue={pendingTaskBranch} disabled={busy} block />
       </label>
       <label>
         Acceptance criteria
