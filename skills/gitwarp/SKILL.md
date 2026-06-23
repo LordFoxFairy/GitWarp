@@ -244,8 +244,8 @@ gitwarp install codex
 gitwarp install claude-code
 ```
 
-`gitwarp install self` refreshes the local launcher. `gitwarp install codex` and `gitwarp install claude-code` call the host-specific plugin installers from the full repository/plugin package. The skill `scripts/` directory contains bootstrap helpers only; product runtime code belongs in `src/gitwarp/`.
+`gitwarp install self` bootstraps the local launcher. `gitwarp install codex` and `gitwarp install claude-code` call the host-specific plugin installers from the full repository/plugin package. The skill `scripts/` directory contains bootstrap helpers only; product runtime code belongs in `src/gitwarp/`.
 
-After installing or refreshing a plugin cache, run `gitwarp upgrade --check`. A `stale` result means the shell launcher still points at older runtime behavior; run `gitwarp upgrade` only when the user or operator agrees to refresh it.
+For ordinary users, `gitwarp upgrade --check` / `gitwarp upgrade` should be the normal update path: GitWarp checks the current install and then refreshes a managed runtime from GitHub without requiring users to know install paths or run `git pull`. Source checkouts are developer mode and are reported explicitly during `--check`.
 
 Read `references/install.md` only when installing, packaging, or troubleshooting plugin discovery.

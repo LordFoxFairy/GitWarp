@@ -3,16 +3,23 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
+import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from ...domain.errors import GitWarpError
+from ...infrastructure.runtime import gitwarp_home_path
 from .runtime_sync import build_upgrade_payload, default_launcher_destination, current_package_root
 
 
 DEFAULT_REPOSITORY_URL = "git+https://github.com/LordFoxFairy/GitWarp.git"
+DEFAULT_GITHUB_REF = "main"
 INSTALL_TIMEOUT_SECONDS = 120.0
 
 
@@ -35,6 +42,42 @@ def normalize_install_target(raw: str) -> str:
 
 def source_root_from_package() -> Path:
     return current_package_root().parent.resolve()
+
+
+def repository_http_url(repository_url: str = DEFAULT_REPOSITORY_URL) -> str:
+    value = repository_url.removeprefix("git+")
+    return value[:-4] if value.endswith(".git") else value
+
+
+def repository_archive_url(repository_url: str = DEFAULT_REPOSITORY_URL, ref: str = DEFAULT_GITHUB_REF) -> str:
+    base = repository_http_url(repository_url)
+    return f"{base}/archive/refs/heads/{ref}.tar.gz"
+
+
+@contextmanager
+def github_source_checkout(
+    repository_url: str = DEFAULT_REPOSITORY_URL,
+    ref: str = DEFAULT_GITHUB_REF,
+) -> Iterator[Path]:
+    archive_url = repository_archive_url(repository_url, ref)
+    with tempfile.TemporaryDirectory(prefix="gitwarp-upgrade-") as tempdir:
+        temp_root = Path(tempdir)
+        archive_path = temp_root / "source.tar.gz"
+        try:
+            with urllib.request.urlopen(archive_url, timeout=INSTALL_TIMEOUT_SECONDS) as response:
+                archive_path.write_bytes(response.read())
+        except OSError as exc:
+            raise GitWarpError(f"failed to download GitWarp source archive: {exc}") from exc
+        try:
+            with tarfile.open(archive_path, "r:gz") as handle:
+                handle.extractall(temp_root)
+        except (tarfile.TarError, OSError) as exc:
+            raise GitWarpError(f"failed to extract GitWarp source archive: {exc}") from exc
+        candidates = [path for path in temp_root.iterdir() if path.is_dir()]
+        source_root = next((path for path in candidates if (path / "src" / "gitwarp").is_dir()), None)
+        if source_root is None:
+            raise GitWarpError("downloaded GitHub archive did not contain a GitWarp source tree")
+        yield source_root
 
 
 def shell_join(command: list[str]) -> str:
@@ -130,6 +173,58 @@ def build_self_install_payload(
 def host_installer_script(target: str, source_root: Path) -> Path:
     name = "claude" if target == "claude-code" else target
     return source_root / "scripts" / f"install-{name}-plugin.sh"
+
+
+def managed_runtime_root() -> Path:
+    return gitwarp_home_path() / "runtime" / "current"
+
+
+def install_runtime_from_github(
+    repository_url: str = DEFAULT_REPOSITORY_URL,
+    ref: str = DEFAULT_GITHUB_REF,
+) -> dict[str, Any]:
+    destination = managed_runtime_root()
+    with github_source_checkout(repository_url, ref) as source_root:
+        staged = Path(tempfile.mkdtemp(prefix="gitwarp-runtime-stage-", dir=str(gitwarp_home_path())))
+        try:
+            shutil.copytree(source_root, staged / source_root.name, dirs_exist_ok=True)
+            prepared_root = staged / source_root.name
+            package_root = prepared_root / "src"
+            if not (package_root / "gitwarp").is_dir():
+                raise GitWarpError("downloaded runtime is missing src/gitwarp")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists():
+                shutil.rmtree(destination)
+            prepared_root.replace(destination)
+        except Exception:
+            shutil.rmtree(staged, ignore_errors=True)
+            raise
+    return {
+        "repository_url": repository_url,
+        "ref": ref,
+        "runtime_root": str(destination),
+        "package_root": str(destination / "src"),
+    }
+
+
+def upgrade_package_from_github(
+    *,
+    python_executable: str,
+    repository_url: str = DEFAULT_REPOSITORY_URL,
+    ref: str = DEFAULT_GITHUB_REF,
+) -> dict[str, Any]:
+    return install_runtime_from_github(repository_url=repository_url, ref=ref)
+
+
+def upgrade_plugin_from_github(
+    *,
+    target: str,
+    scope: str = "user",
+    repository_url: str = DEFAULT_REPOSITORY_URL,
+    ref: str = DEFAULT_GITHUB_REF,
+) -> dict[str, Any]:
+    with github_source_checkout(repository_url, ref) as source_root:
+        return build_host_install_payload(target=target, source=source_root, dry_run=False, scope=scope)
 
 
 def build_host_install_payload(

@@ -244,10 +244,10 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--cwd")
     doctor.set_defaults(func=cmd_doctor)
 
-    upgrade = subparsers.add_parser("upgrade", help="Check or refresh the installed gitwarp launcher")
-    upgrade.add_argument("--cwd", help="Accepted for automation consistency; launcher sync does not mutate repository state")
+    upgrade = subparsers.add_parser("upgrade", help="Check or update GitWarp from GitHub and refresh the local entrypoint")
+    upgrade.add_argument("--cwd", help="Accepted for automation consistency; used for diagnostics when the current repo is a source checkout")
     upgrade.add_argument("--dest", help="Launcher path to check or rewrite; defaults to ~/.local/bin/gitwarp")
-    upgrade.add_argument("--check", action="store_true", help="Only inspect the launcher; do not write files")
+    upgrade.add_argument("--check", action="store_true", help="Inspect the current install and the upgrade strategy without changing files")
     upgrade.set_defaults(func=cmd_upgrade)
 
     finish = subparsers.add_parser("finish", help="Record final progress; collapse only when explicitly destroying the sandbox")
