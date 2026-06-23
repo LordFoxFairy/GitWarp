@@ -145,7 +145,7 @@ function taskCandidateRows(matrixRows: MatrixRow[], worktrees: WorktreeRow[], se
     if (!row.git.branch_ref || row.git.worktree || !row.branch || knownBranches.has(row.branch)) {
       return false;
     }
-    if (row.recommended_action !== "inspect") {
+    if (row.category === "main" || row.role === "base") {
       return false;
     }
     const baseBranch = row.classification_basis?.base_branch || selectedBase?.branch || "main";

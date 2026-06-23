@@ -306,9 +306,6 @@ def recommended_action(category: str, branch_ref: dict[str, Any] | None, live: d
     if category == "orphan_dossier":
         return "repair_metadata"
     if category == "merged_ref":
-        branch_name = str(branch_ref.get("name") or "") if branch_ref is not None else ""
-        if branch_name.startswith("feature/") or branch_name.startswith("fix/"):
-            return "inspect"
         return "prune_branch"
     return "inspect"
 

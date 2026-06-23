@@ -194,9 +194,10 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(matrix["sources"]["git_branch_refs"], 3)
         self.assertIn("feature/web-unchecked-ref", branch_rows)
         self.assertIn("fix/web-unchecked-ref", branch_rows)
+        self.assertTrue(branch_rows["feature/web-unchecked-ref"]["git"]["branch_ref"])
+        self.assertTrue(branch_rows["fix/web-unchecked-ref"]["git"]["branch_ref"])
         self.assertFalse(branch_rows["feature/web-unchecked-ref"]["git"]["worktree"])
         self.assertFalse(branch_rows["fix/web-unchecked-ref"]["git"]["worktree"])
-        self.assertEqual(branch_rows["feature/web-unchecked-ref"]["recommended_action"], "inspect")
 
     def test_web_state_includes_shared_next_actions(self) -> None:
         services = load_gitwarp_services()
