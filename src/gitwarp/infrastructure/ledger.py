@@ -13,6 +13,7 @@ from .runtime import (
     LOCK_TIMEOUT_SECONDS,
     RepoContext,
     now_iso,
+    project_registry_path,
     run_git,
 )
 
@@ -59,6 +60,60 @@ def load_ledger(ctx: RepoContext) -> dict[str, Any]:
 
 def load_raw_ledger(ctx: RepoContext) -> dict[str, Any]:
     return load_ledger(ctx)
+
+
+def load_project_registry(path: Path | None = None) -> dict[str, Any]:
+    registry_path = path or project_registry_path()
+    if not registry_path.exists():
+        return {"version": 1, "projects": []}
+    try:
+        data = json.loads(registry_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise GitWarpError(f"invalid project registry: {registry_path}") from exc
+    if not isinstance(data, dict) or data.get("version", 1) != 1 or not isinstance(data.get("projects"), list):
+        raise GitWarpError(f"invalid project registry: {registry_path}")
+    projects: list[dict[str, Any]] = []
+    for item in data["projects"]:
+        if not isinstance(item, dict):
+            raise GitWarpError(f"invalid project registry: {registry_path}")
+        repo_root = item.get("repo_root")
+        name = item.get("name")
+        if not isinstance(repo_root, str) or not repo_root:
+            raise GitWarpError(f"invalid project registry: {registry_path}")
+        if not isinstance(name, str) or not name:
+            raise GitWarpError(f"invalid project registry: {registry_path}")
+        project: dict[str, Any] = {"repo_root": repo_root, "name": name}
+        last_opened_at = item.get("last_opened_at")
+        if isinstance(last_opened_at, str) and last_opened_at:
+            project["last_opened_at"] = last_opened_at
+        projects.append(project)
+    return {"version": 1, "projects": projects}
+
+
+def write_project_registry(registry: dict[str, Any], path: Path | None = None) -> Path:
+    registry_path = path or project_registry_path()
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(json.dumps(registry, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return registry_path
+
+
+def register_project(repo_root: Path, *, name: str | None = None, path: Path | None = None) -> Path:
+    registry_path = path or project_registry_path()
+    registry = load_project_registry(registry_path)
+    repo_key = str(repo_root)
+    project_name = name or repo_root.name
+    last_opened_at = now_iso()
+    projects = [item for item in registry["projects"] if item.get("repo_root") != repo_key]
+    projects.insert(
+        0,
+        {
+            "repo_root": repo_key,
+            "name": project_name,
+            "last_opened_at": last_opened_at,
+        },
+    )
+    write_project_registry({"version": 1, "projects": projects}, registry_path)
+    return registry_path
 
 
 def process_is_alive(pid: int) -> bool:

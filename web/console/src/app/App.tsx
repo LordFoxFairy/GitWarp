@@ -22,11 +22,17 @@ interface OperationState {
   message: string;
 }
 
+interface PendingTaskCandidate {
+  baseBranch: string;
+  branch: string;
+}
+
 export function App({ token }: AppProps) {
   const api = useMemo(() => new GitWarpApi(token), [token]);
   const [state, setState] = useState<WebState | null>(null);
   const [selectedProject, setSelectedProject] = useState<ProjectSummary | null>(null);
   const [selectedWorktreePath, setSelectedWorktreePath] = useState<string | null>(null);
+  const [pendingTaskBranch, setPendingTaskBranch] = useState<PendingTaskCandidate | null>(null);
   const [dossierKind, setDossierKind] = useState<DossierKind>("task");
   const [dossierContent, setDossierContent] = useState("Select a non-main worktree to inspect task.md, progress.md, and lessons.md.");
   const [activeTab, setActiveTab] = useState<RepositoryTab>("code");
@@ -53,13 +59,20 @@ export function App({ token }: AppProps) {
     return worktrees.find((worktree) => worktree.is_main) ?? worktrees[0] ?? null;
   }, [selectedProject, selectedWorktreePath, state]);
 
-  const refresh = async () => {
+  const refresh = async (projectRoot?: string | null) => {
     setLoading(true);
     try {
-      const nextState = await api.getState();
+      const nextState = projectRoot
+        ? await api.getState(projectRoot)
+        : await api.getState(selectedProject?.repo_root);
       setState(nextState);
       setStateRevision((current) => current + 1);
-      setSelectedProject((current) => (current ? nextState.projects.find((project) => project.id === current.id) ?? null : current));
+      setSelectedProject((current) => {
+        if (current) {
+          return nextState.projects.find((project) => project.repo_root === (projectRoot ?? current.repo_root)) ?? null;
+        }
+        return current;
+      });
       return nextState;
     } catch (error) {
       writeOutput(String(error));
@@ -88,7 +101,7 @@ export function App({ token }: AppProps) {
     }
     let cancelled = false;
     void api
-      .readDossier(path)
+      .readDossier(path, selectedProject?.repo_root)
       .then((payload) => {
         if (!cancelled) {
           setDossierContent(payload.content);
@@ -119,21 +132,37 @@ export function App({ token }: AppProps) {
   }, [selectedProject, selectedWorktreePath, state]);
 
   const selectWorktree = (worktree: WorktreeRow) => {
+    setPendingTaskBranch(null);
     setSelectedWorktreePath(worktree.path);
     setDossierKind("task");
+  };
+
+  const selectTaskCandidate = (branch: string, baseBranch: string) => {
+    setPendingTaskBranch({ branch, baseBranch });
+    setActiveTab("metadata");
+  };
+
+  const createBaseCheckout = async (branch: string) => {
+    const result = await runCommand("Create base checkout", () => api.createBaseCheckout(branch, `Base checkout for ${branch}`, selectedProject?.repo_root));
+    if (typeof result.path === "string") {
+      setSelectedWorktreePath(String(result.path));
+    }
   };
 
   const openProject = (project: ProjectSummary) => {
     setSelectedProject(project);
     setSelectedWorktreePath(null);
+    setPendingTaskBranch(null);
     setDossierKind("task");
     setActiveTab("code");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
+    void refresh(project.repo_root);
   };
 
   const closeProject = () => {
     setSelectedProject(null);
     setSelectedWorktreePath(null);
+    setPendingTaskBranch(null);
     setDossierKind("task");
     setActiveTab("code");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
@@ -197,11 +226,17 @@ export function App({ token }: AppProps) {
         readonly={Boolean(state?.readonly)}
         busy={operationBusy}
         selected={selected}
+        pendingTaskBranch={pendingTaskBranch}
         dossierKind={dossierKind}
         dossierContent={dossierContent}
         onDossierKindChange={setDossierKind}
         onSelectWorktree={selectWorktree}
-        onRunTaskCreate={(input) => runCommand("Create task", () => api.createTask(input))}
+        onSelectTaskCandidate={selectTaskCandidate}
+        onCreateBaseCheckout={createBaseCheckout}
+        onRunTaskCreate={(input) => runCommand("Create task", () => api.createTask(input)).then((result) => {
+          setPendingTaskBranch(null);
+          return result;
+        })}
         onRunStart={(input) => runCommand("Create sandbox", () => api.start(input))}
         onRunDispatch={(input) => runCommand("Prepare agent launch", () => api.dispatch(input))}
         onRunHandoff={(input) => runCommand("Record handoff", () => api.handoff(input))}
@@ -211,6 +246,12 @@ export function App({ token }: AppProps) {
               ? api.finishMergedTask(worktree.path, status, progress)
               : api.finishAndCollapse(worktree.path, status, progress),
           ).then((result) => {
+            setSelectedWorktreePath(null);
+            return result;
+          })
+        }
+        onRunRemove={(worktree) =>
+          runCommand("Remove worktree", () => api.removeWorktree(worktree.path, worktree.branch, worktree.path)).then((result) => {
             setSelectedWorktreePath(null);
             return result;
           })
@@ -235,15 +276,19 @@ interface RepositorySectionProps {
   readonly: boolean;
   busy: boolean;
   selected: WorktreeRow | null;
+  pendingTaskBranch: PendingTaskCandidate | null;
   dossierKind: DossierKind;
   dossierContent: string;
   onDossierKindChange: (kind: DossierKind) => void;
   onSelectWorktree: (worktree: WorktreeRow) => void;
+  onSelectTaskCandidate: (branch: string, baseBranch: string) => void;
+  onCreateBaseCheckout: (branch: string) => Promise<void>;
   onRunTaskCreate: (input: TaskCreateInput) => Promise<CommandResult>;
   onRunStart: (input: StartWorktreeInput) => Promise<CommandResult>;
   onRunDispatch: (input: DispatchInput) => Promise<CommandResult>;
   onRunHandoff: (input: HandoffInput) => Promise<CommandResult>;
   onRunFinish: (worktree: WorktreeRow, status: string, progress: string) => Promise<CommandResult>;
+  onRunRemove: (worktree: WorktreeRow) => Promise<CommandResult>;
   onRunPruneBranch: (branch: string, confirmBranch: string, baseBranch?: string) => Promise<CommandResult>;
   onViewMetadata: () => void;
 }
@@ -257,15 +302,19 @@ function RepositorySection({
   readonly,
   busy,
   selected,
+  pendingTaskBranch,
   dossierKind,
   dossierContent,
   onDossierKindChange,
   onSelectWorktree,
+  onSelectTaskCandidate,
+  onCreateBaseCheckout,
   onRunTaskCreate,
   onRunStart,
   onRunDispatch,
   onRunHandoff,
   onRunFinish,
+  onRunRemove,
   onRunPruneBranch,
   onViewMetadata,
 }: RepositorySectionProps) {
@@ -277,6 +326,8 @@ function RepositorySection({
           state={state}
           selected={selected}
           onSelectWorktree={onSelectWorktree}
+          onSelectTaskCandidate={onSelectTaskCandidate}
+          onCreateBaseCheckout={onCreateBaseCheckout}
           onViewMetadata={onViewMetadata}
         />
       </div>
@@ -286,15 +337,19 @@ function RepositorySection({
           readonly={readonly}
           busy={busy}
           selected={selected}
+          pendingTaskBranch={pendingTaskBranch}
           dossierKind={dossierKind}
           dossierContent={dossierContent}
           onSelectWorktree={onSelectWorktree}
+          onSelectTaskCandidate={onSelectTaskCandidate}
+          onCreateBaseCheckout={onCreateBaseCheckout}
           onDossierKindChange={onDossierKindChange}
           onRunTaskCreate={onRunTaskCreate}
           onRunStart={onRunStart}
           onRunDispatch={onRunDispatch}
           onRunHandoff={onRunHandoff}
           onRunFinish={onRunFinish}
+          onRunRemove={onRunRemove}
         />
       </div>
       <div hidden={activeTab !== "branches"}>

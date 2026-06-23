@@ -6,6 +6,7 @@ from .web_state import build_web_state_payload, safe_load_ledger_for_web, sync_l
 from .cleanup import (
     build_collapse_payload,
     build_finish_payload,
+    build_remove_payload,
     build_sweep_payload,
     collapse_worktree,
     inspect_destructive_target,
@@ -32,6 +33,7 @@ __all__ = [
     "build_dispatch_payload",
     "build_finish_payload",
     "build_handoff_payload",
+    "build_remove_payload",
     "build_init_payload",
     "build_install_payload",
     "build_matrix_payload",

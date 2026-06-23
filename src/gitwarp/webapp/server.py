@@ -9,7 +9,7 @@ from http.server import ThreadingHTTPServer
 from typing import Any
 
 from ..domain.errors import GitWarpError
-from ..infrastructure.ledger import discover_repo
+from ..infrastructure.ledger import discover_repo, register_project
 from ..infrastructure.runtime import RepoContext, resolve_path
 from .security import build_allowed_host_headers, host_for_url, validate_web_host
 from .transport import GitWarpWebHandler
@@ -23,6 +23,7 @@ class WebConsoleState:
     doctor_cache: dict[str, Any]
     allowed_hosts: set[str]
     confirmation_secret: bytes
+    registry_path: str
 
 
 class GitWarpHTTPServer(ThreadingHTTPServer):
@@ -31,6 +32,7 @@ class GitWarpHTTPServer(ThreadingHTTPServer):
 
 def run_web_console(args: Any) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
+    registry_path = register_project(ctx.repo_root, name=ctx.repo_root.name)
     validate_web_host(args.host, args.unsafe_host)
     if args.unsafe_host:
         print("warning: --unsafe-host allows non-loopback Web Console access", file=sys.stderr)
@@ -49,6 +51,7 @@ def run_web_console(args: Any) -> None:
         doctor_cache={},
         allowed_hosts=build_allowed_host_headers(args.host, port),
         confirmation_secret=secrets.token_bytes(32),
+        registry_path=str(registry_path),
     )
     url = f"http://{host_for_url(args.host)}:{port}"
     print(
@@ -60,6 +63,7 @@ def run_web_console(args: Any) -> None:
                 "port": port,
                 "repo_root": str(ctx.repo_root),
                 "readonly": bool(args.readonly),
+                "registry_path": str(registry_path),
             },
             separators=(",", ":"),
             sort_keys=True,

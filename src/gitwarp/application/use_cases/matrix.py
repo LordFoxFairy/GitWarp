@@ -355,7 +355,7 @@ def summarize_matrix(rows: list[dict[str, Any]]) -> dict[str, int]:
         "untracked_worktrees": sum(1 for row in rows if row["category"] == "untracked_worktree"),
         "stale_ledger_entries": sum(1 for row in rows if row["category"] == "stale_ledger"),
         "merged_gitwarp_tasks": sum(1 for row in rows if row["category"] == "merged_task"),
-        "prunable_branch_refs": sum(1 for row in rows if row["recommended_action"] == "prune_branch"),
+        "prunable_branch_refs": sum(1 for row in rows if row["category"] == "merged_ref"),
         "orphan_branch_refs": sum(1 for row in rows if row["category"] == "orphan_ref"),
         "orphan_dossiers": sum(1 for row in rows if row["category"] == "orphan_dossier"),
     }

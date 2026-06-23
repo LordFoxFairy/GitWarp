@@ -109,6 +109,7 @@ export interface WebState {
   worktrees: WorktreeRow[];
   doctor?: FindingGroup;
   reconcile?: FindingGroup;
+  matrix?: MatrixPayload;
   next_actions?: NextAction[];
   recommended_next?: string[];
 }

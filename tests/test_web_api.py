@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest import mock
+
 from helpers import *
 
 
@@ -98,6 +100,53 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("reconcile", state)
         self.assertIn("next_actions", state)
 
+    def test_web_state_lists_global_registry_projects_and_lazy_project_details(self) -> None:
+        other_repo = self.make_repo()
+        registry_home = self.repo / ".gitwarp-test-home"
+        registry_home.mkdir()
+        (registry_home / "projects.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "projects": [
+                        {
+                            "repo_root": str(other_repo.resolve()),
+                            "name": other_repo.name,
+                            "last_opened_at": "2026-06-22T00:00:00+00:00",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with mock.patch.dict(os.environ, {"GITWARP_HOME": str(registry_home)}):
+            _, ready = self.start_web_server(
+                self.repo,
+                "web",
+                "--cwd",
+                str(self.repo),
+                "--port",
+                "0",
+                "--no-open",
+                "--readonly",
+            )
+            status, state = self.fetch_web_json(str(ready["url"]), "/api/state")
+            other_status, other_state = self.fetch_web_json(
+                str(ready["url"]),
+                f"/api/state?cwd={urllib.parse.quote(str(other_repo))}",
+            )
+
+        project_roots = {project["repo_root"] for project in state["projects"]}
+        self.assertEqual(status, 200)
+        self.assertEqual(other_status, 200)
+        self.assertEqual(ready["registry_path"], str(registry_home / "projects.json"))
+        self.assertIn(str(self.repo.resolve()), project_roots)
+        self.assertIn(str(other_repo.resolve()), project_roots)
+        self.assertEqual(state["repo_root"], str(self.repo.resolve()))
+        self.assertEqual(other_state["repo_root"], str(other_repo.resolve()))
+        self.assertEqual(other_state["projects"][0]["repo_root"], str(other_repo.resolve()))
+
     def test_web_project_summary_counts_only_actionable_findings(self) -> None:
         services = load_gitwarp_services()
         start = run_gitwarp(
@@ -132,6 +181,23 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(project["branch_ref_count"], 3)
         self.assertEqual(project["worktree_count"], 1)
         self.assertGreater(project["branch_ref_count"], project["worktree_count"])
+
+    def test_web_state_includes_matrix_rows_for_unchecked_branch_refs(self) -> None:
+        services = load_gitwarp_services()
+        run_git(self.repo, "branch", "feature/web-unchecked-ref")
+        run_git(self.repo, "branch", "fix/web-unchecked-ref")
+
+        payload = services.build_web_state_payload(self.repo, readonly=True)
+        matrix = payload["matrix"]
+        branch_rows = {row["branch"]: row for row in matrix["rows"]}
+
+        self.assertEqual(matrix["sources"]["git_branch_refs"], 3)
+        self.assertIn("feature/web-unchecked-ref", branch_rows)
+        self.assertIn("fix/web-unchecked-ref", branch_rows)
+        self.assertTrue(branch_rows["feature/web-unchecked-ref"]["git"]["branch_ref"])
+        self.assertTrue(branch_rows["fix/web-unchecked-ref"]["git"]["branch_ref"])
+        self.assertFalse(branch_rows["feature/web-unchecked-ref"]["git"]["worktree"])
+        self.assertFalse(branch_rows["fix/web-unchecked-ref"]["git"]["worktree"])
 
     def test_web_state_includes_shared_next_actions(self) -> None:
         services = load_gitwarp_services()
@@ -731,6 +797,77 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(board_row["branch_role"], "task")
         self.assertEqual(board_row["base_branch"], "main")
         self.assertEqual(board_row["latest_progress"], "Web handoff recorded")
+
+    def test_web_handoff_status_then_manual_remove_workflow(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "start",
+            "--agent-id",
+            "codex-web-remove",
+            "--branch",
+            "feature/web-manual-remove",
+            "--purpose",
+            "Remove through Web API",
+        )
+        worktree_path = Path(str(start["path"]))
+        dossier_path = Path(str(start["dossier_path"]))
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+
+        handoff_status, handoff = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/handoff",
+            method="POST",
+            token=token,
+            data={
+                "cwd": str(worktree_path),
+                "status": "deprecated",
+                "progress": "User marked this sandbox for manual removal",
+            },
+        )
+        missing_status, missing = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/remove",
+            method="POST",
+            token=token,
+            data={"path": str(worktree_path), "branch": None},
+        )
+        confirm_status, confirmation = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/confirmation",
+            method="POST",
+            token=token,
+            data={"action": "remove", "cwd": str(worktree_path), "path": None, "branch": None},
+        )
+        remove_status, removed = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/remove",
+            method="POST",
+            token=token,
+            data={"path": str(worktree_path), "branch": None, "confirmation": confirmation["confirmation"]},
+        )
+
+        self.assertEqual(handoff_status, 200)
+        self.assertEqual(handoff["status"], "deprecated")
+        self.assertEqual(missing_status, 403)
+        self.assertEqual(missing["code"], "confirmation_required")
+        self.assertEqual(confirm_status, 200, confirmation)
+        self.assertEqual(confirmation["challenge"]["action"], "remove")
+        self.assertEqual(remove_status, 200, removed)
+        self.assertEqual(removed["removed_path"], str(worktree_path))
+        self.assertTrue(removed["purged_dossier"])
+        self.assertFalse(worktree_path.exists())
+        self.assertFalse(dossier_path.exists())
+        self.assertIn("feature/web-manual-remove", run_git(self.repo, "branch", "--list", "feature/web-manual-remove"))
 
     def test_web_task_create_mutation_returns_task_payload(self) -> None:
         _, ready = self.start_web_server(

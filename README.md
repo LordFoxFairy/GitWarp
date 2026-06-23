@@ -141,6 +141,16 @@ gitwarp enter
 
 `statusline` is the low-noise automatic anchor for prompts and hooks. Run `enter` manually only when an agent needs the full dossier pointers and snippets.
 
+Start the Web Console as a managed repo-local service when you want background lifecycle control:
+
+```bash
+gitwarp web start --readonly --no-open
+gitwarp web status
+gitwarp web stop
+```
+
+`gitwarp web` without a subcommand defaults to `gitwarp web start`. Service state is stored per repository under `.gitwarp/web-console-state.json`.
+
 Create a task from a user request. This is the preferred path for agent work: it creates a short-lived task branch, writes the task dossier, and returns an absolute `path` plus a shell `cd` command.
 
 ```bash

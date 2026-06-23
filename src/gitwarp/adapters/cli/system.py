@@ -5,6 +5,7 @@ import argparse
 from ...application.use_cases import build_init_payload, build_install_payload, build_upgrade_payload
 from ...infrastructure.ledger import discover_repo
 from ...infrastructure.runtime import emit_json, resolve_path
+from ...webapp.lifecycle import build_web_status_payload, start_web_console_service, stop_web_console_service
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -36,6 +37,22 @@ def cmd_upgrade(args: argparse.Namespace) -> None:
 
 
 def cmd_web(args: argparse.Namespace) -> None:
+    command = args.web_command or "start"
+    if getattr(args, "serve_internal", False):
+        from ...webapp.server import run_web_console
+
+        run_web_console(args)
+        return
+    if command == "start":
+        emit_json(start_web_console_service(args))
+        return
+    ctx = discover_repo(resolve_path(args.cwd))
+    if command == "status":
+        emit_json(build_web_status_payload(ctx))
+        return
+    if command == "stop":
+        emit_json(stop_web_console_service(args))
+        return
     from ...webapp.server import run_web_console
 
     run_web_console(args)

@@ -2,17 +2,19 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Button, TextInput } from "@primer/react";
 import { CheckCircleIcon } from "@primer/octicons-react";
 import type { HandoffInput } from "../gitwarp-api";
-import type { CommandResult, DossierKind, WorktreeRow } from "../types";
+import type { CommandResult, DossierKind, MatrixRow, WorktreeRow } from "../types";
 
 interface DossierPanelProps {
   readonly: boolean;
   busy: boolean;
   selected: WorktreeRow | null;
+  selectedMatrixRow: MatrixRow | null;
   dossierKind: DossierKind;
   dossierContent: string;
   onDossierKindChange: (kind: DossierKind) => void;
   onHandoff: (input: HandoffInput) => Promise<CommandResult>;
   onFinish: (worktree: WorktreeRow, status: string, progress: string) => Promise<CommandResult>;
+  onRunRemove: (worktree: WorktreeRow) => Promise<CommandResult>;
 }
 
 function value(form: HTMLFormElement, name: string): string {
@@ -23,11 +25,13 @@ export function DossierPanel({
   readonly,
   busy,
   selected,
+  selectedMatrixRow,
   dossierKind,
   dossierContent,
   onDossierKindChange,
   onHandoff,
   onFinish,
+  onRunRemove,
 }: DossierPanelProps) {
   const isTask = Boolean(selected && !selected.is_main && selected.branch_role !== "base");
   const finish = (status: string, progress: string) => {
@@ -69,7 +73,15 @@ export function DossierPanel({
       ) : null}
 
       {isTask && selected && !readonly ? (
-        <WorktreeActions readonly={readonly} busy={busy} worktree={selected} onHandoff={onHandoff} onFinish={finish} />
+        <WorktreeActions
+          readonly={readonly}
+          busy={busy}
+          worktree={selected}
+          selectedMatrixRow={selectedMatrixRow}
+          onHandoff={onHandoff}
+          onFinish={finish}
+          onRunRemove={onRunRemove}
+        />
       ) : null}
 
       {!isTask ? (
@@ -83,27 +95,36 @@ function WorktreeActions({
   readonly,
   busy,
   worktree,
+  selectedMatrixRow,
   onHandoff,
   onFinish,
+  onRunRemove,
 }: {
   readonly: boolean;
   busy: boolean;
   worktree: WorktreeRow;
+  selectedMatrixRow: MatrixRow | null;
   onHandoff: (input: HandoffInput) => Promise<CommandResult>;
   onFinish: (status: string, progress: string) => Promise<CommandResult>;
+  onRunRemove: (worktree: WorktreeRow) => Promise<CommandResult>;
 }) {
   const [showFinish, setShowFinish] = useState(false);
+  const [showRemove, setShowRemove] = useState(false);
   const [finalStatus, setFinalStatus] = useState("merged");
   const [finalProgress, setFinalProgress] = useState("Merged into parent base; ready to collapse task sandbox");
   const [confirmation, setConfirmation] = useState("");
+  const [removeConfirmation, setRemoveConfirmation] = useState("");
   const expectedConfirmation = worktree.branch || worktree.path;
   const finishAllowed = confirmation === expectedConfirmation && finalStatus.trim().length > 0 && finalProgress.trim().length > 0;
+  const removeAllowed = removeConfirmation === expectedConfirmation;
 
   useEffect(() => {
     setShowFinish(false);
+    setShowRemove(false);
     setFinalStatus("merged");
     setFinalProgress("Merged into parent base; ready to collapse task sandbox");
     setConfirmation("");
+    setRemoveConfirmation("");
   }, [worktree.path]);
 
   const submitHandoff = async (event: FormEvent<HTMLFormElement>) => {
@@ -139,11 +160,24 @@ function WorktreeActions({
     }
   };
 
+  const submitRemove = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!removeAllowed || busy) {
+      return;
+    }
+    try {
+      await onRunRemove(worktree);
+      setShowRemove(false);
+    } catch {
+      // Keep destructive confirmation visible when the command fails.
+    }
+  };
+
   return (
     <div className="detail-actions">
       <form className="handoff-form" onSubmit={submitHandoff} aria-busy={busy}>
         <label>
-          Status
+          Manual status
           <TextInput name="status" defaultValue={worktree.status || "implementing"} disabled={readonly || busy} block />
         </label>
         <label>
@@ -170,6 +204,7 @@ function WorktreeActions({
             <p className="form-hint">
               GitWarp will only collapse this task when Git proves its branch HEAD is already merged into the parent base. It will remove the task worktree, ledger row, and matching dossier. It will not push, merge, or delete the branch.
             </p>
+            <p className="form-hint">Final status stays separate from manual removal because merged tasks and manual cleanup have different intent.</p>
           </div>
           <label>
             Final status
@@ -207,6 +242,41 @@ function WorktreeActions({
               {busy ? "Collapsing..." : "Collapse Worktree"}
             </Button>
             <Button type="button" onClick={() => setShowFinish(false)} disabled={busy}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {!showRemove ? (
+        <Button variant="default" type="button" onClick={() => setShowRemove(true)} disabled={readonly || busy}>
+          Remove Worktree
+        </Button>
+      ) : (
+        <form className="finish-confirm" onSubmit={submitRemove}>
+          <div>
+            <strong>Remove Worktree</strong>
+            <p className="form-hint">
+              Use this manual cleanup flow after setting a Manual status. GitWarp will remove the worktree, ledger row, and matching dossier. It will not merge, push, or delete the branch ref.
+            </p>
+            {selectedMatrixRow ? <p className="form-hint">Current matrix action: {selectedMatrixRow.recommended_action}</p> : null}
+          </div>
+          <label>
+            Type branch to confirm
+            <TextInput
+              value={removeConfirmation}
+              onChange={(event) => setRemoveConfirmation(event.currentTarget.value)}
+              placeholder={expectedConfirmation}
+              disabled={readonly || busy}
+              required
+              block
+            />
+          </label>
+          <div className="form-actions">
+            <Button variant="danger" type="submit" disabled={readonly || busy || !removeAllowed}>
+              {busy ? "Removing..." : "Remove Worktree"}
+            </Button>
+            <Button type="button" onClick={() => setShowRemove(false)} disabled={busy}>
               Cancel
             </Button>
           </div>

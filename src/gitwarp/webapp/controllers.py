@@ -9,9 +9,11 @@ from ..application.use_cases import (
     TaskCreateRequest,
     build_collapse_payload,
     build_dispatch_payload,
+    build_base_payload,
     build_finish_payload,
     build_handoff_payload,
     build_init_payload,
+    build_remove_payload,
     build_prune_branch_payload,
     build_start_payload,
     build_task_create_payload,
@@ -143,6 +145,12 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
                 instruction_mode=optional_instruction_mode(payload),
             ),
         )
+    if path == "/api/base":
+        return build_base_payload(
+            ctx,
+            branch=string_field(payload, "branch"),
+            purpose=optional_string_field(payload, "purpose") or f"Base checkout for {string_field(payload, 'branch')}",
+        )
     if path == "/api/dispatch":
         return build_dispatch_payload(
             ctx,
@@ -206,6 +214,13 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
     if path == "/api/collapse":
         require_confirmation(secret=confirmation_secret, ctx=ctx, action="collapse", payload=payload)
         return build_collapse_payload(
+            ctx,
+            path=optional_string_field(payload, "path"),
+            branch=optional_string_field(payload, "branch"),
+        )
+    if path == "/api/remove":
+        require_confirmation(secret=confirmation_secret, ctx=ctx, action="remove", payload=payload)
+        return build_remove_payload(
             ctx,
             path=optional_string_field(payload, "path"),
             branch=optional_string_field(payload, "branch"),

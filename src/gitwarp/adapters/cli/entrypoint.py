@@ -10,7 +10,7 @@ def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
     if argv and argv[0] == "--web":
-        argv = ["web", *argv[1:]]
+        argv = ["web", "start", *argv[1:]]
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

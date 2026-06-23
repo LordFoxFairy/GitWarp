@@ -386,6 +386,54 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertTrue(any(entry.get("path") == str(worktree_path) for entry in ledger["entries"]))
         self.assertIn("feature/review-stop", run_git(self.repo, "branch", "--list", "feature/review-stop"))
 
+    def test_web_start_status_stop_manage_repo_local_service_state(self) -> None:
+        start = run_gitwarp(
+            self.repo,
+            "web",
+            "start",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+            "--readonly",
+        )
+        self.assertTrue(start["running"])
+        self.assertTrue(start["started"])
+        self.assertIsInstance(start["pid"], int)
+        self.assertTrue(Path(str(start["state_path"])).exists())
+
+        status = run_gitwarp(
+            self.repo,
+            "web",
+            "status",
+            "--cwd",
+            str(self.repo),
+        )
+        self.assertTrue(status["running"])
+        self.assertEqual(status["pid"], start["pid"])
+        self.assertEqual(status["url"], start["url"])
+
+        stop = run_gitwarp(
+            self.repo,
+            "web",
+            "stop",
+            "--cwd",
+            str(self.repo),
+        )
+        self.assertFalse(stop["running"])
+        self.assertTrue(stop["stopped"])
+        self.assertFalse(Path(str(start["state_path"])).exists())
+
+        final_status = run_gitwarp(
+            self.repo,
+            "web",
+            "status",
+            "--cwd",
+            str(self.repo),
+        )
+        self.assertFalse(final_status["running"])
+
     def test_finish_collapse_dossier_purge_is_scoped_to_dossier_root(self) -> None:
         start = run_gitwarp(
             self.repo,
