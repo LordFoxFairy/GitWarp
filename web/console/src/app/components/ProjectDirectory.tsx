@@ -1,14 +1,30 @@
-import { Button, Label } from "@primer/react";
-import { GitBranchIcon, RepoIcon } from "@primer/octicons-react";
+import { useState, type FormEvent } from "react";
+import { Button, Label, TextInput } from "@primer/react";
+import { GitBranchIcon, PlusIcon, RepoIcon } from "@primer/octicons-react";
 import type { ProjectSummary } from "../types";
 
 interface ProjectDirectoryProps {
   projects: ProjectSummary[];
   loading: boolean;
   onOpenProject: (project: ProjectSummary) => void;
+  onAddCurrentRepository: () => Promise<void>;
+  onAddRepositoryPath: (path: string) => Promise<void>;
 }
 
-export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDirectoryProps) {
+export function ProjectDirectory({ projects, loading, onOpenProject, onAddCurrentRepository, onAddRepositoryPath }: ProjectDirectoryProps) {
+  const [pathValue, setPathValue] = useState("");
+  const [showPathForm, setShowPathForm] = useState(false);
+
+  const submitPath = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = pathValue.trim();
+    if (!value) {
+      return;
+    }
+    await onAddRepositoryPath(value);
+    setPathValue("");
+    setShowPathForm(false);
+  };
   return (
     <section className="project-directory" aria-label="Project Directory">
       <div className="section-heading">
@@ -16,14 +32,38 @@ export function ProjectDirectory({ projects, loading, onOpenProject }: ProjectDi
           <p className="kicker">Project Directory</p>
           <h2>Managed Projects</h2>
         </div>
-        <span className="muted-hint">Open a project to manage its worktrees and Git state.</span>
+        <div className="section-actions">
+          <Button type="button" leadingVisual={PlusIcon} onClick={() => void onAddCurrentRepository()} disabled={loading}>
+            Add current repository
+          </Button>
+          <Button type="button" onClick={() => setShowPathForm((current) => !current)} disabled={loading}>
+            Add repository path
+          </Button>
+        </div>
       </div>
+      <span className="muted-hint">Open a project to manage its worktrees and Git state.</span>
+      {showPathForm ? (
+        <form className="form-stack action-form" onSubmit={(event) => void submitPath(event)}>
+          <label>
+            Repository path
+            <TextInput value={pathValue} onChange={(event) => setPathValue(event.currentTarget.value)} placeholder="/absolute/path/to/repo" block />
+          </label>
+          <div className="form-actions">
+            <Button type="submit" disabled={loading || !pathValue.trim()}>
+              Add repository path
+            </Button>
+            <Button type="button" onClick={() => setShowPathForm(false)} disabled={loading}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
 
       <div className="repo-list" role="table" aria-label="Managed repositories">
         {projects.length === 0 ? (
           <article className="panel project-card empty">
             <h3>{loading ? "Loading projects" : "No repositories found"}</h3>
-            <p>{loading ? "Reading GitWarp state..." : "Start GitWarp from a repository to manage its worktrees."}</p>
+            <p>{loading ? "Reading GitWarp state..." : "Add current repository or add a repository path to start managing it with GitWarp."}</p>
           </article>
         ) : (
           <>

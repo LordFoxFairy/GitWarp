@@ -89,6 +89,13 @@ export class GitWarpApi {
     return this.request<MatrixPayload>(`/api/matrix${query ? `?${query}` : ""}`);
   }
 
+  addRepository(path?: string, write_gitignore = false): Promise<CommandResult> {
+    return this.post("/api/add", {
+      ...(path ? { path } : {}),
+      write_gitignore,
+    });
+  }
+
   createBaseCheckout(branch: string, purpose?: string, cwd?: string): Promise<CommandResult> {
     return this.post("/api/base", {
       ...(cwd ? { cwd } : {}),

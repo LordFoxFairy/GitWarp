@@ -115,7 +115,7 @@ export function App({ token }: AppProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, api, selected, dossierKind]);
+  }, [activeTab, api, selected, dossierKind, selectedProject?.repo_root]);
 
   useEffect(() => {
     if (!selectedProject || !state) {
@@ -159,6 +159,28 @@ export function App({ token }: AppProps) {
     void refresh(project.repo_root);
   };
 
+  const addCurrentRepository = async () => {
+    const result = await runCommand("Add current repository", () => api.addRepository(state?.repo_root, false));
+    if (typeof result.repo_root === "string") {
+      const refreshed = await refresh(String(result.repo_root));
+      const project = refreshed?.projects.find((item) => item.repo_root === String(result.repo_root));
+      if (project) {
+        openProject(project);
+      }
+    }
+  };
+
+  const addRepositoryPath = async (path: string) => {
+    const result = await runCommand("Add repository path", () => api.addRepository(path, false));
+    if (typeof result.repo_root === "string") {
+      const refreshed = await refresh(String(result.repo_root));
+      const project = refreshed?.projects.find((item) => item.repo_root === String(result.repo_root));
+      if (project) {
+        openProject(project);
+      }
+    }
+  };
+
   const closeProject = () => {
     setSelectedProject(null);
     setSelectedWorktreePath(null);
@@ -200,7 +222,13 @@ export function App({ token }: AppProps) {
           description="Choose a repository first; worktrees, dossiers, and Git health stay inside project detail."
           onRefresh={() => void refresh()}
         />
-        <ProjectDirectory projects={state?.projects ?? []} loading={loading} onOpenProject={openProject} />
+        <ProjectDirectory
+          projects={state?.projects ?? []}
+          loading={loading}
+          onOpenProject={openProject}
+          onAddCurrentRepository={() => addCurrentRepository()}
+          onAddRepositoryPath={(path) => addRepositoryPath(path)}
+        />
         {output !== "Ready." ? <OutputPanel output={output} onClear={() => setOutput("Ready.")} /> : null}
       </main>
     );

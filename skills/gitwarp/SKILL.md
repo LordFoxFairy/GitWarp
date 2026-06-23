@@ -23,6 +23,7 @@ Use GitWarp instead of `git switch`, `git checkout`, or direct `git worktree add
 | Command | Use |
 | --- | --- |
 | `gitwarp install` | First-class installer for GitWarp itself and host integrations such as Codex and Claude Code. |
+| `gitwarp add` | Initialize another repository if needed and register it in the global project directory. |
 | `gitwarp task create` | Preferred intake for new user work; creates a task worktree and richer dossier from title, description, acceptance, and verification notes. |
 | `gitwarp create` | Lower-level creation for explicit base worktrees or manually specified sandboxes. |
 | `gitwarp switch` | Locate an existing worktree and print its path or a shell `cd` command. |

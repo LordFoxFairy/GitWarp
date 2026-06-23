@@ -141,6 +141,8 @@ gitwarp enter
 
 `statusline` is the low-noise automatic anchor for prompts and hooks. Run `enter` manually only when an agent needs the full dossier pointers and snippets.
 
+`gitwarp init` only initializes the current repository. To initialize and register another repository in the global project directory, use `gitwarp add /path/to/repo`.
+
 Start the Web Console as a managed repo-local service when you want background lifecycle control:
 
 ```bash

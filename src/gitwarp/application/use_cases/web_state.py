@@ -154,13 +154,22 @@ def merge_projects(
     readonly: bool,
     registry_projects: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    projects = [selected_project]
-    seen = {selected_project["repo_root"]}
-    for item in registry_projects:
-        repo_root = item.get("repo_root")
-        if not isinstance(repo_root, str) or repo_root in seen:
+    selected_root = selected_project["repo_root"]
+    ordered_roots = [selected_root]
+    ordered_roots.extend(
+        repo_root
+        for item in registry_projects
+        if isinstance((repo_root := item.get("repo_root")), str) and repo_root != selected_root
+    )
+    projects: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for repo_root in ordered_roots:
+        if repo_root in seen:
             continue
-        projects.append(build_registry_project_summary(repo_root, readonly=readonly))
+        if repo_root == selected_root:
+            projects.append(selected_project)
+        else:
+            projects.append(build_registry_project_summary(repo_root, readonly=readonly))
         seen.add(repo_root)
     return projects
 

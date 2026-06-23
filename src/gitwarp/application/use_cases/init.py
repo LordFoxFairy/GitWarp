@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...application.diagnostics import append_gitwarp_ignore_rule, init_recommendations, preflight_init
-from ...infrastructure.ledger import default_ledger, write_ledger
+from ...infrastructure.ledger import default_ledger, load_project_registry, project_registry_path, register_project, write_ledger
 from ...infrastructure.runtime import RepoContext
 from ...infrastructure.worktrees import parse_worktrees, sync_ledger
 
@@ -47,4 +47,21 @@ def build_init_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, 
         "updated": updated,
         "ignore_target": str(preflight["ignore_target"]),
         "recommended_next": init_recommendations(ctx),
+    }
+
+
+def build_add_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, Any]:
+    registry = load_project_registry(project_registry_path())
+    existing = any(item.get("repo_root") == str(ctx.repo_root) for item in registry["projects"])
+    init_payload = build_init_payload(ctx, write_gitignore=write_gitignore)
+    registry_path = register_project(ctx.repo_root, name=ctx.repo_root.name)
+    return {
+        **init_payload,
+        "registry_path": str(registry_path),
+        "registered": {
+            "name": ctx.repo_root.name,
+            "added_new": not existing,
+            "refreshed": existing,
+            "position": 0,
+        },
     }

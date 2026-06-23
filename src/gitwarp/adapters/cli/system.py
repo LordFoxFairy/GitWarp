@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from ...application.use_cases import build_init_payload, build_install_payload, build_upgrade_payload
+from ...application.use_cases import build_add_payload, build_init_payload, build_install_payload, build_upgrade_payload
 from ...infrastructure.ledger import discover_repo
 from ...infrastructure.runtime import emit_json, resolve_path
 from ...webapp.lifecycle import build_web_status_payload, start_web_console_service, stop_web_console_service
@@ -11,6 +11,11 @@ from ...webapp.lifecycle import build_web_status_payload, start_web_console_serv
 def cmd_init(args: argparse.Namespace) -> None:
     ctx = discover_repo(resolve_path(args.cwd))
     emit_json(build_init_payload(ctx, write_gitignore=args.write_gitignore))
+
+
+def cmd_add(args: argparse.Namespace) -> None:
+    ctx = discover_repo(resolve_path(args.path))
+    emit_json(build_add_payload(ctx, write_gitignore=args.write_gitignore))
 
 
 def cmd_install(args: argparse.Namespace) -> None:

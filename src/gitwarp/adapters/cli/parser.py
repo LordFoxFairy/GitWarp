@@ -16,7 +16,7 @@ from .read import (
     cmd_scan,
     cmd_statusline,
 )
-from .system import cmd_init, cmd_install, cmd_upgrade, cmd_web
+from .system import cmd_add, cmd_init, cmd_install, cmd_upgrade, cmd_web
 from .workspaces import (
     cmd_adopt,
     cmd_annotate,
@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--cwd")
     init.add_argument("--write-gitignore", action="store_true")
     init.set_defaults(func=cmd_init)
+
+    add = subparsers.add_parser("add", help="Initialize another repository if needed and register it in the global project directory")
+    add.add_argument("path")
+    add.add_argument("--write-gitignore", action="store_true")
+    add.set_defaults(func=cmd_add)
 
     install = subparsers.add_parser("install", help="Install GitWarp itself or host integrations")
     install.add_argument("target", choices=["self", "gitwarp", "codex", "claude-code", "claude", "claudecode", "cc"])

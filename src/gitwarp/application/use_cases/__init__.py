@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .branches import build_branches_payload, build_prune_branch_payload
-from .init import build_init_payload
+from .init import build_add_payload, build_init_payload
 from .web_state import build_web_state_payload, safe_load_ledger_for_web, sync_ledger_for_web, web_board_row
 from .cleanup import (
     build_collapse_payload,
@@ -25,6 +25,7 @@ from .tasks import TaskCreateRequest, build_task_create_payload
 
 __all__ = [
     "TaskCreateRequest",
+    "build_add_payload",
     "build_adopt_payload",
     "build_annotate_payload",
     "build_base_payload",

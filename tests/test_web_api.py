@@ -100,6 +100,101 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("reconcile", state)
         self.assertIn("next_actions", state)
 
+    def test_web_add_current_repository_registers_and_refreshes_current_repo(self) -> None:
+        registry_home = self.repo / ".gitwarp-test-home"
+        registry_home.mkdir()
+        with mock.patch.dict(os.environ, {"GITWARP_HOME": str(registry_home)}):
+            _, ready = self.start_web_server(
+                self.repo,
+                "web",
+                "--cwd",
+                str(self.repo),
+                "--port",
+                "0",
+                "--no-open",
+            )
+            _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+            token = str(session["token"])
+            add_status, add_payload = self.fetch_web_json(
+                str(ready["url"]),
+                "/api/add",
+                method="POST",
+                token=token,
+                data={"write_gitignore": False},
+            )
+            state_status, state = self.fetch_web_json(str(ready["url"]), "/api/state")
+
+        self.assertEqual(add_status, 200, add_payload)
+        self.assertTrue(add_payload["registered"]["refreshed"])  # type: ignore[index]
+        self.assertFalse(add_payload["registered"]["added_new"])  # type: ignore[index]
+        self.assertEqual(state_status, 200)
+        self.assertEqual(state["projects"][0]["repo_root"], str(self.repo.resolve()))
+
+    def test_web_add_path_initializes_and_registers_repository(self) -> None:
+        other_repo = self.make_repo()
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+        add_status, add_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/add",
+            method="POST",
+            token=token,
+            data={"path": str(other_repo), "write_gitignore": False},
+        )
+        state_status, state = self.fetch_web_json(
+            str(ready["url"]),
+            f"/api/state?cwd={urllib.parse.quote(str(other_repo))}",
+        )
+
+        self.assertEqual(add_status, 200, add_payload)
+        self.assertTrue((other_repo / ".gitwarp" / "ledger.json").exists())
+        self.assertTrue(add_payload["registered"]["added_new"])  # type: ignore[index]
+        self.assertEqual(add_payload["repo_root"], str(other_repo.resolve()))
+        self.assertEqual(state_status, 200)
+        self.assertEqual(state["projects"][0]["repo_root"], str(other_repo.resolve()))
+
+    def test_web_add_repeated_path_refreshes_project_to_front(self) -> None:
+        other_repo = self.make_repo()
+        third_repo = self.make_repo()
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+        self.fetch_web_json(str(ready["url"]), "/api/add", method="POST", token=token, data={"path": str(other_repo), "write_gitignore": False})
+        self.fetch_web_json(str(ready["url"]), "/api/add", method="POST", token=token, data={"path": str(third_repo), "write_gitignore": False})
+        add_status, add_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/add",
+            method="POST",
+            token=token,
+            data={"path": str(other_repo), "write_gitignore": False},
+        )
+        state_status, state = self.fetch_web_json(
+            str(ready["url"]),
+            f"/api/state?cwd={urllib.parse.quote(str(other_repo))}",
+        )
+
+        self.assertEqual(add_status, 200, add_payload)
+        self.assertTrue(add_payload["registered"]["refreshed"])  # type: ignore[index]
+        self.assertEqual(state_status, 200)
+        self.assertEqual(state["projects"][0]["repo_root"], str(other_repo.resolve()))
+
     def test_web_state_lists_global_registry_projects_and_lazy_project_details(self) -> None:
         other_repo = self.make_repo()
         registry_home = self.repo / ".gitwarp-test-home"

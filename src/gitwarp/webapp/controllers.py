@@ -7,6 +7,7 @@ from ..infrastructure.ledger import discover_repo
 from ..infrastructure.runtime import RepoContext, resolve_path
 from ..application.use_cases import (
     TaskCreateRequest,
+    build_add_payload,
     build_collapse_payload,
     build_dispatch_payload,
     build_base_payload,
@@ -127,6 +128,10 @@ def require_confirmation(
 def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, confirmation_secret: bytes) -> dict[str, Any]:
     if path == "/api/init":
         return build_init_payload(ctx, write_gitignore=bool_field(payload, "write_gitignore"))
+    if path == "/api/add":
+        target_path = optional_string_field(payload, "path")
+        target_ctx = discover_repo(resolve_path(target_path or str(ctx.repo_root)))
+        return build_add_payload(target_ctx, write_gitignore=bool_field(payload, "write_gitignore"))
     if path == "/api/task/create":
         return build_task_create_payload(
             ctx,
