@@ -38,7 +38,7 @@ gitwarp upgrade --check
 gitwarp doctor
 ```
 
-`gitwarp install self` refreshes the `~/.local/bin/gitwarp` launcher from the current checkout or plugin cache. For package-style installs, use one of these explicit methods:
+`gitwarp install self` bootstraps the `~/.local/bin/gitwarp` launcher. After that, the day-to-day user path should be `gitwarp upgrade --check` / `gitwarp upgrade`, which updates GitWarp from GitHub and refreshes the local entrypoint without requiring users to know install paths or run `git pull`. For package-style installs, use one of these explicit methods:
 
 ```bash
 gitwarp install self --method pipx --source "$PWD"
@@ -56,7 +56,7 @@ gitwarp upgrade --check
 gitwarp doctor
 ```
 
-This registers or rebinds the Claude Code marketplace `gitwarp-dev`, installs or updates `gitwarp@gitwarp-dev` with the native Claude plugin commands, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp` from this checkout.
+This registers or rebinds the Claude Code marketplace `gitwarp-dev`, installs or updates `gitwarp@gitwarp-dev` with the native Claude plugin commands, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`. Once installed, users should prefer `gitwarp upgrade` rather than pulling a checkout by hand.
 If the installer reports `on_path:false`, add `~/.local/bin` to `PATH` or run the returned absolute launcher path.
 
 Manual equivalent:
@@ -80,7 +80,7 @@ gitwarp upgrade --check
 gitwarp doctor
 ```
 
-This registers or rebinds the local Codex marketplace `gitwarp-dev`, refreshes any existing `gitwarp@gitwarp-dev` cache, installs it again, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp` from this checkout.
+This registers or rebinds the local Codex marketplace `gitwarp-dev`, refreshes any existing `gitwarp@gitwarp-dev` cache, installs it again, and writes the `gitwarp` launcher to `~/.local/bin/gitwarp`. Once installed, users should prefer `gitwarp upgrade` rather than pulling a checkout by hand.
 
 Manual equivalent:
 
@@ -130,7 +130,7 @@ gitwarp doctor
 
 `sweep --merged-tasks --dry-run` previews clean GitWarp-managed task worktrees whose branch HEAD is already merged into their parent `base_branch`. Running without `--dry-run` removes only those task worktrees, their ledger rows, and matching dossiers. It preserves base worktrees, unmanaged worktrees, dirty worktrees, unmerged tasks, and all local branch refs.
 
-`upgrade --check` validates that the launcher on disk supports the current command set without writing files. If it reports `missing` or `stale`, run `gitwarp upgrade` explicitly to rewrite the local launcher from this checkout or plugin cache.
+`upgrade --check` reports the current install state and whether `gitwarp upgrade` will refresh a managed runtime from GitHub. In ordinary user setups, `gitwarp upgrade` should be the single command that updates GitWarp code and refreshes the local launcher. Source checkouts remain a developer mode and are reported explicitly during `--check`.
 
 Check repository context when a session starts:
 

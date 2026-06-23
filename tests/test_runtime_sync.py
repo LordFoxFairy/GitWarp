@@ -132,6 +132,13 @@ class RuntimeSyncTests(GitWarpTestCase):
         self.assertFalse(destination.exists())
         self.assertIn("gitwarp upgrade", " ".join(payload["recommended_next"]))  # type: ignore[arg-type]
 
+    def test_upgrade_check_reports_source_checkout_origin_and_managed_runtime_strategy(self) -> None:
+        payload = run_gitwarp(REPO_ROOT, "upgrade", "--cwd", str(REPO_ROOT), "--check")
+
+        self.assertEqual(payload["origin"], "source_checkout")
+        self.assertEqual(payload["upgrade_strategy"], "github_managed_runtime")
+        self.assertIn("gitwarp upgrade will install a managed runtime from GitHub", " ".join(payload["recommended_next"]))  # type: ignore[arg-type]
+
     def test_upgrade_check_reports_stale_launcher_without_overwriting(self) -> None:
         destination = self.repo / "bin" / "gitwarp"
         write_fake_launcher(destination, supports_next=False)

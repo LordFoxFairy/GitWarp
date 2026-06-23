@@ -35,15 +35,18 @@ def recommended_next_for_findings(ctx: RepoContext, findings: list[dict[str, Any
         elif code == "gitwarp_launcher" and severity in {"warning", "error"}:
             recommendations.append("Run the GitWarp CLI installer from the skill scripts directory.")
         elif code == "gitwarp_launcher_capability" and severity in {"warning", "error"}:
-            failed_probes = {
-                probe.get("name")
-                for probe in details.get("probes", [])
-                if isinstance(probe, dict) and probe.get("ok") is not True
-            }
-            if "upgrade" in failed_probes and details.get("fallback_upgrade_command"):
-                recommendations.append(str(details["fallback_upgrade_command"]))
-            else:
+            if details.get("origin") == "source_checkout":
                 recommendations.append("gitwarp upgrade")
+            else:
+                failed_probes = {
+                    probe.get("name")
+                    for probe in details.get("probes", [])
+                    if isinstance(probe, dict) and probe.get("ok") is not True
+                }
+                if "upgrade" in failed_probes and details.get("fallback_upgrade_command"):
+                    recommendations.append(str(details["fallback_upgrade_command"]))
+                else:
+                    recommendations.append("gitwarp upgrade")
         elif code == "codex_plugin_metadata" and severity == "warning" and details.get("codex"):
             recommendations.append("Install or enable gitwarp@gitwarp-dev in Codex.")
         elif code == "codex_plugin_cache" and severity == "warning":
@@ -126,7 +129,7 @@ def build_doctor_payload(
                 capability_severity,
                 "gitwarp launcher supports current commands."
                 if capability_severity == "ok"
-                else "gitwarp launcher is missing current commands.",
+                else "gitwarp launcher is missing current commands or upgrade requires a different runtime source.",
                 **capability,
             )
         )
