@@ -114,6 +114,32 @@ For copy-only installs, copy the repository root or install the Python package f
 
 ## Quick Start
 
+GitWarp is easiest to learn if you treat it as three main paths:
+
+### 1. Install or upgrade GitWarp
+
+```bash
+gitwarp install claude-code   # or: gitwarp install codex
+gitwarp upgrade --check
+gitwarp doctor
+```
+
+### 2. Start managing repositories
+
+```bash
+gitwarp init                # initialize the current repository
+gitwarp add /path/to/repo   # initialize and register another repository
+```
+
+### 3. Create work and inspect state
+
+```bash
+gitwarp task create --title "Implement isolated task" --description "Build the requested change"
+gitwarp web
+gitwarp matrix
+gitwarp next
+```
+
 Initialize each target repository once, then run a read-only diagnostic:
 
 ```bash

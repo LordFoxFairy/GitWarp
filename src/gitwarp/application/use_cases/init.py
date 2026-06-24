@@ -37,6 +37,10 @@ def build_init_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, 
     sync_ledger(ctx, parse_worktrees(ctx))
     updated["ledger"] = updated["ledger"] or ledger_before_sync != ctx.ledger_path.read_bytes()
 
+    registry = load_project_registry(project_registry_path())
+    existing = any(item.get("repo_root") == str(ctx.repo_root) for item in registry["projects"])
+    registry_path = register_project(ctx.repo_root, name=ctx.repo_root.name)
+
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),
@@ -46,17 +50,6 @@ def build_init_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, 
         "created": created,
         "updated": updated,
         "ignore_target": str(preflight["ignore_target"]),
-        "recommended_next": init_recommendations(ctx),
-    }
-
-
-def build_add_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, Any]:
-    registry = load_project_registry(project_registry_path())
-    existing = any(item.get("repo_root") == str(ctx.repo_root) for item in registry["projects"])
-    init_payload = build_init_payload(ctx, write_gitignore=write_gitignore)
-    registry_path = register_project(ctx.repo_root, name=ctx.repo_root.name)
-    return {
-        **init_payload,
         "registry_path": str(registry_path),
         "registered": {
             "name": ctx.repo_root.name,
@@ -64,4 +57,9 @@ def build_add_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, A
             "refreshed": existing,
             "position": 0,
         },
+        "recommended_next": init_recommendations(ctx),
     }
+
+
+def build_add_payload(ctx: RepoContext, *, write_gitignore: bool) -> dict[str, Any]:
+    return build_init_payload(ctx, write_gitignore=write_gitignore)

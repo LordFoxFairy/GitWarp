@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest import mock
+
 from helpers import *
 
 
@@ -36,39 +38,47 @@ class DoctorTests(GitWarpTestCase):
         self.assertLessEqual(severities, {"ok", "warning", "error"})
         self.assertEqual(doctor["summary"]["total"], len(findings))  # type: ignore[index]
 
-    def test_init_bootstraps_runtime_state_and_is_idempotent(self) -> None:
-        init = run_gitwarp(self.repo, "init", "--cwd", str(self.repo))
-        ledger_path = self.repo / ".gitwarp" / "ledger.json"
-        worktree_root = self.repo / ".gitwarp" / "worktrees"
-        dossier_root = self.repo / ".gitwarp" / "dossiers"
-        exclude_path = self.repo / ".git" / "info" / "exclude"
+    def test_init_bootstraps_runtime_state_registers_project_and_is_idempotent(self) -> None:
+        registry_home = self.repo / ".gitwarp-test-home"
+        registry_home.mkdir()
+        with mock.patch.dict(os.environ, {"GITWARP_HOME": str(registry_home)}):
+            init = run_gitwarp(self.repo, "init", "--cwd", str(self.repo))
+            ledger_path = self.repo / ".gitwarp" / "ledger.json"
+            worktree_root = self.repo / ".gitwarp" / "worktrees"
+            dossier_root = self.repo / ".gitwarp" / "dossiers"
+            exclude_path = self.repo / ".git" / "info" / "exclude"
+            registry_path = registry_home / "projects.json"
 
-        self.assertTrue(ledger_path.exists())
-        self.assertTrue(worktree_root.is_dir())
-        self.assertTrue(dossier_root.is_dir())
-        self.assertEqual(init["ledger_path"], str(ledger_path.resolve()))
-        self.assertEqual(init["worktree_root"], str(worktree_root.resolve()))
-        self.assertEqual(init["dossier_root"], str(dossier_root.resolve()))
-        self.assertEqual(init["ignore_target"], str(exclude_path.resolve()))
-        self.assertTrue(init["created"]["ledger_dir"])  # type: ignore[index]
-        self.assertTrue(init["created"]["ledger"])  # type: ignore[index]
-        self.assertTrue(init["created"]["worktree_root"])  # type: ignore[index]
-        self.assertTrue(init["created"]["dossier_root"])  # type: ignore[index]
-        self.assertFalse(init["updated"]["ledger"])  # type: ignore[index]
-        self.assertTrue(init["updated"]["ignore_rule"])  # type: ignore[index]
-        self.assertIn("/.gitwarp/", exclude_path.read_text(encoding="utf-8"))
-        self.assertIn("gitwarp doctor", " ".join(init["recommended_next"]))  # type: ignore[arg-type]
+            self.assertTrue(ledger_path.exists())
+            self.assertTrue(worktree_root.is_dir())
+            self.assertTrue(dossier_root.is_dir())
+            self.assertTrue(registry_path.exists())
+            self.assertEqual(init["ledger_path"], str(ledger_path.resolve()))
+            self.assertEqual(init["worktree_root"], str(worktree_root.resolve()))
+            self.assertEqual(init["dossier_root"], str(dossier_root.resolve()))
+            self.assertEqual(init["ignore_target"], str(exclude_path.resolve()))
+            self.assertEqual(Path(str(init["registry_path"])).resolve(), registry_path.resolve())
+            self.assertTrue(init["created"]["ledger_dir"])  # type: ignore[index]
+            self.assertTrue(init["created"]["ledger"])  # type: ignore[index]
+            self.assertTrue(init["created"]["worktree_root"])  # type: ignore[index]
+            self.assertTrue(init["created"]["dossier_root"])  # type: ignore[index]
+            self.assertFalse(init["updated"]["ledger"])  # type: ignore[index]
+            self.assertTrue(init["updated"]["ignore_rule"])  # type: ignore[index]
+            self.assertIn("/.gitwarp/", exclude_path.read_text(encoding="utf-8"))
+            self.assertIn("gitwarp doctor", " ".join(init["recommended_next"]))  # type: ignore[arg-type]
+            self.assertEqual(json.loads(registry_path.read_text(encoding="utf-8"))["projects"][0]["repo_root"], str(self.repo.resolve()))
 
-        first_ledger = ledger_path.read_bytes()
-        second = run_gitwarp(self.repo, "init", "--cwd", str(self.repo))
-        second_ledger = ledger_path.read_bytes()
-        self.assertEqual(first_ledger, second_ledger)
-        self.assertFalse(second["created"]["ledger_dir"])  # type: ignore[index]
-        self.assertFalse(second["created"]["ledger"])  # type: ignore[index]
-        self.assertFalse(second["created"]["worktree_root"])  # type: ignore[index]
-        self.assertFalse(second["created"]["dossier_root"])  # type: ignore[index]
-        self.assertFalse(second["updated"]["ledger"])  # type: ignore[index]
-        self.assertFalse(second["updated"]["ignore_rule"])  # type: ignore[index]
+            first_ledger = ledger_path.read_bytes()
+            second = run_gitwarp(self.repo, "init", "--cwd", str(self.repo))
+            second_ledger = ledger_path.read_bytes()
+            self.assertEqual(first_ledger, second_ledger)
+            self.assertFalse(second["created"]["ledger_dir"])  # type: ignore[index]
+            self.assertFalse(second["created"]["ledger"])  # type: ignore[index]
+            self.assertFalse(second["created"]["worktree_root"])  # type: ignore[index]
+            self.assertFalse(second["created"]["dossier_root"])  # type: ignore[index]
+            self.assertFalse(second["updated"]["ledger"])  # type: ignore[index]
+            self.assertFalse(second["updated"]["ignore_rule"])  # type: ignore[index]
+            self.assertEqual(second["registered"]["refreshed"], True)  # type: ignore[index]
 
     def test_init_prunes_missing_existing_ledger_entries(self) -> None:
         ledger_dir = self.repo / ".gitwarp"

@@ -40,7 +40,7 @@ escape_for_json() {
 }
 
 context="GitWarp: ${gitwarp_banner:-unavailable. Run gitwarp init, then gitwarp doctor.}
-Use gitwarp task create for new isolated work, gitwarp switch for existing sandboxes, and run gitwarp enter only when full dossier context is needed.
+Use gitwarp matrix, then gitwarp next, before cleanup or repair decisions. Use gitwarp task create for new isolated work, gitwarp switch for existing sandboxes, and run gitwarp enter only when full dossier context is needed; if you are about to edit inside an assigned task sandbox, enter first.
 When assigned an existing worktree, leave it intact after verification unless the user explicitly asks for push, merge, remove, or collapse."
 if [[ "${#diagnostics[@]}" -gt 0 ]]; then
   context="${context}

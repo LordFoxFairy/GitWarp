@@ -23,28 +23,43 @@ Use GitWarp instead of `git switch`, `git checkout`, or direct `git worktree add
 | Command | Use |
 | --- | --- |
 | `gitwarp install` | First-class installer for GitWarp itself and host integrations such as Codex and Claude Code. |
+| `gitwarp upgrade --check` | Inspect the current install and the GitHub-backed update strategy without writing files. |
+| `gitwarp upgrade` | Update GitWarp from GitHub and refresh the local entrypoint. |
+| `gitwarp init` | Initialize the current repository for GitWarp management. |
 | `gitwarp add` | Initialize another repository if needed and register it in the global project directory. |
 | `gitwarp task create` | Preferred intake for new user work; creates a task worktree and richer dossier from title, description, acceptance, and verification notes. |
 | `gitwarp create` | Lower-level creation for explicit base worktrees or manually specified sandboxes. |
+| `gitwarp start` | Create an isolated task worktree with dossier files. |
+| `gitwarp dispatch` | Create a worktree and render an agent launch command. |
+| `gitwarp adopt` | Bind an existing non-main worktree to GitWarp metadata. |
 | `gitwarp switch` | Locate an existing worktree and print its path or a shell `cd` command. |
-| `gitwarp remove` | Destroy one explicit sandbox and its dossier; use `--force` only when dirty removal is intended. |
-| `gitwarp matrix` | Read-only control-plane view of refs, worktrees, ledger rows, and dossiers. |
-| `gitwarp next` | Read-only prioritized action queue derived from `matrix`. |
-| `gitwarp sweep` | Batch-clean clean, merged, GitWarp-managed task worktrees; preserves branch refs. |
-| `gitwarp branches` | List local branch refs with cleanup safety metadata. |
-| `gitwarp prune-branch` | Delete only a safe merged local branch ref after explicit selection. |
-| `gitwarp handoff` | Record progress and optional lessons for the current sandbox. |
-| `gitwarp pause` / `gitwarp resume` | Mark a task blocked or active without destroying context. |
-| `gitwarp statusline` | Print a raw prompt banner such as `GITWARP[main-repo]`. |
+| `gitwarp context` | Print JSON context for the current worktree. |
 | `gitwarp enter` | Return session context and dossier snippets when full task context is needed. |
 | `gitwarp board` | List active sandboxes. |
+| `gitwarp matrix` | Read-only control-plane view of refs, worktrees, ledger rows, and dossiers. |
+| `gitwarp next` | Read-only prioritized action queue derived from `matrix`. |
+| `gitwarp branches` | List local branch refs with cleanup safety metadata. |
 | `gitwarp reconcile` | Read-only audit for dirty, stale, missing, merged, or drifted worktrees. |
+| `gitwarp handoff` | Record progress and optional lessons for the current sandbox. |
+| `gitwarp finish` | Record final progress; optionally collapse a sandbox after explicit cleanup intent. |
+| `gitwarp remove` | Destroy one explicit sandbox and its dossier; use `--force` only when dirty removal is intended. |
+| `gitwarp sweep` | Batch-clean clean, merged, GitWarp-managed task worktrees; preserves branch refs. |
+| `gitwarp prune-branch` | Delete only a safe merged local branch ref after explicit selection. |
+| `gitwarp pause` / `gitwarp resume` | Mark a task blocked or active without destroying context. |
+| `gitwarp statusline` | Print a raw prompt banner such as `GITWARP[main-repo]`. |
 | `gitwarp doctor` | Check install, hook, plugin, launcher, and runtime health. |
-| `gitwarp upgrade --check` | Detect stale launchers without writing files. |
-| `gitwarp upgrade` | Explicitly rewrite the local launcher from the current checkout or plugin cache. |
 | `gitwarp web` | Start the local Web Console in the foreground. |
 
 Prefer `task create` for new work. Use `create --role base` for long-lived user feature branches. Use `switch` for navigation and `remove` only when the sandbox should actually be destroyed.
+
+## Standard Agent Flow
+
+1. Confirm where you are with `gitwarp statusline`.
+2. Inspect the control plane with `gitwarp matrix`, then `gitwarp next`.
+3. If this is a new task, prefer `gitwarp task create`.
+4. If you were given an existing worktree, use `gitwarp enter` before editing.
+5. During work, record milestones with `gitwarp handoff`.
+6. When complete, use `gitwarp finish`; only choose collapse/cleanup actions deliberately.
 
 ## Session Startup Loop
 
@@ -117,6 +132,14 @@ If the user assigns an existing worktree, finish the requested work there and st
 ## Cleanup Semantics
 
 Completion is not cleanup. Verification, push, merge, worktree removal, and branch-ref pruning are separate actions.
+
+| Command | Delete worktree | Delete ledger row | Delete dossier | Delete local branch ref | Merge or push |
+| --- | --- | --- | --- | --- | --- |
+| `gitwarp remove` | yes | yes | yes | no | no |
+| `gitwarp finish --collapse` | yes | yes | yes | no | no |
+| `gitwarp finish --collapse-merged` | yes | yes | yes | no | no |
+| `gitwarp sweep --merged-tasks` | yes | yes | yes | no | no |
+| `gitwarp prune-branch` | no | no | no | yes | no |
 
 When verified, record the outcome and leave the sandbox intact unless cleanup was explicitly requested:
 

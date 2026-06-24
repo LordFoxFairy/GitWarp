@@ -75,6 +75,7 @@ def scenario_session_hook_is_low_noise() -> list[str]:
             for item in (
                 require_contains(hook, "gitwarp statusline --cwd", relative),
                 require_contains(hook, "gitwarp task create --help", relative),
+                require_contains(hook, "Use gitwarp matrix, then gitwarp next", relative),
                 require_contains(hook, "Use gitwarp task create for new isolated work", relative),
                 require_contains(hook, "run gitwarp enter only when full dossier context is needed", relative),
                 require_absent(hook, "gitwarp enter --cwd", relative),

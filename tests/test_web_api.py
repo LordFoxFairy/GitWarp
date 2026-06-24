@@ -195,27 +195,14 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(state_status, 200)
         self.assertEqual(state["projects"][0]["repo_root"], str(other_repo.resolve()))
 
-    def test_web_state_lists_global_registry_projects_and_lazy_project_details(self) -> None:
+    def test_web_state_lists_global_registry_projects_and_uses_live_project_details(self) -> None:
         other_repo = self.make_repo()
         registry_home = self.repo / ".gitwarp-test-home"
         registry_home.mkdir()
-        (registry_home / "projects.json").write_text(
-            json.dumps(
-                {
-                    "version": 1,
-                    "projects": [
-                        {
-                            "repo_root": str(other_repo.resolve()),
-                            "name": other_repo.name,
-                            "last_opened_at": "2026-06-22T00:00:00+00:00",
-                        }
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
+        run_gitwarp(other_repo, "init", "--cwd", str(other_repo))
 
         with mock.patch.dict(os.environ, {"GITWARP_HOME": str(registry_home)}):
+            run_gitwarp(other_repo, "init", "--cwd", str(other_repo))
             _, ready = self.start_web_server(
                 self.repo,
                 "web",
@@ -241,6 +228,9 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(state["repo_root"], str(self.repo.resolve()))
         self.assertEqual(other_state["repo_root"], str(other_repo.resolve()))
         self.assertEqual(other_state["projects"][0]["repo_root"], str(other_repo.resolve()))
+        listed_other = next(project for project in state["projects"] if project["repo_root"] == str(other_repo.resolve()))
+        self.assertEqual(listed_other["worktree_count"], 1)
+        self.assertEqual(listed_other["statusline"], "GITWARP[main-repo]")
 
     def test_web_project_summary_counts_only_actionable_findings(self) -> None:
         services = load_gitwarp_services()

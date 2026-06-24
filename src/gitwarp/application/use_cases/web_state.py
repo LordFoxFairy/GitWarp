@@ -128,23 +128,60 @@ def build_project_summary(
 
 
 def build_registry_project_summary(repo_root: str, *, readonly: bool) -> dict[str, Any]:
-    path = Path(repo_root).expanduser()
-    return {
-        "id": str(path.resolve()),
-        "name": path.name,
-        "repo_root": str(path.resolve()),
-        "ledger_path": str(path / ".gitwarp" / "ledger.json"),
-        "readonly": readonly,
-        "statusline": statusline_banner(None),
-        "branch_ref_count": 0,
-        "worktree_count": 0,
-        "active_worktree_count": 0,
-        "assigned_agent_count": 0,
-        "doctor_finding_count": 0,
-        "reconcile_finding_count": 0,
-        "next_action_count": 0,
-        "destructive_action_count": 0,
-    }
+    path = Path(repo_root).expanduser().resolve()
+    try:
+        ctx = discover_repo(path)
+        _, worktrees, ledger_error = sync_ledger_for_web(ctx, parse_worktrees(ctx))
+        branch_ref_count = len(list_local_branch_refs(ctx))
+        target = find_worktree_for_cwd(ctx.cwd, worktrees)
+        doctor = build_doctor_payload(ctx, web_safe=True)
+        if ledger_error:
+            reconcile = {
+                "ok": True,
+                "repo_root": str(ctx.repo_root),
+                "ledger_path": str(ctx.ledger_path),
+                "findings": [
+                    build_finding(
+                        "ledger_schema",
+                        "error",
+                        f"GitWarp ledger is invalid: {ledger_error}",
+                        path=str(ctx.ledger_path),
+                    )
+                ],
+            }
+            reconcile["summary"] = summarize_findings(reconcile["findings"])
+        else:
+            reconcile = build_reconcile_payload(ctx)
+        next_actions = build_next_actions_payload(ctx)["actions"]
+        worktree_rows = [web_board_row(item) for item in worktrees]
+        statusline = statusline_banner(target)
+        return build_project_summary(
+            ctx,
+            readonly=readonly,
+            statusline=statusline,
+            worktree_rows=worktree_rows,
+            branch_ref_count=branch_ref_count,
+            doctor=doctor,
+            reconcile=reconcile,
+            next_actions=next_actions,
+        )
+    except Exception:
+        return {
+            "id": str(path),
+            "name": path.name,
+            "repo_root": str(path),
+            "ledger_path": str(path / ".gitwarp" / "ledger.json"),
+            "readonly": readonly,
+            "statusline": statusline_banner(None),
+            "branch_ref_count": 0,
+            "worktree_count": 0,
+            "active_worktree_count": 0,
+            "assigned_agent_count": 0,
+            "doctor_finding_count": 0,
+            "reconcile_finding_count": 0,
+            "next_action_count": 0,
+            "destructive_action_count": 0,
+        }
 
 
 
