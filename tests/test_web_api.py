@@ -75,9 +75,12 @@ class WebApiTests(GitWarpTestCase):
         self.assertEqual(ready["host"], "127.0.0.1")
         self.assertIsInstance(ready["port"], int)
         self.assertEqual(ready["repo_root"], str(self.repo.resolve()))
+        self.assertEqual(ready["active_repo_root"], str(self.repo.resolve()))
+        self.assertEqual(ready["public_url"], "http://127.0.0.1:6006")
+        self.assertIn("backend_url", ready)
         self.assertTrue(ready["readonly"])
 
-        status, state = self.fetch_web_json(str(ready["url"]), "/api/state")
+        status, state = self.fetch_web_json(str(ready["backend_url"]), "/api/state")
 
         self.assertEqual(status, 200)
         self.assertTrue(state["ok"])
@@ -99,6 +102,24 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("doctor", state)
         self.assertIn("reconcile", state)
         self.assertIn("next_actions", state)
+
+    def test_web_reload_repairs_state_without_deleting_entries(self) -> None:
+        _, ready = self.start_web_server(
+            self.repo,
+            "web",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        _, session = self.fetch_web_json(str(ready["backend_url"]), "/api/session")
+        token = str(session["token"])
+        status, payload = self.fetch_web_json(str(ready["backend_url"]), "/api/reload", method="POST", token=token, data={})
+
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["reloaded"])
 
     def test_web_add_current_repository_registers_and_refreshes_current_repo(self) -> None:
         registry_home = self.repo / ".gitwarp-test-home"
@@ -231,6 +252,17 @@ class WebApiTests(GitWarpTestCase):
         listed_other = next(project for project in state["projects"] if project["repo_root"] == str(other_repo.resolve()))
         self.assertEqual(listed_other["worktree_count"], 1)
         self.assertEqual(listed_other["statusline"], "GITWARP[main-repo]")
+
+    def test_web_matrix_groups_unknown_refs_as_unmanaged_other_branches(self) -> None:
+        services = load_gitwarp_services()
+        run_git(self.repo, "branch", "feature/unmanaged-one")
+        run_git(self.repo, "branch", "feature/unmanaged-two")
+
+        payload = services.build_web_state_payload(self.repo, readonly=True)
+        unmanaged = payload["matrix"]["groups"]["unmanaged_branches"]
+
+        self.assertEqual([row["branch"] for row in unmanaged], ["feature/unmanaged-one", "feature/unmanaged-two"])
+        self.assertTrue(all(row["managed_state"] == "unmanaged" for row in unmanaged))
 
     def test_web_project_summary_counts_only_actionable_findings(self) -> None:
         services = load_gitwarp_services()

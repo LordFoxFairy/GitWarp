@@ -122,3 +122,7 @@ def gitwarp_home_path() -> Path:
 
 def project_registry_path() -> Path:
     return gitwarp_home_path() / "projects.json"
+
+
+def global_web_state_path() -> Path:
+    return gitwarp_home_path() / "web-console-global-state.json"

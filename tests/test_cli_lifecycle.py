@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shlex
 
 from helpers import *
@@ -387,6 +388,12 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertIn("feature/review-stop", run_git(self.repo, "branch", "--list", "feature/review-stop"))
 
     def test_web_start_status_stop_manage_repo_local_service_state(self) -> None:
+        gitwarp_home = self.repo / ".gitwarp-test-home"
+        gitwarp_home.mkdir()
+        old_home = os.environ.get("GITWARP_HOME")
+        os.environ["GITWARP_HOME"] = str(gitwarp_home)
+        self.addCleanup(lambda: os.environ.__setitem__("GITWARP_HOME", old_home) if old_home is not None else os.environ.pop("GITWARP_HOME", None))
+
         start = run_gitwarp(
             self.repo,
             "web",
@@ -402,6 +409,9 @@ class CliLifecycleTests(GitWarpTestCase):
         self.assertTrue(start["started"])
         self.assertIsInstance(start["pid"], int)
         self.assertTrue(Path(str(start["state_path"])).exists())
+        self.assertEqual(start["public_url"], "http://127.0.0.1:6006")
+        self.assertIn("backend_url", start)
+        self.assertEqual(start["active_repo_root"], str(self.repo.resolve()))
 
         status = run_gitwarp(
             self.repo,
@@ -412,18 +422,47 @@ class CliLifecycleTests(GitWarpTestCase):
         )
         self.assertTrue(status["running"])
         self.assertEqual(status["pid"], start["pid"])
-        self.assertEqual(status["url"], start["url"])
+        self.assertEqual(status["public_url"], start["public_url"])
+        self.assertEqual(status["active_repo_root"], str(self.repo.resolve()))
+
+        same_repo = run_gitwarp(
+            self.repo,
+            "web",
+            "start",
+            "--cwd",
+            str(self.repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        self.assertTrue(same_repo["already_running"])
+        self.assertEqual(same_repo["public_url"], "http://127.0.0.1:6006")
+
+        other_repo = self.make_repo()
+        takeover = run_gitwarp(
+            other_repo,
+            "web",
+            "start",
+            "--cwd",
+            str(other_repo),
+            "--port",
+            "0",
+            "--no-open",
+        )
+        self.assertTrue(takeover["replaced_existing"])
+        self.assertEqual(takeover["public_url"], "http://127.0.0.1:6006")
+        self.assertEqual(takeover["active_repo_root"], str(other_repo.resolve()))
 
         stop = run_gitwarp(
-            self.repo,
+            other_repo,
             "web",
             "stop",
             "--cwd",
-            str(self.repo),
+            str(other_repo),
         )
         self.assertFalse(stop["running"])
         self.assertTrue(stop["stopped"])
-        self.assertFalse(Path(str(start["state_path"])).exists())
+        self.assertFalse(Path(str(takeover["state_path"])).exists())
 
         final_status = run_gitwarp(
             self.repo,
@@ -433,6 +472,26 @@ class CliLifecycleTests(GitWarpTestCase):
             str(self.repo),
         )
         self.assertFalse(final_status["running"])
+
+    def test_reload_re_registers_repo_without_destructive_cleanup(self) -> None:
+        registry_home = self.repo / ".gitwarp-test-home"
+        registry_home.mkdir()
+        old_home = os.environ.get("GITWARP_HOME")
+        os.environ["GITWARP_HOME"] = str(registry_home)
+        self.addCleanup(lambda: os.environ.__setitem__("GITWARP_HOME", old_home) if old_home is not None else os.environ.pop("GITWARP_HOME", None))
+
+        init_payload = run_gitwarp(self.repo, "init", "--cwd", str(self.repo))
+        registry_path = registry_home / "projects.json"
+        registry_path.unlink()
+        ledger_before = Path(str(init_payload["ledger_path"])).read_bytes()
+
+        payload = run_gitwarp(self.repo, "reload", "--cwd", str(self.repo))
+
+        self.assertTrue(payload["reloaded"])
+        self.assertTrue(registry_path.exists())
+        self.assertEqual(payload["repo_root"], str(self.repo.resolve()))
+        self.assertEqual(Path(str(payload["ledger_path"])).read_bytes(), ledger_before)
+        self.assertTrue(payload["registered"]["added_new"] or payload["registered"]["refreshed"])  # type: ignore[index]
 
     def test_finish_collapse_dossier_purge_is_scoped_to_dossier_root(self) -> None:
         start = run_gitwarp(

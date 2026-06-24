@@ -30,7 +30,7 @@ class PluginStructureTests(unittest.TestCase):
         gitwarp = importlib.import_module("gitwarp")
         cli = importlib.import_module("gitwarp.adapters.cli.entrypoint")
 
-        self.assertEqual(gitwarp.__version__, "0.1.0")
+        self.assertEqual(gitwarp.__version__, "0.2.0")
         self.assertTrue(callable(cli.main))
 
     def test_python_entrypoint_reports_version_from_package(self) -> None:
@@ -43,7 +43,7 @@ class PluginStructureTests(unittest.TestCase):
             check=True,
         )
 
-        self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
+        self.assertEqual(result.stdout.strip(), "gitwarp 0.2.0")
 
     def test_release_metadata_files_exist(self) -> None:
         self.assertIn("MIT License", (REPO_ROOT / "LICENSE").read_text(encoding="utf-8"))
@@ -217,7 +217,7 @@ class PluginStructureTests(unittest.TestCase):
             launcher_text = launcher.read_text(encoding="utf-8")
             self.assertIn("PYTHONPATH", launcher_text)
             self.assertIn("gitwarp.adapters.cli.entrypoint", launcher_text)
-            self.assertEqual(result.stdout.strip(), "gitwarp 0.1.0")
+            self.assertEqual(result.stdout.strip(), "gitwarp 0.2.0")
 
     def test_codex_plugin_points_at_canonical_skill_and_hooks(self) -> None:
         plugin = json.loads((REPO_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
@@ -392,6 +392,7 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("addCurrentRepository", app)
         self.assertIn("addRepositoryPath", app)
         self.assertIn("onRunRemove", app)
+        self.assertIn("reload", app.lower())
         self.assertIn("repository-content-grid", code_panel)
         self.assertIn("repo-about", code_panel)
         self.assertIn("Parent Base", code_panel)
@@ -440,6 +441,8 @@ class PluginStructureTests(unittest.TestCase):
         self.assertIn("Refs &amp; worktrees", branches_panel)
         self.assertIn("source-chip", branches_panel)
         self.assertIn("Live Git worktrees", branches_panel)
+        self.assertIn("Unmanaged / Other Branches", branches_panel)
+        self.assertIn("not classified as GitWarp base or task branches", branches_panel)
         self.assertIn("managed_state", types)
         self.assertIn("commit_state", types)
         self.assertIn("cleanup_policy", types)

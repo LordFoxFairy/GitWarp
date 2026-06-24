@@ -25,6 +25,7 @@ class PayloadValidationError(ValueError):
 MUTATION_ENDPOINTS: dict[str, EndpointSpec] = {
     "/api/init": EndpointSpec("POST", True, ("write_gitignore",)),
     "/api/add": EndpointSpec("POST", True, ("write_gitignore",)),
+    "/api/reload": EndpointSpec("POST", True),
     "/api/task/create": EndpointSpec("POST", True, ("title",)),
     "/api/base": EndpointSpec("POST", True, ("branch",)),
     "/api/dispatch": EndpointSpec("POST", True, ("branch", "purpose")),
@@ -46,6 +47,7 @@ MUTATION_FIELD_SPECS: dict[str, dict[str, FieldSpec]] = {
         "path": FieldSpec("string"),
         "write_gitignore": FieldSpec("boolean", required=True),
     },
+    "/api/reload": {},
     "/api/task/create": {
         "cwd": FieldSpec("string"),
         "title": FieldSpec("string", required=True),

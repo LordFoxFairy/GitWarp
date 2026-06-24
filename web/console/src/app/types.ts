@@ -264,6 +264,11 @@ export interface MatrixPayload {
     orphan_dossiers: number;
   };
   rows: MatrixRow[];
+  groups?: {
+    base_branches: MatrixRow[];
+    task_branches: MatrixRow[];
+    unmanaged_branches: MatrixRow[];
+  };
 }
 
 export interface CommandResult {

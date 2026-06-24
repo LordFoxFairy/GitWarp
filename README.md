@@ -173,11 +173,13 @@ Start the Web Console as a managed repo-local service when you want background l
 
 ```bash
 gitwarp web start --readonly --no-open
+# Open http://127.0.0.1:6006
 gitwarp web status
 gitwarp web stop
+gitwarp reload
 ```
 
-`gitwarp web` without a subcommand defaults to `gitwarp web start`. Service state is stored per repository under `.gitwarp/web-console-state.json`.
+`gitwarp web` without a subcommand defaults to `gitwarp web start`. The public entrypoint is fixed at `http://127.0.0.1:6006`; GitWarp may track an internal backend URL separately for lifecycle/status reporting. Service state is stored per repository under `.gitwarp/web-console-state.json`. `gitwarp reload` rescans Git and GitWarp state, repairs safe missing metadata such as registry registration, and never performs destructive cleanup.
 
 Create a task from a user request. This is the preferred path for agent work: it creates a short-lived task branch, writes the task dossier, and returns an absolute `path` plus a shell `cd` command.
 

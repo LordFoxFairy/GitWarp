@@ -96,6 +96,10 @@ export class GitWarpApi {
     });
   }
 
+  reloadRepository(cwd?: string): Promise<CommandResult> {
+    return this.post("/api/reload", cwd ? { cwd } : {});
+  }
+
   createBaseCheckout(branch: string, purpose?: string, cwd?: string): Promise<CommandResult> {
     return this.post("/api/base", {
       ...(cwd ? { cwd } : {}),

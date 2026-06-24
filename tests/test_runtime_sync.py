@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gitwarp as gitwarp_package
+
 from helpers import *
 from unittest import mock
 
@@ -214,7 +216,8 @@ class RuntimeSyncTests(GitWarpTestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(version.stdout.strip(), "gitwarp 0.1.0")
+        self.assertEqual(version.stdout.strip(), f"gitwarp {gitwarp_package.__version__}")
+        self.assertNotEqual(gitwarp_package.__version__, "0.1.0")
         self.assertEqual(next_help.returncode, 0)
         self.assertEqual(sweep_help.returncode, 0)
         self.assertEqual(install_help.returncode, 0)

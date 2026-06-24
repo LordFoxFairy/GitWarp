@@ -181,6 +181,10 @@ export function App({ token }: AppProps) {
     }
   };
 
+  const reloadRepository = async () => {
+    await runCommand("Reload", () => api.reloadRepository(selectedProject?.repo_root ?? state?.repo_root));
+  };
+
   const closeProject = () => {
     setSelectedProject(null);
     setSelectedWorktreePath(null);
@@ -221,6 +225,7 @@ export function App({ token }: AppProps) {
           title="Project Directory"
           description="Choose a repository first; worktrees, dossiers, and Git health stay inside project detail."
           onRefresh={() => void refresh()}
+          onReload={() => void reloadRepository()}
         />
         <ProjectDirectory
           projects={state?.projects ?? []}
@@ -241,6 +246,15 @@ export function App({ token }: AppProps) {
         loading={loading}
         onBack={closeProject}
         onRefresh={() => void refresh()}
+      />
+      <Header
+        readonly={Boolean(state?.readonly)}
+        loading={loading}
+        title="Repository Controls"
+        eyebrow={selectedProject.name}
+        description="Refresh or reload the current repository view without destructive cleanup."
+        onRefresh={() => void refresh()}
+        onReload={() => void reloadRepository()}
       />
       <RepositoryTitleBar project={selectedProject} readonly={Boolean(state?.readonly)} />
       <RepositoryTabs activeTab={activeTab} onTabChange={setActiveTab} />

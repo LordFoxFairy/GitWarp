@@ -8,9 +8,10 @@ interface HeaderProps {
   eyebrow?: string;
   description?: string;
   onRefresh: () => void;
+  onReload?: () => void;
 }
 
-export function Header({ readonly, loading, title, eyebrow = "GitWarp Manager", description, onRefresh }: HeaderProps) {
+export function Header({ readonly, loading, title, eyebrow = "GitWarp Manager", description, onRefresh, onReload }: HeaderProps) {
   return (
     <header className="topbar">
       <div>
@@ -20,6 +21,11 @@ export function Header({ readonly, loading, title, eyebrow = "GitWarp Manager", 
       </div>
       <div className="topbar-actions">
         <Label variant={readonly ? "secondary" : "success"}>{readonly ? "Read-only" : "Mutation enabled"}</Label>
+        {onReload ? (
+          <Button type="button" leadingVisual={SyncIcon} onClick={onReload} disabled={loading}>
+            {loading ? "Reloading" : "Reload"}
+          </Button>
+        ) : null}
         <Button variant="primary" type="button" leadingVisual={SyncIcon} onClick={onRefresh} disabled={loading}>
           {loading ? "Refreshing" : "Refresh"}
         </Button>

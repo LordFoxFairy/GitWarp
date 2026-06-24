@@ -48,6 +48,7 @@ Use GitWarp instead of `git switch`, `git checkout`, or direct `git worktree add
 | `gitwarp pause` / `gitwarp resume` | Mark a task blocked or active without destroying context. |
 | `gitwarp statusline` | Print a raw prompt banner such as `GITWARP[main-repo]`. |
 | `gitwarp doctor` | Check install, hook, plugin, launcher, and runtime health. |
+| `gitwarp reload` | Rescan Git and GitWarp state, then repair safe missing metadata without destructive cleanup. |
 | `gitwarp web` | Start the local Web Console in the foreground. |
 
 Prefer `task create` for new work. Use `create --role base` for long-lived user feature branches. Use `switch` for navigation and `remove` only when the sandbox should actually be destroyed.
@@ -256,7 +257,7 @@ If a JSON command returns nonzero or `"ok": false`, stop and report the `error` 
 
 Use `gitwarp web` for human supervision. It opens a local GitHub-like console where users can select a project, choose base and task worktrees, browse committed files, inspect Metadata, review Refs & Worktrees, and check Health.
 
-Use `--readonly` when supervising without mutations. Use `--host` and `--port` only when the local environment requires explicit binding.
+`gitwarp web start` should expose a stable public entrypoint at `http://127.0.0.1:6006`. The current implementation may track a separate backend URL internally, but users should be told to open the fixed public entrypoint. Use `--readonly` when supervising without mutations. Use `--host` and `--port` only when the local environment requires explicit binding.
 
 ## Installation Notes
 
@@ -270,6 +271,6 @@ gitwarp install claude-code
 
 `gitwarp install self` bootstraps the local launcher. `gitwarp install codex` and `gitwarp install claude-code` call the host-specific plugin installers from the full repository/plugin package. The skill `scripts/` directory contains bootstrap helpers only; product runtime code belongs in `src/gitwarp/`.
 
-For ordinary users, `gitwarp upgrade --check` / `gitwarp upgrade` should be the normal update path: GitWarp checks the current install and then refreshes a managed runtime from GitHub without requiring users to know install paths or run `git pull`. Source checkouts are developer mode and are reported explicitly during `--check`.
+For ordinary users, `gitwarp upgrade --check` / `gitwarp upgrade` should be the normal update path: GitWarp checks the current install and then refreshes a managed runtime from GitHub without requiring users to know install paths or run `git pull`. Source checkouts are developer mode and are reported explicitly during `--check`. Every user-visible change must bump `src/gitwarp/__init__.py::__version__`.
 
 Read `references/install.md` only when installing, packaging, or troubleshooting plugin discovery.

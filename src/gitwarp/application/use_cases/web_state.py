@@ -185,6 +185,20 @@ def build_registry_project_summary(repo_root: str, *, readonly: bool) -> dict[st
 
 
 
+def group_matrix_rows(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    return {
+        "base_branches": [row for row in rows if row.get("managed_state") == "gitwarp_managed" and row.get("role") == "base"],
+        "task_branches": [row for row in rows if row.get("managed_state") == "gitwarp_managed" and row.get("role") == "task"],
+        "unmanaged_branches": [
+            row
+            for row in rows
+            if row.get("managed_state") not in {"gitwarp_managed"}
+            and row.get("git", {}).get("branch_ref")
+            and row.get("category") not in {"main", "base"}
+        ],
+    }
+
+
 def merge_projects(
     selected_project: dict[str, Any],
     *,
@@ -310,6 +324,7 @@ def build_web_state_payload(
             }
         else:
             raise
+    matrix["groups"] = group_matrix_rows(matrix["rows"])
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),

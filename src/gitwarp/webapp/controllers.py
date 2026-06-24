@@ -14,6 +14,7 @@ from ..application.use_cases import (
     build_finish_payload,
     build_handoff_payload,
     build_init_payload,
+    build_reload_payload,
     build_remove_payload,
     build_prune_branch_payload,
     build_start_payload,
@@ -132,6 +133,8 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
         target_path = optional_string_field(payload, "path")
         target_ctx = discover_repo(resolve_path(target_path or str(ctx.repo_root)))
         return build_add_payload(target_ctx, write_gitignore=bool_field(payload, "write_gitignore"))
+    if path == "/api/reload":
+        return build_reload_payload(ctx)
     if path == "/api/task/create":
         return build_task_create_payload(
             ctx,

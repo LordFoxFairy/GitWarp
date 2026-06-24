@@ -99,6 +99,28 @@ export function BranchesPanel({ api, cwd, active, refreshKey, readonly, busy, on
         ))}
       </div>
 
+      {(payload?.groups?.unmanaged_branches?.length ?? 0) > 0 ? (
+        <section className="branch-subsection" aria-label="Unmanaged or other branches">
+          <h3>Unmanaged / Other Branches</h3>
+          <p className="muted-hint">These refs exist in Git but are not classified as GitWarp base or task branches.</p>
+          <div className="branch-list matrix-list" role="table" aria-label="Unmanaged or other branches list">
+            {(payload?.groups?.unmanaged_branches ?? []).map((row) => (
+              <MatrixRowView
+                key={`unmanaged-${row.row_id}`}
+                row={row}
+                readonly={readonly}
+                busy={busy}
+                expanded={expandedRowId === row.row_id}
+                confirmValue={confirmByRow[row.row_id] || ""}
+                onExpand={() => setExpandedRowId(expandedRowId === row.row_id ? null : row.row_id)}
+                onConfirmChange={(value) => setConfirmByRow((current) => ({ ...current, [row.row_id]: value }))}
+                onPrune={() => void prune(row)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {!payload && !loading ? <p className="empty-state">Control-plane matrix is unavailable. Refresh to retry.</p> : null}
       {loading ? <p className="empty-state">Loading Git control plane...</p> : null}
     </section>

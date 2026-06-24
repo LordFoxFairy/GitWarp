@@ -13,13 +13,42 @@ DEVNULL = subprocess.DEVNULL
 
 from ..domain.errors import GitWarpError
 from ..infrastructure.ledger import discover_repo, process_is_alive
-from ..infrastructure.runtime import RepoContext, now_iso, resolve_path
+from ..infrastructure.runtime import RepoContext, global_web_state_path, now_iso, resolve_path
 
 WEB_STATE_FILENAME = "web-console-state.json"
+DEFAULT_PUBLIC_WEB_HOST = "127.0.0.1"
+DEFAULT_PUBLIC_WEB_PORT = 6006
 
 
 def web_state_path(ctx: RepoContext) -> Path:
     return ctx.ledger_dir / WEB_STATE_FILENAME
+
+
+def load_global_web_state() -> dict[str, Any] | None:
+    path = global_web_state_path()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise GitWarpError(f"invalid global web state file: {path}") from exc
+    if not isinstance(data, dict):
+        raise GitWarpError(f"invalid global web state file: {path}")
+    return data
+
+
+def write_global_web_state(payload: dict[str, Any]) -> Path:
+    path = global_web_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def remove_global_web_state() -> None:
+    try:
+        global_web_state_path().unlink()
+    except FileNotFoundError:
+        pass
 
 
 def load_web_state(ctx: RepoContext) -> dict[str, Any] | None:
@@ -67,6 +96,7 @@ def build_web_status_payload(ctx: RepoContext) -> dict[str, Any]:
             "repo_root": str(ctx.repo_root),
             "running": False,
             "state_path": str(web_state_path(ctx)),
+            "global_state_path": str(global_web_state_path()),
         }
     running = same_web_process(ctx, state)
     if not running:
@@ -75,6 +105,7 @@ def build_web_status_payload(ctx: RepoContext) -> dict[str, Any]:
             "repo_root": str(ctx.repo_root),
             "running": False,
             "state_path": str(web_state_path(ctx)),
+            "global_state_path": str(global_web_state_path()),
             "stale": True,
             **state,
         }
@@ -83,6 +114,7 @@ def build_web_status_payload(ctx: RepoContext) -> dict[str, Any]:
         "repo_root": str(ctx.repo_root),
         "running": True,
         "state_path": str(web_state_path(ctx)),
+        "global_state_path": str(global_web_state_path()),
         **state,
     }
 
@@ -97,11 +129,38 @@ def start_web_console_service(args: Any) -> dict[str, Any]:
                 "repo_root": str(ctx.repo_root),
                 "running": True,
                 "already_running": True,
+                "replaced_existing": False,
                 "state_path": str(web_state_path(ctx)),
+                "global_state_path": str(global_web_state_path()),
                 **current,
             }
         remove_web_state(ctx)
 
+    replaced_existing = False
+    global_state = load_global_web_state()
+    if global_state is not None:
+        global_pid = global_state.get("pid")
+        global_repo_root = global_state.get("repo_root")
+        if isinstance(global_pid, int) and process_is_alive(global_pid):
+            if global_repo_root == str(ctx.repo_root):
+                return {
+                    "ok": True,
+                    "repo_root": str(ctx.repo_root),
+                    "running": True,
+                    "already_running": True,
+                    "replaced_existing": False,
+                    "state_path": str(web_state_path(ctx)),
+                    "global_state_path": str(global_web_state_path()),
+                    **global_state,
+                }
+            os.kill(global_pid, signal.SIGTERM)
+            deadline = time.time() + 5.0
+            while time.time() < deadline and process_is_alive(global_pid):
+                time.sleep(0.05)
+            replaced_existing = True
+        remove_global_web_state()
+
+    effective_port = DEFAULT_PUBLIC_WEB_PORT if int(args.port) == 0 else int(args.port)
     command = [
         sys.executable,
         "-m",
@@ -113,7 +172,7 @@ def start_web_console_service(args: Any) -> dict[str, Any]:
         "--host",
         str(args.host),
         "--port",
-        str(args.port),
+        str(effective_port),
         "--serve-internal",
     ]
     if args.no_open:
@@ -148,19 +207,27 @@ def start_web_console_service(args: Any) -> dict[str, Any]:
         "host": readiness.get("host"),
         "port": readiness.get("port"),
         "url": readiness.get("url"),
+        "backend_url": readiness.get("backend_url", readiness.get("url")),
+        "public_url": readiness.get("public_url", readiness.get("url")),
+        "public_port": readiness.get("public_port", readiness.get("port")),
         "repo_root": readiness.get("repo_root"),
+        "active_repo_root": readiness.get("active_repo_root", readiness.get("repo_root")),
         "readonly": readiness.get("readonly"),
         "registry_path": readiness.get("registry_path"),
         "command": command,
         "started_at": now_iso(),
     }
     write_web_state(ctx, state)
+    write_global_web_state(state)
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),
         "running": True,
         "started": True,
+        "already_running": False,
+        "replaced_existing": replaced_existing,
         "state_path": str(web_state_path(ctx)),
+        "global_state_path": str(global_web_state_path()),
         **state,
     }
 
@@ -175,10 +242,12 @@ def stop_web_console_service(args: Any) -> dict[str, Any]:
             "running": False,
             "stopped": False,
             "state_path": str(web_state_path(ctx)),
+            "global_state_path": str(global_web_state_path()),
         }
     pid = state.get("pid")
     if not isinstance(pid, int) or not process_is_alive(pid):
         remove_web_state(ctx)
+        remove_global_web_state()
         return {
             "ok": True,
             "repo_root": str(ctx.repo_root),
@@ -186,6 +255,7 @@ def stop_web_console_service(args: Any) -> dict[str, Any]:
             "stopped": False,
             "stale": True,
             "state_path": str(web_state_path(ctx)),
+            "global_state_path": str(global_web_state_path()),
             **state,
         }
     os.kill(pid, signal.SIGTERM)
@@ -193,12 +263,14 @@ def stop_web_console_service(args: Any) -> dict[str, Any]:
     while time.time() < deadline:
         if not process_is_alive(pid):
             remove_web_state(ctx)
+            remove_global_web_state()
             return {
                 "ok": True,
                 "repo_root": str(ctx.repo_root),
                 "running": False,
                 "stopped": True,
                 "state_path": str(web_state_path(ctx)),
+                "global_state_path": str(global_web_state_path()),
                 **state,
             }
         time.sleep(0.05)

@@ -11,6 +11,10 @@ from typing import Any
 from ..domain.errors import GitWarpError
 from ..infrastructure.ledger import discover_repo, register_project
 from ..infrastructure.runtime import RepoContext, resolve_path
+
+
+DEFAULT_PUBLIC_WEB_HOST = "127.0.0.1"
+DEFAULT_PUBLIC_WEB_PORT = 6006
 from .security import build_allowed_host_headers, host_for_url, validate_web_host
 from .transport import GitWarpWebHandler
 
@@ -53,15 +57,20 @@ def run_web_console(args: Any) -> None:
         confirmation_secret=secrets.token_bytes(32),
         registry_path=str(registry_path),
     )
-    url = f"http://{host_for_url(args.host)}:{port}"
+    backend_url = f"http://{host_for_url(args.host)}:{port}"
+    public_url = f"http://{DEFAULT_PUBLIC_WEB_HOST}:{DEFAULT_PUBLIC_WEB_PORT}"
     print(
         json.dumps(
             {
                 "ok": True,
-                "url": url,
+                "url": backend_url,
+                "backend_url": backend_url,
+                "public_url": public_url,
                 "host": args.host,
                 "port": port,
+                "public_port": DEFAULT_PUBLIC_WEB_PORT,
                 "repo_root": str(ctx.repo_root),
+                "active_repo_root": str(ctx.repo_root),
                 "readonly": bool(args.readonly),
                 "registry_path": str(registry_path),
             },
@@ -71,7 +80,7 @@ def run_web_console(args: Any) -> None:
         flush=True,
     )
     if not args.no_open:
-        webbrowser.open(url)
+        webbrowser.open(public_url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

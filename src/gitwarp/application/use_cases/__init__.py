@@ -21,6 +21,7 @@ from .next_actions import build_next_actions_payload
 from .provisioning import build_base_payload, build_dispatch_payload, build_start_payload, build_summon_payload
 from .repository_browser import build_repository_file_payload, build_repository_tree_payload
 from .runtime_sync import build_upgrade_payload
+from .reload import build_reload_payload
 from .tasks import TaskCreateRequest, build_task_create_payload
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "build_prune_branch_payload",
     "build_repository_file_payload",
     "build_repository_tree_payload",
+    "build_reload_payload",
     "build_start_payload",
     "build_sweep_payload",
     "build_switch_payload",

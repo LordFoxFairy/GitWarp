@@ -16,7 +16,7 @@ from .read import (
     cmd_scan,
     cmd_statusline,
 )
-from .system import cmd_add, cmd_init, cmd_install, cmd_upgrade, cmd_web
+from .system import cmd_add, cmd_init, cmd_install, cmd_reload, cmd_upgrade, cmd_web
 from .workspaces import (
     cmd_adopt,
     cmd_annotate,
@@ -248,6 +248,10 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = subparsers.add_parser("doctor", help="Audit local GitWarp CLI, plugin, hook, and agent setup")
     doctor.add_argument("--cwd")
     doctor.set_defaults(func=cmd_doctor)
+
+    reload_cmd = subparsers.add_parser("reload", help="Rescan Git and GitWarp state, then repair safe missing metadata")
+    reload_cmd.add_argument("--cwd")
+    reload_cmd.set_defaults(func=cmd_reload)
 
     upgrade = subparsers.add_parser("upgrade", help="Check or update GitWarp from GitHub and refresh the local entrypoint")
     upgrade.add_argument("--cwd", help="Accepted for automation consistency; used for diagnostics when the current repo is a source checkout")
