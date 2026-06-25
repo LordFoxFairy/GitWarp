@@ -776,30 +776,29 @@ class WorktreeTests(GitWarpTestCase):
         self.assertIn("specified more than once", str(duplicate["error"]))
         self.assertEqual(run_git(self.repo, "branch", "--list", "feature/duplicate-profile"), "")
 
-    def test_instruction_symlink_mode_and_validation_do_not_mutate_on_error(self) -> None:
+    def test_instruction_copy_mode_preserves_worktree_isolation(self) -> None:
         (self.repo / "AGENTS.md").write_text("root rules\n", encoding="utf-8")
         run_git(self.repo, "add", "AGENTS.md")
         run_git(self.repo, "commit", "-m", "add rules")
 
-        linked = run_gitwarp(
+        payload = run_gitwarp(
             self.repo,
             "start",
             "--cwd",
             str(self.repo),
             "--agent-id",
-            "codex-symlink",
+            "codex-copy",
             "--branch",
-            "feature/symlink-instructions",
+            "feature/copy-instructions",
             "--purpose",
-            "Verify symlink mode",
+            "Verify copy mode",
             "--instruction",
             ".rules/AGENTS.md=AGENTS.md",
-            "--instruction-mode",
-            "symlink",
         )
-        link_path = Path(str(linked["path"])) / ".rules" / "AGENTS.md"
-        self.assertTrue(link_path.is_symlink())
-        self.assertEqual(linked["instructions"][0]["status"], "linked")  # type: ignore[index]
+        link_path = Path(str(payload["path"])) / ".rules" / "AGENTS.md"
+        self.assertFalse(link_path.is_symlink())
+        self.assertEqual(payload["instruction_mode"], "copy")
+        self.assertEqual(payload["instructions"][0]["status"], "copied")  # type: ignore[index]
 
         missing = run_gitwarp(
             self.repo,

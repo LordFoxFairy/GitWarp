@@ -235,7 +235,7 @@ Use `.gitwarp/instruction_profiles.json` for repeatable stacks:
 }
 ```
 
-Then pass `--instruction-profile claude-code`. Instructions are copied by default as a safe snapshot; pass `--instruction-mode symlink` only when the worker should track live rule edits.
+Then pass `--instruction-profile claude-code`. Instructions are copied by default as a safe snapshot. GitWarp no longer exposes a symlink instruction mode in the main workflow because that breaks worktree isolation.
 
 Begin inside the returned absolute `path`, read the returned `task_md`, `progress_md`, and `lessons_md` dossier paths, then record milestones:
 

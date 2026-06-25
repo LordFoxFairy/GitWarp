@@ -96,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--purpose", required=True)
     create.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
     create.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
-    create.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
+    create.add_argument("--instruction-mode", choices=["copy"], default="copy")
     create.set_defaults(func=cmd_create)
 
     task = subparsers.add_parser("task", help="High-level task intake for agent work")
@@ -119,7 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Mount instruction file into the worktree; use TARGET=SOURCE to rename",
     )
     task_create.add_argument("--instruction-profile")
-    task_create.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
+    task_create.add_argument("--instruction-mode", choices=["copy"], default="copy")
     task_create.set_defaults(func=cmd_task_create)
 
     switch = subparsers.add_parser("switch", help="Return the path or shell cd command for an existing worktree")
@@ -165,7 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--purpose", required=True)
     start.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
     start.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
-    start.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
+    start.add_argument("--instruction-mode", choices=["copy"], default="copy")
     start.set_defaults(func=cmd_start)
 
     dispatch = subparsers.add_parser("dispatch", help="Create a worktree and render an agent launch command")
@@ -178,7 +178,7 @@ def build_parser() -> argparse.ArgumentParser:
     dispatch.add_argument("--command-mode", choices=["print", "execute"], default="print")
     dispatch.add_argument("--instruction", action="append", default=[], help="Mount instruction file into the worktree; use TARGET=SOURCE to rename")
     dispatch.add_argument("--instruction-profile", help="Mount instructions from .gitwarp/instruction_profiles.json")
-    dispatch.add_argument("--instruction-mode", choices=["copy", "symlink"], default="copy")
+    dispatch.add_argument("--instruction-mode", choices=["copy"], default="copy")
     dispatch.set_defaults(func=cmd_dispatch)
 
     adopt = subparsers.add_parser("adopt", help="Bind an existing non-main worktree to GitWarp metadata")

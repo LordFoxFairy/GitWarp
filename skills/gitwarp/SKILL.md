@@ -243,7 +243,7 @@ gitwarp task create --title "Implement isolated task" \
   --instruction CLAUDE.md=docs/claude-code.md
 ```
 
-Repeatable instruction stacks live in `.gitwarp/instruction_profiles.json` and are selected with `--instruction-profile <name>`. Instructions are copied by default; use `--instruction-mode symlink` only when live rule edits are intended.
+Repeatable instruction stacks live in `.gitwarp/instruction_profiles.json` and are selected with `--instruction-profile <name>`. Instructions are copied by default; GitWarp does not use instruction symlinking in the main workflow because it breaks worktree isolation.
 
 ## Output Contract
 

@@ -75,8 +75,8 @@ def build_instruction_plan(
     profile_name: str | None,
     mode: str,
 ) -> list[dict[str, str]]:
-    if mode not in {"copy", "symlink"}:
-        raise GitWarpError("instruction mode must be copy or symlink")
+    if mode != "copy":
+        raise GitWarpError("instruction mode must be copy")
     specs: list[dict[str, str]] = []
     if profile_name:
         specs.extend(load_instruction_profile(ctx, profile_name))
@@ -115,12 +115,8 @@ def mount_instruction_files(worktree_path: Path, plan: list[dict[str, str]]) -> 
             status = "existing"
         else:
             destination.parent.mkdir(parents=True, exist_ok=True)
-            if item["mode"] == "copy":
-                shutil.copy2(source, destination)
-                status = "copied"
-            else:
-                destination.symlink_to(source)
-                status = "linked"
+            shutil.copy2(source, destination)
+            status = "copied"
         mounted.append(
             {
                 "source": str(source),
