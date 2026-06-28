@@ -74,6 +74,7 @@ export interface ProjectSummary {
   reconcile_finding_count: number;
   next_action_count?: number;
   destructive_action_count?: number;
+  exists?: boolean;
 }
 
 export interface NextAction {
@@ -107,6 +108,16 @@ export interface WebState {
   statusline: string;
   projects: ProjectSummary[];
   worktrees: WorktreeRow[];
+  branch_groups?: {
+    primary: MatrixRow[];
+    base: MatrixRow[];
+    task: MatrixRow[];
+    unmanaged: MatrixRow[];
+  };
+  sandbox_groups?: {
+    managed: WorktreeRow[];
+    unmanaged: WorktreeRow[];
+  };
   doctor?: FindingGroup;
   reconcile?: FindingGroup;
   matrix?: MatrixPayload;

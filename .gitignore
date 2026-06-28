@@ -15,6 +15,7 @@ yarn-error.log*
 .vscode/*
 /.gitwarp/
 .playwright-cli/
+.playwright-mcp/
 web/console/dist/.vite/
 web/console/*.tsbuildinfo
 web/console/vite.config.d.ts

@@ -115,6 +115,7 @@ class BranchRefTests(GitWarpTestCase):
         merged = rows["feature/legacy-merged"]
         unmerged = rows["feature/legacy-unmerged"]
         self.assertEqual(merged["managed_state"], "unmanaged")
+        self.assertIsNone(merged["branch_role"])
         self.assertEqual(merged["base_branch"], "main")
         self.assertEqual(merged["commit_state"], "merged")
         self.assertEqual(merged["cleanup_policy"], "user_confirmed_ref_prune")
@@ -124,6 +125,7 @@ class BranchRefTests(GitWarpTestCase):
         self.assertFalse(merged["classification_basis"]["managed_by_gitwarp"])
 
         self.assertEqual(unmerged["managed_state"], "unmanaged")
+        self.assertIsNone(unmerged["branch_role"])
         self.assertEqual(unmerged["base_branch"], "main")
         self.assertEqual(unmerged["commit_state"], "unmerged")
         self.assertEqual(unmerged["cleanup_policy"], "review_unmerged_ref")

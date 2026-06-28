@@ -18,6 +18,7 @@ from .matrix import build_matrix_payload
 from .metadata import build_adopt_payload, build_annotate_payload
 from .navigation import build_switch_payload, shell_cd_command
 from .next_actions import build_next_actions_payload
+from .projects import build_forget_project_payload
 from .provisioning import build_base_payload, build_dispatch_payload, build_start_payload, build_summon_payload
 from .repository_browser import build_repository_file_payload, build_repository_tree_payload
 from .runtime_sync import build_upgrade_payload
@@ -34,6 +35,7 @@ __all__ = [
     "build_collapse_payload",
     "build_dispatch_payload",
     "build_finish_payload",
+    "build_forget_project_payload",
     "build_handoff_payload",
     "build_remove_payload",
     "build_init_payload",

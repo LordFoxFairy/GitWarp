@@ -3,10 +3,10 @@ import { CodeIcon, GitBranchIcon, PulseIcon } from "@primer/octicons-react";
 import type { RepositoryTab } from "../types";
 
 const TABS: Array<{ id: RepositoryTab; label: string; icon: typeof GitBranchIcon }> = [
-  { id: "code", label: "Code", icon: CodeIcon },
-  { id: "metadata", label: "Metadata", icon: GitBranchIcon },
-  { id: "branches", label: "Refs & Worktrees", icon: GitBranchIcon },
-  { id: "health", label: "Health", icon: PulseIcon },
+  { id: "branches", label: "Branches", icon: GitBranchIcon },
+  { id: "metadata", label: "Sandboxes", icon: GitBranchIcon },
+  { id: "code", label: "Repository", icon: CodeIcon },
+  { id: "health", label: "Diagnostics", icon: PulseIcon },
 ];
 
 interface RepositoryTabsProps {

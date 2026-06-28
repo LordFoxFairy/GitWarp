@@ -12,6 +12,7 @@ from ..application.use_cases import (
     build_dispatch_payload,
     build_base_payload,
     build_finish_payload,
+    build_forget_project_payload,
     build_handoff_payload,
     build_init_payload,
     build_reload_payload,
@@ -243,5 +244,10 @@ def handle_mutation(path: str, ctx: RepoContext, payload: dict[str, Any], *, con
             target_ctx,
             branch=branch,
             base_branch=optional_string_field(payload, "base_branch"),
+        )
+    if path == "/api/forget-project":
+        return build_forget_project_payload(
+            optional_string_field(payload, "repo_root"),
+            prune_missing=optional_bool_field(payload, "prune_missing"),
         )
     raise GitWarpError("mutation endpoint is not implemented yet")

@@ -35,7 +35,7 @@ export function App({ token }: AppProps) {
   const [pendingTaskBranch, setPendingTaskBranch] = useState<PendingTaskCandidate | null>(null);
   const [dossierKind, setDossierKind] = useState<DossierKind>("task");
   const [dossierContent, setDossierContent] = useState("Select a non-main worktree to inspect task.md, progress.md, and lessons.md.");
-  const [activeTab, setActiveTab] = useState<RepositoryTab>("code");
+  const [activeTab, setActiveTab] = useState<RepositoryTab>("branches");
   const [output, setOutput] = useState("Ready.");
   const [loading, setLoading] = useState(false);
   const [operation, setOperation] = useState<OperationState>({ status: "idle", message: "" });
@@ -154,7 +154,7 @@ export function App({ token }: AppProps) {
     setSelectedWorktreePath(null);
     setPendingTaskBranch(null);
     setDossierKind("task");
-    setActiveTab("code");
+    setActiveTab("branches");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
     void refresh(project.repo_root);
   };
@@ -185,12 +185,20 @@ export function App({ token }: AppProps) {
     await runCommand("Reload", () => api.reloadRepository(selectedProject?.repo_root ?? state?.repo_root));
   };
 
+  const forgetProject = async (repoRoot: string) => {
+    await runCommand("Remove project", () => api.forgetProject(repoRoot));
+  };
+
+  const pruneMissingProjects = async () => {
+    await runCommand("Remove missing projects", () => api.pruneMissingProjects());
+  };
+
   const closeProject = () => {
     setSelectedProject(null);
     setSelectedWorktreePath(null);
     setPendingTaskBranch(null);
     setDossierKind("task");
-    setActiveTab("code");
+    setActiveTab("branches");
     setDossierContent("Select a sandbox to inspect task.md, progress.md, and lessons.md.");
   };
 
@@ -233,6 +241,8 @@ export function App({ token }: AppProps) {
           onOpenProject={openProject}
           onAddCurrentRepository={() => addCurrentRepository()}
           onAddRepositoryPath={(path) => addRepositoryPath(path)}
+          onForgetProject={(repoRoot) => forgetProject(repoRoot)}
+          onPruneMissing={() => pruneMissingProjects()}
         />
         {output !== "Ready." ? <OutputPanel output={output} onClear={() => setOutput("Ready.")} /> : null}
       </main>

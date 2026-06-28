@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Button, Label, TextInput } from "@primer/react";
-import { GitBranchIcon, PlusIcon, RepoIcon } from "@primer/octicons-react";
+import { GitBranchIcon, PlusIcon, RepoIcon, TrashIcon } from "@primer/octicons-react";
 import type { ProjectSummary } from "../types";
 
 interface ProjectDirectoryProps {
@@ -9,11 +9,14 @@ interface ProjectDirectoryProps {
   onOpenProject: (project: ProjectSummary) => void;
   onAddCurrentRepository: () => Promise<void>;
   onAddRepositoryPath: (path: string) => Promise<void>;
+  onForgetProject: (repoRoot: string) => Promise<void>;
+  onPruneMissing: () => Promise<void>;
 }
 
-export function ProjectDirectory({ projects, loading, onOpenProject, onAddCurrentRepository, onAddRepositoryPath }: ProjectDirectoryProps) {
+export function ProjectDirectory({ projects, loading, onOpenProject, onAddCurrentRepository, onAddRepositoryPath, onForgetProject, onPruneMissing }: ProjectDirectoryProps) {
   const [pathValue, setPathValue] = useState("");
   const [showPathForm, setShowPathForm] = useState(false);
+  const missingCount = projects.filter((project) => project.exists === false).length;
 
   const submitPath = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -39,6 +42,11 @@ export function ProjectDirectory({ projects, loading, onOpenProject, onAddCurren
           <Button type="button" onClick={() => setShowPathForm((current) => !current)} disabled={loading}>
             Add repository path
           </Button>
+          {missingCount > 0 ? (
+            <Button type="button" variant="danger" leadingVisual={TrashIcon} onClick={() => void onPruneMissing()} disabled={loading}>
+              Remove missing ({missingCount})
+            </Button>
+          ) : null}
         </div>
       </div>
       <span className="muted-hint">Open a project to manage its worktrees and Git state.</span>
@@ -75,7 +83,9 @@ export function ProjectDirectory({ projects, loading, onOpenProject, onAddCurren
               <span role="columnheader">Next</span>
               <span role="columnheader" aria-label="Actions" />
             </div>
-            {projects.map((project) => <ProjectCard key={project.id} project={project} onOpenProject={onOpenProject} />)}
+            {projects.map((project) => (
+              <ProjectCard key={project.id} project={project} onOpenProject={onOpenProject} onForgetProject={onForgetProject} loading={loading} />
+            ))}
           </>
         )}
       </div>
@@ -83,12 +93,23 @@ export function ProjectDirectory({ projects, loading, onOpenProject, onAddCurren
   );
 }
 
-function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOpenProject: (project: ProjectSummary) => void }) {
+function ProjectCard({
+  project,
+  onOpenProject,
+  onForgetProject,
+  loading,
+}: {
+  project: ProjectSummary;
+  onOpenProject: (project: ProjectSummary) => void;
+  onForgetProject: (repoRoot: string) => Promise<void>;
+  loading: boolean;
+}) {
   const findings = project.doctor_finding_count + project.reconcile_finding_count;
   const nextActions = project.next_action_count ?? findings;
   const destructive = project.destructive_action_count ?? 0;
+  const missing = project.exists === false;
   return (
-    <article className="repo-list-row" role="row">
+    <article className={`repo-list-row${missing ? " missing" : ""}`} role="row">
       <div className="repo-list-main">
         <div>
           <h3>
@@ -97,7 +118,11 @@ function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOp
           </h3>
           <p className="project-path">{project.repo_root}</p>
         </div>
-        <Label variant={project.readonly ? "secondary" : "success"}>{project.readonly ? "read-only" : "writable"}</Label>
+        {missing ? (
+          <Label variant="danger">missing</Label>
+        ) : (
+          <Label variant={project.readonly ? "secondary" : "success"}>{project.readonly ? "read-only" : "writable"}</Label>
+        )}
       </div>
 
       <Metric label="Git refs" value={project.branch_ref_count} detail="local branches" />
@@ -110,9 +135,15 @@ function ProjectCard({ project, onOpenProject }: { project: ProjectSummary; onOp
         tone={nextActions > 0 ? "warning" : "ok"}
       />
 
-      <Button variant="primary" type="button" leadingVisual={GitBranchIcon} onClick={() => onOpenProject(project)}>
-        Open Project
-      </Button>
+      {missing ? (
+        <Button variant="danger" type="button" leadingVisual={TrashIcon} onClick={() => void onForgetProject(project.repo_root)} disabled={loading}>
+          Remove
+        </Button>
+      ) : (
+        <Button variant="primary" type="button" leadingVisual={GitBranchIcon} onClick={() => onOpenProject(project)}>
+          Open Project
+        </Button>
+      )}
     </article>
   );
 }

@@ -129,6 +129,7 @@ def build_project_summary(
 
 def build_registry_project_summary(repo_root: str, *, readonly: bool) -> dict[str, Any]:
     path = Path(repo_root).expanduser().resolve()
+    exists = path.is_dir()
     try:
         ctx = discover_repo(path)
         _, worktrees, ledger_error = sync_ledger_for_web(ctx, parse_worktrees(ctx))
@@ -155,7 +156,7 @@ def build_registry_project_summary(repo_root: str, *, readonly: bool) -> dict[st
         next_actions = build_next_actions_payload(ctx)["actions"]
         worktree_rows = [web_board_row(item) for item in worktrees]
         statusline = statusline_banner(target)
-        return build_project_summary(
+        summary = build_project_summary(
             ctx,
             readonly=readonly,
             statusline=statusline,
@@ -165,6 +166,8 @@ def build_registry_project_summary(repo_root: str, *, readonly: bool) -> dict[st
             reconcile=reconcile,
             next_actions=next_actions,
         )
+        summary["exists"] = True
+        return summary
     except Exception:
         return {
             "id": str(path),
@@ -173,6 +176,7 @@ def build_registry_project_summary(repo_root: str, *, readonly: bool) -> dict[st
             "ledger_path": str(path / ".gitwarp" / "ledger.json"),
             "readonly": readonly,
             "statusline": statusline_banner(None),
+            "exists": exists,
             "branch_ref_count": 0,
             "worktree_count": 0,
             "active_worktree_count": 0,
@@ -199,6 +203,22 @@ def group_matrix_rows(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, An
     }
 
 
+def group_branch_assets(matrix_rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    return {
+        "primary": [row for row in matrix_rows if row.get("category") == "main"],
+        "base": [row for row in matrix_rows if row.get("role") == "base" and row.get("category") != "main"],
+        "task": [row for row in matrix_rows if row.get("role") == "task"],
+        "unmanaged": [row for row in matrix_rows if row.get("managed_state") == "unmanaged"],
+    }
+
+
+def group_sandboxes(worktree_rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    return {
+        "managed": [row for row in worktree_rows if not row.get("is_main") and row.get("branch_role") in {"base", "task"}],
+        "unmanaged": [row for row in worktree_rows if not row.get("is_main") and row.get("branch_role") not in {"base", "task"}],
+    }
+
+
 def merge_projects(
     selected_project: dict[str, Any],
     *,
@@ -218,6 +238,7 @@ def merge_projects(
         if repo_root in seen:
             continue
         if repo_root == selected_root:
+            selected_project.setdefault("exists", True)
             projects.append(selected_project)
         else:
             projects.append(build_registry_project_summary(repo_root, readonly=readonly))
@@ -325,6 +346,8 @@ def build_web_state_payload(
         else:
             raise
     matrix["groups"] = group_matrix_rows(matrix["rows"])
+    branch_groups = group_branch_assets(matrix["rows"])
+    sandbox_groups = group_sandboxes(worktree_rows)
     return {
         "ok": True,
         "repo_root": str(ctx.repo_root),
@@ -333,6 +356,8 @@ def build_web_state_payload(
         "statusline": statusline,
         "projects": projects,
         "worktrees": worktree_rows,
+        "branch_groups": branch_groups,
+        "sandbox_groups": sandbox_groups,
         "doctor": doctor,
         "reconcile": reconcile,
         "matrix": matrix,

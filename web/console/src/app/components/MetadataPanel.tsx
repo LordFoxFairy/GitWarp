@@ -58,7 +58,7 @@ export function MetadataPanel({
   const selectedMatrixRow = selectedWorktree?.branch ? matrixRowsByBranch.get(selectedWorktree.branch) ?? null : null;
 
   return (
-    <section className="tab-panel workspace-console" aria-label="Agent metadata console">
+    <section className="tab-panel workspace-console" aria-label="Sandbox management console">
       <WorktreePicker
         worktrees={worktrees}
         matrixRows={matrixRows}
