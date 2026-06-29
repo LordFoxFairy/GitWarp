@@ -50,6 +50,8 @@ export function BranchesPanel({ api, cwd, active, refreshKey, readonly, busy, on
       .sort((left, right) => left.localeCompare(right));
   }, [payload]);
 
+  const branchGroups = useMemo(() => partitionBranchGroups(payload?.rows ?? []), [payload]);
+
   const prune = async (row: MatrixRow) => {
     try {
       await onRunPrune(row.branch, confirmByRow[row.row_id] || "", payload?.merge_base);
@@ -77,52 +79,136 @@ export function BranchesPanel({ api, cwd, active, refreshKey, readonly, busy, on
       {error ? <Flash variant="danger">{error}</Flash> : null}
       {payload ? <MatrixSummary payload={payload} baseOptions={baseOptions} selectedBase={baseBranch} busy={busy || loading} onBaseChange={setBaseBranch} /> : null}
 
-      <div className="branch-list matrix-list" role="table" aria-label="Git and GitWarp matrix">
-        <div className="branch-list-header" role="row">
-          <span>Record</span>
-          <span>Sources</span>
-          <span>Meaning</span>
-          <span>Action</span>
-        </div>
-        {(payload?.rows ?? []).map((row) => (
-          <MatrixRowView
-            key={row.row_id}
-            row={row}
+      {payload ? (
+        <>
+          <BranchSection
+            id="primary"
+            title="Primary"
+            hint="The default branch and main repository checkout."
+            rows={branchGroups.primary}
             readonly={readonly}
             busy={busy}
-            expanded={expandedRowId === row.row_id}
-            confirmValue={confirmByRow[row.row_id] || ""}
-            onExpand={() => setExpandedRowId(expandedRowId === row.row_id ? null : row.row_id)}
-            onConfirmChange={(value) => setConfirmByRow((current) => ({ ...current, [row.row_id]: value }))}
-            onPrune={() => void prune(row)}
+            expandedRowId={expandedRowId}
+            confirmByRow={confirmByRow}
+            onExpand={setExpandedRowId}
+            onConfirmChange={setConfirmByRow}
+            onPrune={prune}
           />
-        ))}
-      </div>
-
-      {(payload?.groups?.unmanaged_branches?.length ?? 0) > 0 ? (
-        <section className="branch-subsection" aria-label="Unmanaged or other branches">
-          <h3>Unmanaged / Other Branches</h3>
-          <p className="muted-hint">These refs exist in Git but are not classified as GitWarp base or task branches.</p>
-          <div className="branch-list matrix-list" role="table" aria-label="Unmanaged or other branches list">
-            {(payload?.groups?.unmanaged_branches ?? []).map((row) => (
-              <MatrixRowView
-                key={`unmanaged-${row.row_id}`}
-                row={row}
-                readonly={readonly}
-                busy={busy}
-                expanded={expandedRowId === row.row_id}
-                confirmValue={confirmByRow[row.row_id] || ""}
-                onExpand={() => setExpandedRowId(expandedRowId === row.row_id ? null : row.row_id)}
-                onConfirmChange={(value) => setConfirmByRow((current) => ({ ...current, [row.row_id]: value }))}
-                onPrune={() => void prune(row)}
-              />
-            ))}
-          </div>
-        </section>
+          <BranchSection
+            id="base"
+            title="Base Branches"
+            hint="GitWarp base checkouts that task worktrees branch from."
+            rows={branchGroups.base}
+            readonly={readonly}
+            busy={busy}
+            expandedRowId={expandedRowId}
+            confirmByRow={confirmByRow}
+            onExpand={setExpandedRowId}
+            onConfirmChange={setConfirmByRow}
+            onPrune={prune}
+          />
+          <BranchSection
+            id="task"
+            title="Task Branches"
+            hint="Branches owned by GitWarp task sandboxes."
+            rows={branchGroups.task}
+            readonly={readonly}
+            busy={busy}
+            expandedRowId={expandedRowId}
+            confirmByRow={confirmByRow}
+            onExpand={setExpandedRowId}
+            onConfirmChange={setConfirmByRow}
+            onPrune={prune}
+          />
+          <BranchSection
+            id="unmanaged"
+            title="Unmanaged / Other Branches"
+            hint="These refs exist in Git but are not classified as GitWarp base or task branches."
+            rows={branchGroups.unmanaged}
+            readonly={readonly}
+            busy={busy}
+            expandedRowId={expandedRowId}
+            confirmByRow={confirmByRow}
+            onExpand={setExpandedRowId}
+            onConfirmChange={setConfirmByRow}
+            onPrune={prune}
+          />
+        </>
       ) : null}
 
       {!payload && !loading ? <p className="empty-state">Control-plane matrix is unavailable. Refresh to retry.</p> : null}
       {loading ? <p className="empty-state">Loading Git control plane...</p> : null}
+    </section>
+  );
+}
+
+interface BranchGroups {
+  primary: MatrixRow[];
+  base: MatrixRow[];
+  task: MatrixRow[];
+  unmanaged: MatrixRow[];
+}
+
+function partitionBranchGroups(rows: MatrixRow[]): BranchGroups {
+  const groups: BranchGroups = { primary: [], base: [], task: [], unmanaged: [] };
+  for (const row of rows) {
+    if (row.category === "main") {
+      groups.primary.push(row);
+    } else if (row.role === "base") {
+      groups.base.push(row);
+    } else if (row.role === "task") {
+      groups.task.push(row);
+    } else {
+      groups.unmanaged.push(row);
+    }
+  }
+  return groups;
+}
+
+interface BranchSectionProps {
+  id: string;
+  title: string;
+  hint: string;
+  rows: MatrixRow[];
+  readonly: boolean;
+  busy: boolean;
+  expandedRowId: string | null;
+  confirmByRow: Record<string, string>;
+  onExpand: (rowId: string | null) => void;
+  onConfirmChange: (updater: (current: Record<string, string>) => Record<string, string>) => void;
+  onPrune: (row: MatrixRow) => void;
+}
+
+function BranchSection({ id, title, hint, rows, readonly, busy, expandedRowId, confirmByRow, onExpand, onConfirmChange, onPrune }: BranchSectionProps) {
+  return (
+    <section className="branch-subsection" aria-label={title}>
+      <h3>{title}</h3>
+      <p className="muted-hint">{hint}</p>
+      {rows.length === 0 ? (
+        <p className="empty-state">No branches in this group.</p>
+      ) : (
+        <div className="branch-list matrix-list" role="table" aria-label={`${title} list`}>
+          <div className="branch-list-header" role="row">
+            <span>Record</span>
+            <span>Sources</span>
+            <span>Meaning</span>
+            <span>Action</span>
+          </div>
+          {rows.map((row) => (
+            <MatrixRowView
+              key={`${id}-${row.row_id}`}
+              row={row}
+              readonly={readonly}
+              busy={busy}
+              expanded={expandedRowId === row.row_id}
+              confirmValue={confirmByRow[row.row_id] || ""}
+              onExpand={() => onExpand(expandedRowId === row.row_id ? null : row.row_id)}
+              onConfirmChange={(value) => onConfirmChange((current) => ({ ...current, [row.row_id]: value }))}
+              onPrune={() => onPrune(row)}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

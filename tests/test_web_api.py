@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from unittest import mock
 
 from helpers import *
@@ -215,6 +216,54 @@ class WebApiTests(GitWarpTestCase):
         self.assertTrue(add_payload["registered"]["refreshed"])  # type: ignore[index]
         self.assertEqual(state_status, 200)
         self.assertEqual(state["projects"][0]["repo_root"], str(other_repo.resolve()))
+
+    def test_web_forget_project_removes_single_registry_entry(self) -> None:
+        other_repo = self.make_repo()
+        _, ready = self.start_web_server(self.repo, "web", "--cwd", str(self.repo), "--port", "0", "--no-open")
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+        self.fetch_web_json(str(ready["url"]), "/api/add", method="POST", token=token, data={"path": str(other_repo), "write_gitignore": False})
+
+        forget_status, forget_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/forget-project",
+            method="POST",
+            token=token,
+            data={"repo_root": str(other_repo.resolve())},
+        )
+        _, state = self.fetch_web_json(str(ready["url"]), f"/api/state?cwd={urllib.parse.quote(str(self.repo))}")
+
+        self.assertEqual(forget_status, 200, forget_payload)
+        self.assertEqual(forget_payload["removed_count"], 1)
+        roots = [project["repo_root"] for project in state["projects"]]
+        self.assertNotIn(str(other_repo.resolve()), roots)
+
+    def test_web_forget_project_prunes_missing_directories_and_flags_exists(self) -> None:
+        other_repo = self.make_repo()
+        _, ready = self.start_web_server(self.repo, "web", "--cwd", str(self.repo), "--port", "0", "--no-open")
+        _, session = self.fetch_web_json(str(ready["url"]), "/api/session")
+        token = str(session["token"])
+        self.fetch_web_json(str(ready["url"]), "/api/add", method="POST", token=token, data={"path": str(other_repo), "write_gitignore": False})
+
+        shutil.rmtree(other_repo)
+        _, missing_state = self.fetch_web_json(str(ready["url"]), f"/api/state?cwd={urllib.parse.quote(str(self.repo))}")
+        missing_entry = next(project for project in missing_state["projects"] if project["repo_root"] == str(other_repo.resolve()))
+        self.assertFalse(missing_entry["exists"])
+
+        prune_status, prune_payload = self.fetch_web_json(
+            str(ready["url"]),
+            "/api/forget-project",
+            method="POST",
+            token=token,
+            data={"prune_missing": True},
+        )
+        _, pruned_state = self.fetch_web_json(str(ready["url"]), f"/api/state?cwd={urllib.parse.quote(str(self.repo))}")
+
+        self.assertEqual(prune_status, 200, prune_payload)
+        self.assertIn(str(other_repo.resolve()), prune_payload["removed"])
+        roots = [project["repo_root"] for project in pruned_state["projects"]]
+        self.assertNotIn(str(other_repo.resolve()), roots)
+        self.assertTrue(all(project.get("exists") for project in pruned_state["projects"]))
 
     def test_web_state_lists_global_registry_projects_and_uses_live_project_details(self) -> None:
         other_repo = self.make_repo()
@@ -449,6 +498,8 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("/api/matrix", schema["endpoints"])
         self.assertIn("/api/branches", schema["endpoints"])
         self.assertIn("/api/prune-branch", schema["endpoints"])
+        self.assertIn("/api/forget-project", schema["endpoints"])
+        self.assertTrue(schema["endpoints"]["/api/forget-project"]["mutates"])  # type: ignore[index]
         self.assertIn("/api/task/create", schema["endpoints"])
         self.assertIn("/api/repository/tree", schema["endpoints"])
         self.assertIn("/api/repository/file", schema["endpoints"])
@@ -503,7 +554,7 @@ class WebApiTests(GitWarpTestCase):
         self.assertIn("Live worktrees", html)
         self.assertIn("Base branch", html)
         self.assertIn("Task worktree", html)
-        self.assertIn("Refs & Worktrees", html)
+        self.assertIn("Sandboxes", html)
         self.assertIn("Review prune", html)
         self.assertIn("Delete local branch ref", html)
         self.assertIn("Doctor / Reconcile", html)

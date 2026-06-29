@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Renamed Web Console tabs to a branch-first information architecture (Branches, Sandboxes, Repository, Diagnostics) and made Branches the default view when opening a project.
+- Reworked the Branches view into branch-first sections (Primary, Base Branches, Task Branches, Unmanaged / Other Branches).
+- Added Project Directory cleanup: missing repositories are flagged, can be removed individually, and `Remove missing` prunes every dead registry entry. New `POST /api/forget-project` endpoint backs this, and project summaries now report `exists`.
+- Isolated `GITWARP_HOME` per test so the suite no longer pollutes the real `~/.gitwarp/projects.json` registry.
+
 ## 0.1.0
 
 - Initial GitWarp skill and CLI package for isolated Git worktree sandboxes.

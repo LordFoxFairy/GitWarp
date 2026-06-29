@@ -116,6 +116,31 @@ def register_project(repo_root: Path, *, name: str | None = None, path: Path | N
     return registry_path
 
 
+def unregister_project(repo_root: str | Path, *, path: Path | None = None) -> tuple[Path, int]:
+    registry_path = path or project_registry_path()
+    registry = load_project_registry(registry_path)
+    repo_key = str(repo_root)
+    kept = [item for item in registry["projects"] if item.get("repo_root") != repo_key]
+    removed = len(registry["projects"]) - len(kept)
+    write_project_registry({"version": 1, "projects": kept}, registry_path)
+    return registry_path, removed
+
+
+def prune_missing_projects(*, path: Path | None = None) -> tuple[Path, list[str]]:
+    registry_path = path or project_registry_path()
+    registry = load_project_registry(registry_path)
+    kept: list[dict[str, Any]] = []
+    removed: list[str] = []
+    for item in registry["projects"]:
+        repo_root = item.get("repo_root")
+        if isinstance(repo_root, str) and Path(repo_root).expanduser().is_dir():
+            kept.append(item)
+        elif isinstance(repo_root, str):
+            removed.append(repo_root)
+    write_project_registry({"version": 1, "projects": kept}, registry_path)
+    return registry_path, removed
+
+
 def process_is_alive(pid: int) -> bool:
     if pid <= 0:
         return False

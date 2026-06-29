@@ -126,20 +126,20 @@ def resolve_branch_role(
     is_merge_base: bool,
     live: dict[str, Any] | None,
     ledger_entry: dict[str, Any],
-) -> str:
+) -> str | None:
     if is_default or is_merge_base:
         return BASE_ROLE
     if live is not None and isinstance(live.get("branch_role"), str):
         return str(live["branch_role"])
     if isinstance(ledger_entry.get("branch_role"), str):
         return str(ledger_entry["branch_role"])
-    return TASK_ROLE
+    return None
 
 
 def resolve_base_branch(
     *,
     merge_base: str,
-    branch_role: str,
+    branch_role: str | None,
     live: dict[str, Any] | None,
     ledger_entry: dict[str, Any],
 ) -> str | None:
@@ -155,8 +155,12 @@ def resolve_base_branch(
 def categorize_branch(row: dict[str, Any]) -> str:
     if row["is_default"] or row["branch_role"] == BASE_ROLE:
         return "base"
-    if row["has_worktree"] or row["in_ledger"]:
-        return "active"
+    if row["branch_role"] == TASK_ROLE:
+        if row["has_worktree"] or row["in_ledger"]:
+            return "active"
+        if row["merged_to_base"]:
+            return "merged"
+        return "orphan"
     if row["merged_to_base"]:
         return "merged"
     return "orphan"
@@ -173,10 +177,10 @@ def resolve_managed_state(*, has_worktree: bool, in_ledger: bool) -> str:
 def resolve_commit_state(row: dict[str, Any]) -> str:
     if row["is_default"] or row["branch_role"] == BASE_ROLE:
         return "base"
+    if row["branch_role"] == TASK_ROLE and (row["has_worktree"] or row["in_ledger"]):
+        return "active"
     if row["merged_to_base"]:
         return "merged"
-    if row["has_worktree"] or row["in_ledger"]:
-        return "active"
     return "unmerged"
 
 
@@ -185,7 +189,7 @@ def resolve_cleanup_policy(row: dict[str, Any]) -> str:
         return "user_confirmed_ref_prune"
     if row["is_default"] or row["branch_role"] == BASE_ROLE:
         return "preserve_base"
-    if row["has_worktree"] or row["in_ledger"]:
+    if row["branch_role"] == TASK_ROLE and (row["has_worktree"] or row["in_ledger"]):
         return "preserve_managed"
     if row["base_branch"] and not row["merged_to_base"]:
         return "review_unmerged_ref"

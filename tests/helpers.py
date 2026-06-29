@@ -111,6 +111,11 @@ class GitWarpTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
         self.repo = Path(self.tempdir.name)
+        # Isolate the global GitWarp home so `init`/`add` registration never
+        # pollutes the developer's real ~/.gitwarp/projects.json registry.
+        self._gitwarp_home = tempfile.TemporaryDirectory()
+        self._prev_gitwarp_home = os.environ.get("GITWARP_HOME")
+        os.environ["GITWARP_HOME"] = self._gitwarp_home.name
         run_git(self.repo, "init", "-b", "main")
         run_git(self.repo, "config", "user.name", "Test User")
         run_git(self.repo, "config", "user.email", "test@example.com")
@@ -119,6 +124,11 @@ class GitWarpTestCase(unittest.TestCase):
         run_git(self.repo, "commit", "-m", "init")
 
     def tearDown(self) -> None:
+        if self._prev_gitwarp_home is None:
+            os.environ.pop("GITWARP_HOME", None)
+        else:
+            os.environ["GITWARP_HOME"] = self._prev_gitwarp_home
+        self._gitwarp_home.cleanup()
         self.tempdir.cleanup()
 
     def make_repo(self) -> Path:

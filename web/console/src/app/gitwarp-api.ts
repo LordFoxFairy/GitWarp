@@ -100,6 +100,14 @@ export class GitWarpApi {
     return this.post("/api/reload", cwd ? { cwd } : {});
   }
 
+  forgetProject(repoRoot: string): Promise<CommandResult> {
+    return this.post("/api/forget-project", { repo_root: repoRoot });
+  }
+
+  pruneMissingProjects(): Promise<CommandResult> {
+    return this.post("/api/forget-project", { prune_missing: true });
+  }
+
   createBaseCheckout(branch: string, purpose?: string, cwd?: string): Promise<CommandResult> {
     return this.post("/api/base", {
       ...(cwd ? { cwd } : {}),
